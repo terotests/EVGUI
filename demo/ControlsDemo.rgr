@@ -468,6 +468,7 @@ class ControlsDemo {
 
     fn page:EVGElement () {
         def page (tree Ctl (Page))
+        UiTree.inline(page "min-height" (ControlsDemo.px(pageH)))
         page.addChild((tree Ctl (Title "Checkout")))
 
         ; --- the stepper strip ------------------------------------------------
@@ -982,6 +983,7 @@ class ControlsDemo {
             def lay:EVGLayout (unwrap layout)
             if ((s.layoutClean()) == false) {
                 lay.layout(r)
+                this.fitHeight(lay)
             }
             return lay
         }
@@ -989,6 +991,7 @@ class ControlsDemo {
         fresh.setPageSize(pageW pageH)
         layout = fresh
         fresh.layout(r)
+        this.fitHeight(fresh)
         return fresh
     }
 
@@ -1078,17 +1081,27 @@ class ControlsDemo {
         return (bottom + pad)
     }
 
-    fn heightPx:double () {
-        this.laidOut()
+    ; Grow the page to its content, once laid out. Done in `laidOut` so every
+    ; reader of the tree — the display list, the hit test, the layout check —
+    ; sees the same page the canvas is sized to.
+    fn fitHeight:void (lay:EVGLayout) {
         def want:double (to_double (to_int ((this.contentBottom()) + 0.999)))
         if (want > pageH) {
             pageH = want
-            layout = (new EVGLayout())
-            def lay:EVGLayout (unwrap layout)
+            def s:EVGStyleSheet (unwrap sheet)
+            def r:EVGElement (unwrap root)
+            ; The root box is as tall as the page: EVG sizes it from its
+            ; min-height, not from what is in it.
+            UiTree.inline(r "min-height" (ControlsDemo.px(pageH)))
+            s.setViewport(pageW pageH false)
+            s.applyTree(r "")
             lay.setPageSize(pageW pageH)
-            this.laidOut()
-            lay.layout((unwrap root))
+            lay.layout(r)
         }
+    }
+
+    fn heightPx:double () {
+        this.laidOut()
         return pageH
     }
 }
