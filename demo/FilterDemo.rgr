@@ -22,6 +22,8 @@
 ; =============================================================================
 
 Import "../src/FilterCtl.rgr"
+Import "../src/MenuCtl.rgr"
+Import "../src/UiCtl.rgr"
 Import "pkg:evg/EVGElement.rgr"
 Import "pkg:evg/EVGLayout.rgr"
 Import "pkg:evg/EVGDisplayList.rgr"
@@ -43,11 +45,25 @@ treefactory Flt {
     tag PartTxt  EVGElement (props (className "fd-part-text") (elementType 1) (a11yHidden true))
     tag OpTxt    EVGElement (props (className "fd-op-text") (elementType 1) (a11yHidden true))
     tag ValTxt   EVGElement (props (className "fd-val-text") (elementType 1) (a11yHidden true))
-    tag Menu     EVGElement (props (className "fd-menu") (role "button"))
+    ; The chip's actions button. An overlay ANCHOR, because the menu it opens
+    ; is a surface placed against it — the dropdown demo's trigger, one size
+    ; smaller.
+    tag Menu     EVGElement (props (className "fd-menu") (isOverlayAnchor true) (role "button") (a11yFocusable true) (a11yHasPopup "menu"))
     tag MenuTxt  EVGElement (props (className "fd-menu-text") (elementType 1) (a11yHidden true))
+    ; The actions menu itself. Drawn here, driven by MenuCtl — the controller
+    ; the dropdown demo uses and five conformance specs measure against
+    ; @radix-ui/react-dropdown-menu — so the keyboard is not written twice.
+    tag MContent EVGElement (props (className "fd-mcontent") (isOverlay true) (overlaySide "bottom") (overlayAlign "end") (role "menu"))
+    tag MSub     EVGElement (props (className "fd-mcontent fd-msub") (isOverlay true) (overlaySide "right") (overlayAlign "start") (role "menu"))
+    tag MItem    EVGElement (props (className "fd-mitem") (role "menuitem") (a11yFocusable true))
+    tag MSubItem EVGElement (props (className "fd-mitem") (isOverlayAnchor true) (role "menuitem") (a11yFocusable true) (a11yHasPopup "menu"))
+    tag MRadio   EVGElement (props (className "fd-mitem") (role "menuitemradio") (a11yFocusable true))
+    tag MLabel   EVGElement (props (className "fd-mlabel") (elementType 1))
+    tag MHint    EVGElement (props (className "fd-mhint") (elementType 1) (a11yHidden true))
+    tag MSep     EVGElement (props (className "fd-msep") (role "separator"))
     tag Add      EVGElement (props (className "fd-add") (role "button"))
     tag AddTxt   EVGElement (props (className "fd-add-text") (elementType 1) (a11yHidden true))
-    tag List     EVGElement (props (className "fd-list") (role "listbox"))
+    tag List     EVGElement (props (className "fd-list") (role "listbox") (isOverlay true) (overlaySide "bottom") (overlayAlign "start"))
     tag Opt      EVGElement (props (className "fd-opt") (role "option"))
     tag OptTxt   EVGElement (props (className "fd-opt-text") (elementType 1) (a11yHidden true))
     tag Results  EVGElement (props (className "fd-results") (role "list") (a11yLabel "Matching tasks"))
@@ -66,6 +82,12 @@ class FilterDemo {
     def hovered:string ""
     def pressed:string ""
     def focused:string ""
+    ; The chip actions menu. ONE controller, rebuilt for whichever chip's
+    ; button opened it, because the rows it offers depend on that chip's field
+    ; (a multi-select field has "has all of", an option field "is not").
+    ; `menuRule` is that chip; "" when no menu is open.
+    def menu:MenuCtl (new MenuCtl())
+    def menuRule:string ""
     def pageW:double 900.0
     def pageH:double 460.0
     ; The titles, parallel to the controller's record keys, so a result row can
@@ -195,16 +217,35 @@ class FilterDemo {
             chip.addChild((tree Flt
                 (Part (props (id (id + "-op")) (a11yLabel (FilterCtl.operatorLabel(rule.operator))) (a11yHasPopup "menu"))
                     (OpTxt (FilterCtl.operatorLabel(rule.operator))))))
-            chip.addChild((tree Flt
+            def valuePart (tree Flt
                 (Part (props (id (id + "-value")) (a11yLabel (model.valueText(id))) (a11yHasPopup "listbox"))
-                    (ValTxt (model.valueText(id))))))
+                    (ValTxt (model.valueText(id)))))
+            chip.addChild(valuePart)
             ; A vertical ellipsis, one glyph alone in its own box. The measurer
             ; falls back to half an em outside 32-126, which spaces a RUN
             ; wrongly; a single centred glyph is unaffected, which is what this
             ; is — the same reasoning the calendar's chevrons are under.
+            ;
+            ; It OPENS A MENU. It used to delete the chip outright, which is
+            ; not what three dots promise: the reference's button opens the
+            ; chip's actions, and removing is one of them.
+            def menuOpen:boolean (this.menuOpenFor(id))
+            def menuCls:string "fd-menu"
+            def menuExp:int (EVGA11yTri.no())
+            if menuOpen {
+                menuCls = "fd-menu fd-menu-open"
+                menuExp = (EVGA11yTri.yes())
+            }
             chip.addChild((tree Flt
-                (Menu (props (id (id + "-menu")) (a11yLabel ("Remove the " + f.label + " filter")))
+                (Menu (props (id (FilterDemo.triggerIdFor(id))) (className menuCls)
+                             (a11yLabel (f.label + " filter actions")) (a11yExpanded menuExp))
                     (MenuTxt "⋮"))))
+            ; The surface is the trigger's SIBLING, which is the arrangement
+            ; the overlay pass's anchor search expects. Out of flow, so the
+            ; chip does not grow to hold it.
+            if menuOpen {
+                chip.addChild((this.menuSurface(id)))
+            }
             bar.addChild(chip)
 
             if (model.isOpen(id)) {
@@ -233,7 +274,11 @@ class FilterDemo {
                     list.addChild(opt)
                     oi = (oi + 1)
                 }
-                bar.addChild(list)
+                ; A surface under the value it edits, not a box in the bar's
+                ; row: in flow, it was centred on the 40px bar and grew it
+                ; both ways, pushing the chips down over the count.
+                list.overlayAnchor = valuePart
+                chip.addChild(list)
             }
             i = (i + 1)
         }
@@ -264,15 +309,258 @@ class FilterDemo {
         page.addChild(results)
 
         page.addChild((tree Flt (Note
-            "Click a value to open its list. Arrow keys move between chips; Backspace removes the focused one.")))
+            "Click a value to open its list, or the three dots for the chip's actions. Arrow keys move between chips; Backspace removes the focused one.")))
         return page
+    }
+
+    ; --- the chip actions menu ------------------------------------------------
+    ; MenuCtl's tids nest off `tid`: with tid `seed-2-menu` the button is
+    ; `seed-2-menu-trigger`, the surface `seed-2-menu-content`, a row
+    ; `seed-2-menu-item-remove`, and the operator submenu's rows
+    ; `seed-2-menu-item-operator-item-is_not`.
+
+    sfn triggerIdFor:string (ruleId:string) {
+        return (ruleId + "-menu-trigger")
+    }
+
+    fn menuOpenFor:boolean (ruleId:string) {
+        if (menu.open == false) {
+            return false
+        }
+        return (menuRule == ruleId)
+    }
+
+    ; The rule whose trigger `target` is, or "".
+    fn ruleOfTrigger:string (target:string) {
+        def rootNode:FilterNode (model.node("root"))
+        def i:int 0
+        while (i < (array_length rootNode.kids)) {
+            def id:string (itemAt rootNode.kids i)
+            if (target == (FilterDemo.triggerIdFor(id))) {
+                return id
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    ; A fresh controller for this chip, opened. Returns where focus goes: the
+    ; surface, as MenuCtl says Radix does — the first arrow then enters it.
+    fn openMenuFor:string (ruleId:string) {
+        model.close()
+        model.activeId = ruleId
+        def r:FilterNode (model.node(ruleId))
+        def f:FilterField (model.field(r.path))
+        def m (new MenuCtl())
+        m.tid = (ruleId + "-menu")
+        m.name = (f.label + " filter actions")
+        def opSub:UiItem (m.addSub("operator" "Change operator" false))
+        def ops:[string] (FilterCtl.operatorsFor(f.kind))
+        def i:int 0
+        while (i < (array_length ops)) {
+            def op:string (itemAt ops i)
+            MenuCtl.addKid(opSub op (FilterCtl.operatorLabel(op)) false)
+            i = (i + 1)
+        }
+        m.addItem("edit" "Edit value" false)
+        ; Nothing to clear is a disabled row, not a missing one: the menu keeps
+        ; its shape, and the arrows skip it the way Radix skips a disabled item.
+        m.addItem("clear" "Clear value" ((array_length r.vals) == 0))
+        m.addItem("remove" "Remove filter" false)
+        menu = m
+        menuRule = ruleId
+        return (m.activate((m.triggerTid())))
+    }
+
+    ; What choosing a leaf row DOES. Called after MenuCtl has closed the menu,
+    ; so the rule is passed in rather than read from `menuRule`. Returns where
+    ; focus goes, or "" to leave it where MenuCtl put it (on the button).
+    fn runAction:string (ruleId:string rowTid:string) {
+        def base:string (ruleId + "-menu")
+        if (rowTid == (MenuCtl.itemTidUnder(base "remove"))) {
+            ; Backspace's rule: focus moves on to the next stop first, so it
+            ; lands on something that still exists.
+            model.activeId = ruleId
+            model.moveFocus(1)
+            model.removeNode(ruleId)
+            return model.activeId
+        }
+        if (rowTid == (MenuCtl.itemTidUnder(base "clear"))) {
+            def none:[string]
+            model.setValues(ruleId none)
+            return ""
+        }
+        if (rowTid == (MenuCtl.itemTidUnder(base "edit"))) {
+            model.open(ruleId)
+            return (ruleId + "-value")
+        }
+        def subTid:string (MenuCtl.itemTidUnder(base "operator"))
+        def r:FilterNode (model.node(ruleId))
+        def f:FilterField (model.field(r.path))
+        def ops:[string] (FilterCtl.operatorsFor(f.kind))
+        def i:int 0
+        while (i < (array_length ops)) {
+            def op:string (itemAt ops i)
+            if (rowTid == (MenuCtl.itemTidUnder(subTid op))) {
+                model.setOperator(ruleId op)
+                return ""
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    ; A press or Enter on a row of the open menu. A sub-trigger opens its
+    ; submenu; a leaf closes the menu and then does its thing.
+    fn chooseRow:boolean (target:string) {
+        def idx:int (menu.rowIndexOf(target))
+        if (idx < 0) {
+            return false
+        }
+        if (itemAt menu.rowDisabled idx) {
+            return true
+        }
+        if (itemAt menu.rowIsSub idx) {
+            def into:string (menu.activate(target))
+            if ((strlen into) > 0) {
+                focused = into
+            }
+            this.rebuild()
+            return true
+        }
+        def rule:string menuRule
+        def back:string (menu.activate(target))
+        menuRule = ""
+        focused = back
+        def moved:string (this.runAction(rule target))
+        if ((strlen moved) > 0) {
+            focused = moved
+        }
+        this.rebuild()
+        return true
+    }
+
+    fn menuRow:EVGElement (value:string label:string disabled:boolean) {
+        def rowTid:string (menu.itemTid(value))
+        def cls:string "fd-mitem"
+        def labelCls:string "fd-mlabel"
+        if (value == "remove") {
+            cls = "fd-mitem fd-mitem-danger"
+            labelCls = "fd-mlabel fd-mlabel-danger"
+        }
+        if disabled {
+            cls = "fd-mitem fd-mitem-disabled"
+            labelCls = "fd-mlabel fd-mlabel-disabled"
+        }
+        def row (tree Flt
+            (MItem (props (id rowTid) (className cls) (a11yLabel label))
+                (MLabel (props (className labelCls)) label)))
+        row.a11yDisabled = disabled
+        return row
+    }
+
+    fn operatorRow:EVGElement (ruleId:string) {
+        def rowTid:string (menu.itemTid("operator"))
+        def isOpen:boolean (menu.isOpenSub(rowTid))
+        def cls:string "fd-mitem"
+        def expanded:int (EVGA11yTri.no())
+        if isOpen {
+            cls = "fd-mitem fd-mitem-open"
+            expanded = (EVGA11yTri.yes())
+        }
+        def row (tree Flt
+            (MSubItem (props (id rowTid) (className cls) (a11yLabel "Change operator") (a11yExpanded expanded))
+                (MLabel "Change operator")
+                (MHint ">")))
+        if isOpen {
+            def r:FilterNode (model.node(ruleId))
+            def f:FilterField (model.field(r.path))
+            def sub (tree Flt (MSub (props (id (MenuCtl.subContentTid(rowTid))) (a11yLabel "Operator"))))
+            def ops:[string] (FilterCtl.operatorsFor(f.kind))
+            def i:int 0
+            while (i < (array_length ops)) {
+                def op:string (itemAt ops i)
+                def on:int (EVGA11yTri.no())
+                def tick:string " "
+                if (r.operator == op) {
+                    on = (EVGA11yTri.yes())
+                    tick = "✓"
+                }
+                sub.addChild((tree Flt
+                    (MRadio (props (id (MenuCtl.itemTidUnder(rowTid op))) (a11yLabel (FilterCtl.operatorLabel(op))) (a11yChecked on))
+                        (MLabel (props (className "fd-mlabel fd-mlabel-sub")) (FilterCtl.operatorLabel(op)))
+                        (MHint tick))))
+                i = (i + 1)
+            }
+            ; Named outright: the surface is the row's CHILD, and the sibling
+            ; search would find nothing to stand against.
+            sub.overlayAnchor = row
+            row.addChild(sub)
+        }
+        return row
+    }
+
+    fn menuSurface:EVGElement (ruleId:string) {
+        def surf (tree Flt (MContent (props (id (menu.contentTid())) (a11yLabel menu.name))))
+        def i:int 0
+        while (i < (array_length menu.items)) {
+            def it:UiItem (itemAt menu.items i)
+            if (it.value == "operator") {
+                surf.addChild((this.operatorRow(ruleId)))
+            } {
+                if (it.value == "remove") {
+                    surf.addChild((tree Flt (MSep)))
+                }
+                surf.addChild((this.menuRow(it.value it.name it.disabled)))
+            }
+            i = (i + 1)
+        }
+        return surf
     }
 
     ; --- events --------------------------------------------------------------
 
     fn press:boolean (target:string) {
+        ; An open menu is modal, as Radix's is: a press inside it is the
+        ; menu's, and a press anywhere else only dismisses it — the click does
+        ; not also land on whatever was underneath.
+        if menu.open {
+            if (this.chooseRow(target)) {
+                return true
+            }
+            if (target == (menu.triggerTid())) {
+                focused = (menu.activate(target))
+                menuRule = ""
+                this.rebuild()
+                return true
+            }
+            if (target == (menu.contentTid())) {
+                return true
+            }
+            if ((menu.rowIndexOf(target)) < 0) {
+                def n:int (array_length menu.openPath)
+                def k:int 0
+                while (k < n) {
+                    if (target == (MenuCtl.subContentTid((itemAt menu.openPath k)))) {
+                        return true
+                    }
+                    k = (k + 1)
+                }
+            }
+            menu.closeMenu()
+            menuRule = ""
+            focused = ""
+            this.rebuild()
+            return true
+        }
         if (target == "") {
             return false
+        }
+        def menuOf:string (this.ruleOfTrigger(target))
+        if ((strlen menuOf) > 0) {
+            focused = (this.openMenuFor(menuOf))
+            this.rebuild()
+            return true
         }
         focused = target
         ; An option inside an open list. Checked FIRST, because an option id
@@ -307,11 +595,6 @@ class FilterDemo {
                 this.rebuild()
                 return true
             }
-            if (target == (id + "-menu")) {
-                model.removeNode(id)
-                this.rebuild()
-                return true
-            }
             if (target == (id + "-field")) {
                 model.activeId = id
                 this.rebuild()
@@ -338,6 +621,51 @@ class FilterDemo {
     }
 
     fn key:boolean (k:string) {
+        ; The open menu takes every key: MenuCtl answers the arrows, Escape
+        ; and the submenu keys, and a row's activation is the demo's to act on.
+        if menu.open {
+            if (UiCtl.activatesOn(k)) {
+                if ((menu.rowIndexOf(focused)) >= 0) {
+                    return (this.chooseRow(focused))
+                }
+                return true
+            }
+            def next:string (menu.keyDown(focused k))
+            if ((strlen next) > 0) {
+                focused = next
+            }
+            if (menu.open == false) {
+                menuRule = ""
+            }
+            this.rebuild()
+            return true
+        }
+        ; On a chip's actions button — reached by the pointer or the mirror —
+        ; Enter, Space and ArrowDown open its menu, as they open Radix's.
+        ; On the chip itself (the toolbar stop the arrows walk) Enter and Space
+        ; do the same: the chip's one command is "what can I do with this".
+        def onTrigger:string (this.ruleOfTrigger(focused))
+        def opener:string onTrigger
+        if ((strlen opener) == 0) {
+            if ((strlen focused) > 0) {
+                if (focused == model.activeId) {
+                    if (model.has(focused)) {
+                        opener = focused
+                    }
+                }
+            }
+        }
+        if ((strlen opener) > 0) {
+            def opens:boolean (UiCtl.activatesOn(k))
+            if ((k == "ArrowDown") && ((strlen onTrigger) > 0)) {
+                opens = true
+            }
+            if opens {
+                focused = (this.openMenuFor(opener))
+                this.rebuild()
+                return true
+            }
+        }
         ; Nothing else on this page takes a key, so an unfocused bar arms its
         ; first stop rather than swallowing the press — the same rule the
         ; calendar is under, and for the same reason: otherwise the first
@@ -350,8 +678,25 @@ class FilterDemo {
         return handled
     }
 
+    ; With the menu open the pointer highlights a row by FOCUSING it, which is
+    ; how Radix does it and why the stylesheet paints the menu's highlight
+    ; with `:focus` alone. Off a row, focus goes back to that row's surface so
+    ; the highlight follows the pointer out instead of staying behind.
     fn setHover:void (id:string) {
         hovered = id
+        if (menu.open == false) {
+            return
+        }
+        def next:string (menu.hover(id))
+        if ((strlen next) > 0) {
+            focused = next
+        } {
+            if ((menu.rowIndexOf(focused)) >= 0) {
+                focused = (menu.ownerOf(focused))
+                menu.activeTid = focused
+            }
+        }
+        this.rebuild()
     }
 
     fn setPressed:void (id:string) {
@@ -360,6 +705,9 @@ class FilterDemo {
 
     fn setFocus:void (id:string) {
         focused = id
+        if menu.open {
+            menu.activeTid = id
+        }
     }
 
     fn rebuild:void () {
@@ -452,17 +800,32 @@ class FilterDemo {
         return (s.getError(i))
     }
 
+    ; The menu's clock first — a submenu the pointer has rested on for 100ms
+    ; opens here — then the stylesheet's.
     fn tick:boolean (dtMs:double) {
+        if menu.open {
+            def opened:string (menu.tickCtl(dtMs))
+            if ((strlen opened) > 0) {
+                focused = opened
+                this.rebuild()
+            }
+        }
         def r:EVGElement (unwrap root)
         def t:EVGTransition transitions
         t.advanceTree(r dtMs)
-        return (t.busy(r))
+        if (t.busy(r)) {
+            return true
+        }
+        return ((strlen menu.pendingTid) > 0)
     }
 
     fn busyNow:boolean () {
         def r:EVGElement (unwrap root)
         def t:EVGTransition transitions
-        return (t.busy(r))
+        if (t.busy(r)) {
+            return true
+        }
+        return ((strlen menu.pendingTid) > 0)
     }
 
     fn heightPx:double () {

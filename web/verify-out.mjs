@@ -3,7 +3,7 @@
 //
 // WHAT THE DEPLOYMENT IS ABOUT TO SERVE.
 //
-//   node gallery/ui/web/verify-out.mjs <dir>
+//   node gallery/evgui/web/verify-out.mjs <dir>
 //
 // A page whose bundle failed to copy looks exactly like a page whose bundle
 // failed to compile, and both look fine until someone opens them. The build

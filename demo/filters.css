@@ -42,11 +42,16 @@
   height: 40px;
 }
 
+/* The chip's parts are INSET: 3px of padding keeps each part's hover fill —
+ * a rounded 26px pill — clear of the chip's own rounded border, rather than a
+ * square fill running into the corner it sits in. */
 .fd-chip {
   display: flex;
   flex-direction: row;
   align-items: center;
   height: 34px;
+  padding-left: 3px;
+  padding-right: 3px;
   border-width: 1px;
   border-color: #e4e4e7;
   border-radius: 8px;
@@ -64,13 +69,17 @@
 /* Each part is separately clickable, because each opens a different thing:
  * the field name a field list, the operator an operator list, the value its
  * options. A chip that is one button cannot express that. */
+/* `flex-direction: row` is not decoration. EVG's flex default is COLUMN, so
+ * `align-items: center` without it centred the label left-to-right and left it
+ * pinned to the top of the box — the high baseline the chip had. */
 .fd-part {
   display: flex;
   flex-direction: row;
   align-items: center;
-  height: 32px;
-  padding-left: 10px;
-  padding-right: 10px;
+  height: 26px;
+  padding-left: 8px;
+  padding-right: 8px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
@@ -97,15 +106,27 @@
 
 .fd-menu {
   display: flex;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
 .fd-menu:hover {
   background-color: #f4f4f5;
+}
+
+.fd-menu:focus {
+  background-color: #f4f4f5;
+}
+
+/* Its menu is showing: the button stays pressed-in while the pointer is in
+ * the menu, so the menu reads as coming from it. */
+.fd-menu-open {
+  background-color: #e4e4e7;
 }
 
 .fd-menu-text {
@@ -115,6 +136,7 @@
 
 .fd-add {
   display: flex;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
   width: 34px;
@@ -135,13 +157,13 @@
   color: #0a0a0a;
 }
 
-/* The open value list. It sits in the bar's flow rather than floating, which
- * is a deliberate simplification and not an oversight: the overlay layer is
- * exercised by the dropdown and dialog demos, and a popover here would be
- * re-testing those instead of showing this. */
+/* The open value list: a surface under the value it edits. It used to sit in
+ * the bar's flow, where the 40px bar centred it and it grew the row both ways
+ * — the chips dropped over the count and the list climbed off the top. */
 .fd-list {
   display: flex;
   flex-direction: column;
+  width: 160px;
   border-width: 1px;
   border-color: #e4e4e7;
   border-radius: 8px;
@@ -175,6 +197,61 @@
 
 .fd-opt-text-chosen {
   color: #ffffff;
+}
+
+/* --- the chip actions menu ---------------------------------------------------
+   The dropdown demo's menu, one size down: 13px labels, 30px rows, and the
+   highlight is `:focus` — the pointer focuses the row it is on, as in Radix,
+   so one rule paints the pointer and the arrow keys alike. */
+.fd-mcontent {
+  display: flex;
+  flex-direction: column;
+  border-width: 1px;
+  border-color: #e4e4e7;
+  border-radius: 8px;
+  background-color: #ffffff;
+  padding: 4px;
+  width: 200px;
+}
+
+.fd-msub { width: 160px; }
+
+/* 200 less 2px of border and 8 of padding is 190 for a row; 16 of that is the
+ * row's own padding, and a 150 label, an 8 gap and a 16 hint make 174.
+ * The submenu: 160 gives 134 inside a row, so its labels are 110. */
+.fd-mitem {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding-left: 8px;
+  padding-right: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.fd-mitem:focus { background-color: #f4f4f5; }
+
+/* The row whose submenu is showing stays tinted while the pointer is in the
+ * submenu, so the trail back to it does not go dark. */
+.fd-mitem-open { background-color: #f4f4f5; }
+
+.fd-mitem-danger:focus { background-color: #fef2f2; }
+
+.fd-mlabel { font-size: 13px; color: #0a0a0a; width: 150px; height: 18px; }
+.fd-mlabel-sub { width: 110px; }
+.fd-mlabel-danger { color: #dc2626; }
+.fd-mlabel-disabled { color: #a1a1aa; }
+
+.fd-mhint { font-size: 12px; color: #71717a; width: 16px; height: 18px; text-align: center; }
+
+.fd-msep {
+  background-color: #f4f4f5;
+  width: 190px;
+  height: 1px;
+  margin-top: 4px;
+  margin-bottom: 4px;
 }
 
 /* The count is role=status, so a reader hears the result change when a chip

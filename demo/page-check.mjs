@@ -3,7 +3,7 @@
 //
 // Load the demo page in a real browser and walk every demo.
 //
-//   node gallery/ui/demo/page-check.mjs
+//   node gallery/evgui/demo/page-check.mjs
 //
 // WHY THIS EXISTS. `mod.EVGReconcile is not a constructor`, reported from a
 // browser console. `keptTree` builds three of the demos and asks the compiled
@@ -26,14 +26,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "node:http";
-import { requireHostTool, findChromium } from "../conformance/dom-adapter.mjs";
+import { requireHostTool, findChromium } from "../../ui/conformance/dom-adapter.mjs";
 import { parsePresets } from "../../../lib/evg/gl/effect-presets.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
 
 if (!fs.existsSync(path.join(HERE, "bundle.js"))) {
-  console.error("bundle.js missing — run `node gallery/ui/demo/build.mjs` first");
+  console.error("bundle.js missing — run `node gallery/evgui/demo/build.mjs` first");
   process.exit(3);
 }
 
@@ -85,7 +85,7 @@ console.log("--- the page loads ---");
 // The SAME url a person opens. Serving index.html at "/" instead would make
 // its relative `bundle.js` resolve to the repo root, which is not where it is
 // — the check would then be testing a page nobody loads.
-await page.goto(`http://127.0.0.1:${port}/gallery/ui/demo/index.html`, { waitUntil: "networkidle" });
+await page.goto(`http://127.0.0.1:${port}/gallery/evgui/demo/index.html`, { waitUntil: "networkidle" });
 // The stage only gets a canvas once main.js has run far enough to paint.
 await page.waitForFunction("document.querySelector('#stage canvas') !== null", null, { timeout: 15000 })
   .catch(() => {});

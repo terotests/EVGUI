@@ -22,7 +22,7 @@
 // icon black and the page still looked plausible), and the line reaching the
 // next dot (`align-items: stretch` and `fill` both do less than they read as).
 //
-//   node gallery/ui/demo/timeline-check.mjs
+//   node gallery/evgui/demo/timeline-check.mjs
 
 import fs from "node:fs";
 import path from "node:path";
@@ -33,7 +33,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
 const require = createRequire(import.meta.url);
 
-const M = require(path.join(ROOT, "gallery/ui/bin/TimelineDemo.cjs"));
+const M = require(path.join(ROOT, "gallery/evgui/bin/TimelineDemo.cjs"));
 const CSS = fs.readFileSync(path.join(HERE, "timeline.css"), "utf8");
 
 const DOT_DONE = "#18181b";

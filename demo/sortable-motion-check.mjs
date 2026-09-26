@@ -20,7 +20,7 @@
 // Mutating the rebuild into a plain replacement (drop the reconcile) must fail
 // this, and does — that is the check being a check rather than a description.
 //
-//   node gallery/ui/demo/sortable-motion-check.mjs
+//   node gallery/evgui/demo/sortable-motion-check.mjs
 
 import fs from "node:fs";
 import path from "node:path";
@@ -31,7 +31,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
 const require = createRequire(import.meta.url);
 
-const M = require(path.join(ROOT, "gallery/ui/bin/SortableDemo.cjs"));
+const M = require(path.join(ROOT, "gallery/evgui/bin/SortableDemo.cjs"));
 const CSS = fs.readFileSync(path.join(HERE, "sortable.css"), "utf8");
 
 const ORDER = ["demo", "spec", "video", "audio", "extra"];

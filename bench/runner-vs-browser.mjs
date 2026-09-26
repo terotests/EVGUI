@@ -5,7 +5,7 @@
 // browser at all.
 //
 //   npm run ui:runner:bench
-//   node gallery/ui/bench/runner-vs-browser.mjs [--tests 20] [--json] [--no-browser]
+//   node gallery/evgui/bench/runner-vs-browser.mjs [--tests 20] [--json] [--no-browser]
 //
 // `ui-bench.mjs` beside this file answers "which phase of a frame do I fix".
 // This one answers a different question: an e2e suite is usually Playwright,
@@ -63,11 +63,11 @@ const ms = (v) => (v < 1 ? v.toFixed(3) : v.toFixed(v < 10 ? 2 : 1));
 // cheaply, and a dashboard that rebuilds a table and a Vega chart every frame.
 
 const APPS = [
-  { name: "MessageDemo",   mod: "gallery/ui/bin/MessageDemo.cjs",
-    css: "gallery/ui/demo/message.css",   ctor: "MessageDemo",
+  { name: "MessageDemo",   mod: "gallery/evgui/bin/MessageDemo.cjs",
+    css: "gallery/evgui/demo/message.css",   ctor: "MessageDemo",
     hover: ["msg-1", "msg-2", "msg-3"] },
-  { name: "DashboardDemo", mod: "gallery/ui/bin/DashboardDemo.cjs",
-    css: "gallery/ui/demo/dashboard.css", ctor: "DashboardDemo",
+  { name: "DashboardDemo", mod: "gallery/evgui/bin/DashboardDemo.cjs",
+    css: "gallery/evgui/demo/dashboard.css", ctor: "DashboardDemo",
     hover: ["card-0", "card-1", "card-2"] },
 ];
 

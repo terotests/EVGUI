@@ -289,3 +289,315 @@
 
 .pf-opttxt { color: #0a0a0a; font-family: Arial; font-size: 13px; height: 18px; }
 .pf-optmark { color: #0a0a0a; font-family: Arial; font-size: 13px; height: 18px; width: 12px; }
+
+/* --- the date picker --------------------------------------------------------
+ *
+ * The calendar glyph at the end of a date box is a button now. Small and
+ * quiet like the glyph it replaced, with a hover and a focus ring so it reads
+ * as something to press. */
+.pf-pick {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-right: -4px;
+  border: 1px solid #ffffff;
+  border-radius: 6px;
+  background-color: #ffffff;
+  cursor: pointer;
+  transition: background-color 120ms ease-out;
+}
+
+.pf-pick:hover { background-color: #f4f4f5; }
+.pf-pick:active { background-color: #e4e4e7; }
+.pf-pick:focus { border-color: #18181b; }
+
+.pf-pick-icon { color: #71717a; text-align: center; }
+
+/* The box and its popover, siblings, as the select's trigger and list are. */
+.pf-datewrap {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* The surface under the field. The card inside it is the calendar demo's own
+ * (`CalView.card`, the `cd-*` rules below); this only puts a gap between it
+ * and the field. */
+.pf-popover {
+  display: flex;
+  flex-direction: column;
+  padding-top: 6px;
+  width: 268px;
+}
+
+/* --- the calendar card, as calendar.css draws it ---------------------------
+ *
+ * Copied from calendar.css (the card and year-panel rules only, not that
+ * page's field or layout), because a page's sheet is one text and the popover
+ * has to look like the calendar it is. Keep the two in step. */
+
+/* --- the card -------------------------------------------------------------- */
+
+.cd-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  background-color: #ffffff;
+  padding: 12px;
+  width: 268px;
+}
+
+.cd-nav {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  width: 244px;
+  height: 32px;
+}
+
+.cd-navbtn {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #e4e4e7;
+  border-radius: 6px;
+  background-color: #ffffff;
+  cursor: pointer;
+  transition: background-color 120ms ease-out;
+}
+
+.cd-navbtn:hover { background-color: #f4f4f5; }
+.cd-navbtn:active { background-color: #e4e4e7; }
+
+.cd-navglyph {
+  color: #52525b;
+  font-size: 14px;
+  width: 26px;
+  height: 20px;
+  text-align: center;
+}
+
+/* role=status with a live region behind it: arrowing into another month has to
+ * be announced, because the grid moves under the reader without them asking. */
+.cd-caption {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 180px;
+  height: 24px;
+}
+
+.cd-grid {
+  display: flex;
+  flex-direction: column;
+  width: 244px;
+}
+
+.cd-headrow {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  width: 244px;
+  height: 28px;
+}
+
+.cd-weekday {
+  color: #a1a1aa;
+  font-size: 12px;
+  width: 34px;
+  height: 18px;
+  text-align: center;
+}
+
+.cd-week {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  width: 244px;
+  height: 34px;
+}
+
+/* One day. Thirty-four wide so seven of them are exactly the grid's 238 plus
+ * the row's own spare — a day that sized itself from its text would make the
+ * 1st narrower than the 30th and the columns would not line up. */
+.cd-day {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 32px;
+  border-radius: 6px;
+  background-color: #ffffff;
+  cursor: pointer;
+  /* On the BASE rule, not on `:hover`. A transition describes the property and
+   * not the direction — declared only under `:hover`, a day lights up slowly
+   * and goes dark instantly. */
+  transition: background-color 120ms ease-out;
+}
+
+.cd-daynum {
+  color: #18181b;
+  font-size: 13px;
+  width: 32px;
+  height: 18px;
+  text-align: center;
+}
+
+.cd-day:hover { background-color: #f4f4f5; }
+
+/* The day the keyboard is on. The arrows move it — the hint under the grid
+ * says so — and nothing on the page showed where it had gone, so the arrows
+ * read as dead until Enter revealed the day they had reached. A 2px ring, one
+ * shade darker than today's, visible on a white day and on the chosen day's
+ * black alike. Inside the box: an explicit size is border-box here, so the
+ * grid does not move. */
+.cd-day:focus { border: 2px solid #52525b; }
+
+/* The number's own variants. It cannot inherit them: EVGStyleSheet matches one
+ * class token per selector and has no descendant selectors, so "the number
+ * inside a selected day" is not something a rule here can say. The demo writes
+ * the token on the number instead. */
+.cd-daynum-outside { color: #a1a1aa; }
+.cd-daynum-selected { color: #ffffff; }
+
+/* The neighbours' days. Present and clickable — the reference selects them —
+ * but pale, because the month you are looking at is the subject. */
+.cd-day-outside { background-color: #ffffff; }
+
+/* Today: a ring rather than a fill, so it can still show through a selection
+ * or a hover. The fill is already saying "chosen" and the two would be one
+ * picture. */
+.cd-day-today {
+  border: 1px solid #a1a1aa;
+}
+
+/* Later than `:hover` on purpose: a chosen day stays visibly chosen under the
+ * pointer. */
+.cd-day-selected {
+  background-color: #18181b;
+}
+/* …and it has to be said again under the pointer. A pseudo-class outranks a
+ * plain class in this sheet as in CSS, so `.cd-day:hover` above beat the
+ * selected fill however the two were ordered: the day you had just clicked
+ * turned hover-grey with white digits on it, and read as not chosen until the
+ * pointer left. */
+.cd-day-selected:hover { background-color: #18181b; }
+
+/* A day you cannot pick. No pointer cursor either — a cursor that says
+ * "clickable" over something that is not is a lie the user acts on. */
+.cd-day-disabled {
+  background-color: #ffffff;
+  cursor: default;
+  opacity: 0.4;
+}
+
+/* --- reaching a year -------------------------------------------------------
+ *
+ * Reported: the calendar had previous/next month arrows and nothing else, so
+ * 2019 was forty-eight clicks away. react-day-picker's answer is a native
+ * `<select>`; a canvas kit has none, so this is the scrollable panel the
+ * request described. The BEHAVIOUR of choosing a year is measured against the
+ * reference (`ui:calendar:check`); this appearance is not, and does not claim
+ * to be. */
+.cd-monthtxt {
+  color: #18181b;
+  font-size: 14px;
+  font-weight: bold;
+  height: 20px;
+  text-align: right;
+  width: 96px;
+}
+
+.cd-yearbtn {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 22px;
+  border-radius: 6px;
+  background-color: #f4f4f5;
+  cursor: pointer;
+  transition: background-color 120ms ease-out;
+}
+
+.cd-yearbtn:hover { background-color: #e4e4e7; }
+.cd-yearbtn:active { background-color: #d4d4d8; }
+
+.cd-yeartxt {
+  color: #18181b;
+  font-size: 14px;
+  font-weight: bold;
+  height: 20px;
+  width: 44px;
+  text-align: center;
+}
+
+/* Bounded height with a scroller: twenty-one years is taller than the grid,
+ * and the point of the panel is to reach a year without the calendar growing
+ * a page. */
+.cd-yearpanel {
+  display: flex;
+  flex-direction: column;
+  width: 88px;
+  height: 200px;
+  /* `overflow: hidden` with a definite height IS the scroller here — the
+   * engine clamps `scrollTop` to what there is and the demo sets it. There is
+   * no `overflow-y`; `overflow` is the only one parsed. */
+  overflow: hidden;
+  position: relative;
+  padding: 4px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background-color: #ffffff;
+}
+
+.cd-yearopt {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 76px;
+  height: 26px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 100ms ease-out;
+}
+
+.cd-yearopt:hover { background-color: #f4f4f5; }
+
+.cd-yearopt-on {
+  background-color: #18181b;
+}
+
+.cd-yearopttx {
+  color: #3f3f46;
+  font-size: 13px;
+  height: 18px;
+  width: 60px;
+  text-align: center;
+}
+
+.cd-yearopttx-on { color: #ffffff; }
+
+/* The year the keyboard is on, in the picker's year list. */
+.cd-yearopt:focus { border: 2px solid #52525b; }

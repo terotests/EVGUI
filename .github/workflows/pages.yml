@@ -5,12 +5,12 @@
 #   /demo/   the tree-literal demos, painted by EVG's WebGL painter
 #   /web/    Radix on the left, Ranger on the right, the behaviour trace below
 #
-# The demos are Ranger source. They import the controllers from Ranger's
-# gallery/ui/src and the EVG library from lib/evg, and are compiled by the
-# compiler committed in Ranger (dist/rgrc.js), so no compiler build is needed:
-# a sparse, shallow checkout of the parts the build reads is enough, and
-# scripts/run.mjs copies this repository's demo/, web/ and bench/ into its
-# gallery/ui/, where the scripts expect to be.
+# The demos are Ranger source. The controllers are this repository's src/;
+# the EVG library (lib/evg) and the conformance harness the playground runs
+# (gallery/ui/conformance) come from Ranger, and the compiler committed there
+# (dist/rgrc.js) compiles everything, so no compiler build is needed: a sparse,
+# shallow checkout of the parts the build reads is enough, and this repository
+# is checked out at gallery/evgui inside it, where the scripts expect to be.
 name: Deploy EVGUI to GitHub Pages
 
 # Every push is built and tested; only the default branch is deployed.
@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - name: Checkout Ranger (compiler, libraries, controllers)
+      - name: Checkout Ranger (compiler, EVG, conformance harness)
         uses: actions/checkout@v4
         with:
           repository: terotests/Ranger
@@ -52,16 +52,17 @@ jobs:
             compiler
             lib
             dist
-            gallery/ui
+            gallery/ui/conformance
             gallery/vela
             gallery/game_engine/ui
             gallery/office/text
             gallery/pdf_writer/src
+            gallery/mfiles
 
       - name: Checkout EVGUI
         uses: actions/checkout@v4
         with:
-          path: evgui
+          path: ranger/gallery/evgui
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -71,7 +72,7 @@ jobs:
       # esbuild, playwright-core and the Radix reference host the playground
       # bundles. One install serves the pages, the gate and the smoke test.
       - name: Install the conformance host
-        run: node evgui/scripts/run.mjs --ranger ranger ui:conformance:install
+        run: node ranger/gallery/evgui/scripts/run.mjs ui:conformance:install
 
       - name: Install Chromium
         working-directory: ranger/gallery/ui/conformance/dom
@@ -83,20 +84,20 @@ jobs:
 
       - name: Build the pages
         run: |
-          node evgui/scripts/run.mjs --ranger ranger ui:pages:build
-          node ranger/gallery/ui/web/verify-out.mjs ranger/gallery/ui/web/dist
+          node ranger/gallery/evgui/scripts/run.mjs ui:pages:build
+          node ranger/gallery/evgui/web/verify-out.mjs ranger/gallery/evgui/web/dist
 
       # The files being there is not the page: this serves the artifact the
       # way GitHub Pages will and checks that / lands on the demos and /web/
       # paints the playground.
       - name: Smoke test the published tree
-        run: node evgui/scripts/run.mjs --ranger ranger --no-overlay ui:pages:smoke
+        run: node ranger/gallery/evgui/scripts/run.mjs --no-overlay ui:pages:smoke
 
       - name: Demo suites
-        run: bash evgui/scripts/gate.sh --ranger ranger
+        run: bash ranger/gallery/evgui/scripts/gate.sh
 
       - name: Collect the site
-        run: cp -r ranger/gallery/ui/web/dist _site
+        run: cp -r ranger/gallery/evgui/web/dist _site
 
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
