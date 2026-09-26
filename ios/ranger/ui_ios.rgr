@@ -1,0 +1,16 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; ==============================================================================
+; ui_ios.rgr — UiIos
+; ==============================================================================
+;
+; The name the Swift host imports, and nothing else. Everything this class can
+; do is `UiWindowHost` — see `../../src/UiWindowHost.rgr`, which says why the
+; iOS and Android facades are one file now. The safe area and the watch's
+; readable fit are the two things iOS uses that Android does not, and both are
+; calls a host makes rather than classes of their own: `setSafeArea` and
+; `useWatchFit`.
+
+Import "../../src/UiWindowHost.rgr"
+
+class UiIos extends UiWindowHost {
+}
