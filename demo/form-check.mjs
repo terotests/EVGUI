@@ -257,9 +257,21 @@ console.log("--- the tab ring ---");
   // A readonly field is still reachable: it can be read and copied from, and
   // skipping it would take something away from a keyboard user.
   ok("the readonly field is in the ring", ring.includes("fm-invoice"), ring.join(" "));
+  // THE ENDS ARE THE PAGE'S. The ring used to wrap — Shift+Tab from the
+  // first field landed on the last button — and on the page that was a trap:
+  // the focus could never leave the form. Now the ring lets go at either end
+  // (returns false, focus cleared) and the page moves the focus on.
   d.setFocus("fm-name");
+  const tookBack = d.tab(true);
+  ok("Shift+Tab from the first stop lets go", tookBack === false && d.focused === "", `${tookBack} ${d.focused}`);
+  d.setFocus("fm-submit");
+  const tookOn = d.tab(false);
+  ok("and so does Tab from the last", tookOn === false && d.focused === "", `${tookOn} ${d.focused}`);
+  d.setFocus("fm-amount");
   d.tab(true);
-  ok("Shift+Tab goes the other way", d.focused === "fm-submit", d.focused);
+  ok("Shift+Tab goes the other way", d.focused === "fm-secret-eye", d.focused);
+  // One stop for the radio group — the chosen radio — as a browser gives it.
+  ok("the radio group is one stop", ring.filter((x) => x.startsWith("fm-delivery-")).length === 1, ring.join(" "));
 }
 
 console.log("--- readonly is not disabled ---");

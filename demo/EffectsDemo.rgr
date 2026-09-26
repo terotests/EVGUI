@@ -57,7 +57,10 @@ treefactory Fx {
     tag FxGlassSub2 EVGElement (props (className "fx-glass-sub fx-glass-sub2") (elementType 1))
     tag FxGlassSub3 EVGElement (props (className "fx-glass-sub fx-glass-sub3") (elementType 1))
     tag FxRow      EVGElement (props (className "fx-row"))
-    tag FxPool     EVGElement (props (className "fx-pool"))
+    ; The two pools answer a press, so they are buttons a keyboard can reach:
+    ; Enter or Space on one is a press at its centre (see the page's KEYBOARD
+    ; section), and the ripple is the same one a finger starts.
+    tag FxPool     EVGElement (props (className "fx-pool") (role "button") (a11yFocusable true))
     tag FxCard     EVGElement (props (className "fx-card"))
     tag FxCardTop  EVGElement (props (className "fx-card-title") (elementType 1))
     tag FxCardSub  EVGElement (props (className "fx-card-sub") (elementType 1))

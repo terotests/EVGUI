@@ -170,6 +170,19 @@ class ComboboxCtl extends UiCtl {
         return (tid + "-empty")
     }
 
+    ; The option the highlight is on while the list is open, "" otherwise —
+    ; what the input's `aria-activedescendant` names. Not `aria-selected`,
+    ; which follows the selection (see `rows`).
+    fn activeOptionTid:string () {
+        if (open == false) {
+            return ""
+        }
+        if ((strlen activeValue) == 0) {
+            return ""
+        }
+        return (this.itemTid(activeValue))
+    }
+
     fn itemTid:string (v:string) {
         return ((tid + "-item-") + v)
     }

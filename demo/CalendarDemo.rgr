@@ -258,16 +258,13 @@ class CalendarDemo {
         if (this.inField(focused)) {
             if (k == "Tab") {
                 def next:string (field.tabFrom(focused shift))
+                ; Off either end of the field the Tab is the page's: it walks
+                ; on to the month buttons and the grid (or out of the demo)
+                ; in the order the accessible tree has them.
                 if (next == "") {
-                    if shift {
-                        focused = ""
-                    } {
-                        ; Out of the year and onto the grid's resting day.
-                        focused = (model.dayTid((model.currentFocusDay())))
-                    }
-                } {
-                    focused = next
+                    return false
                 }
+                focused = next
                 this.rebuild()
                 return true
             }
@@ -286,12 +283,15 @@ class CalendarDemo {
             this.rebuild()
             return true
         }
-        ; Shift+Tab from the grid goes back into the field, at the year.
+        ; Tab outside the field is the page's — see above.
         if (k == "Tab") {
-            if shift {
-                focused = (field.enterFrom(true))
-                this.rebuild()
-                return true
+            return false
+        }
+        ; The month buttons and the year are buttons: Enter and Space press
+        ; them, and every other key is not theirs.
+        if (((focused == (model.prevTid())) || (focused == (model.nextTid()))) || (focused == (model.yearTid()))) {
+            if (UiCtl.activatesOn(k)) {
+                return (this.press(focused))
             }
             return false
         }
@@ -321,6 +321,12 @@ class CalendarDemo {
     }
 
     fn setFocus:void (id:string) {
+        ; Leaving the field by the keyboard ends its edit, as a click away does.
+        if (this.inField(focused)) {
+            if ((this.inField(id)) == false) {
+                field.blur()
+            }
+        }
         focused = id
     }
 

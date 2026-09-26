@@ -46,7 +46,7 @@ treefactory Ot {
     tag Status    EVGElement (props (className "ot-status") (role "status") (elementType 1))
     tag StatusOk  EVGElement (props (className "ot-status-done") (role "status") (elementType 1))
     tag Row       EVGElement (props (className "ot-row"))
-    tag Btn       EVGElement (props (className "ot-btn") (role "button"))
+    tag Btn       EVGElement (props (className "ot-btn") (role "button") (a11yFocusable true))
     tag BtnTxt    EVGElement (props (className "ot-btntxt") (elementType 1) (a11yHidden true))
     tag Result    EVGElement (props (className "ot-result") (role "status") (elementType 1))
     tag Note      EVGElement (props (className "ot-note") (elementType 1))
@@ -139,14 +139,20 @@ class OtpDemo {
         if back {
             next = (at - 1)
         }
-        if (next < 0) {
-            next = (n - 1)
-        }
-        if (next >= n) {
+        ; NO WRAP: past either end the Tab is the page's.
+        if (at < 0) {
             next = 0
+            if back {
+                next = (n - 1)
+            }
         }
         code.blur()
         invite.blur()
+        if ((next < 0) || (next >= n)) {
+            focused = ""
+            this.rebuild()
+            return false
+        }
         focused = (itemAt r next)
         if (this.inField(focused)) {
             ; MEASURED: focus lands at the end, from either direction.

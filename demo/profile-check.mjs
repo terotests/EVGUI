@@ -192,15 +192,23 @@ console.log("--- it types, and only where it should ---");
   ok("a switch takes none", d.type("x") === false);
   d.setFocus("pf-visibility");
   ok("nor does a select", d.type("x") === false);
-  // The ring closes, and every stop in it is reached once.
+  // The ring walks every stop once and then LETS GO: past the last one the
+  // Tab is the page's, which moves the focus out of the card. (It used to
+  // wrap to the first stop, and on the page that was a keyboard trap.)
   d.setFocus("pf-photo-change");
-  const ring = [];
-  const start = d.focused;
-  do { d.tab(false); ring.push(d.focused); } while (d.focused !== start && ring.length < 40);
-  ok("Tab comes back to where it started", d.focused === start, ring.join(" "));
+  const ring = [d.focused];
+  let took = true;
+  while (ring.length < 40) {
+    took = d.tab(false);
+    if (!took) break;
+    ring.push(d.focused);
+  }
+  ok("Tab lets go after the last stop", took === false && d.focused === "", `${took} ${JSON.stringify(d.focused)} after ${ring.join(" ")}`);
   ok("visiting every stop once", new Set(ring).size === ring.length, ring.join(" "));
   // Fourteen: the twelve controls and the two date fields' calendar buttons.
   ok("fourteen of them", ring.length === 14, "got " + ring.length);
+  d.setFocus("pf-photo-change");
+  ok("and Shift+Tab lets go before the first", d.tab(true) === false && d.focused === "");
 }
 
 console.log("--- nothing leaks out of its container ---");

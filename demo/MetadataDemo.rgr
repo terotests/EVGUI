@@ -80,8 +80,8 @@ treefactory Md {
     tag Title   EVGElement (props (className "md-title") (elementType 1) (role "heading") (a11yLevel 1))
     tag Sub     EVGElement (props (className "md-sub") (elementType 1))
     tag Actions EVGElement (props (className "md-actions"))
-    tag Save    EVGElement (props (className "md-btn md-btn-primary") (elementType 1) (role "button"))
-    tag Discard EVGElement (props (className "md-btn") (elementType 1) (role "button"))
+    tag Save    EVGElement (props (className "md-btn md-btn-primary") (elementType 1) (role "button") (a11yFocusable true))
+    tag Discard EVGElement (props (className "md-btn") (elementType 1) (role "button") (a11yFocusable true))
     tag Status  EVGElement (props (className "md-status") (elementType 1) (role "status"))
     tag Bad     EVGElement (props (className "md-status md-status-bad") (elementType 1) (role "status"))
     tag Sep     EVGElement (props (className "md-sep"))
@@ -636,6 +636,10 @@ class MetadataDemo {
     ; input, the date field's month, and the approved pill that is on.
     fn ring:[string] () {
         def a:[string]
+        ; Save and Discard are drawn ABOVE the fields, under the title, so a
+        ; reading-order walk meets them first.
+        push a "md-save"
+        push a "md-discard"
         push a "md-title"
         push a (cls.inputTid())
         push a "md-number"
@@ -643,8 +647,6 @@ class MetadataDemo {
         push a "md-amount"
         push a (due.segTid(0))
         push a (approved.itemTid(approved.value))
-        push a "md-save"
-        push a "md-discard"
         return a
     }
 
@@ -685,11 +687,19 @@ class MetadataDemo {
         if back {
             next = (at - 1)
         }
-        if (next < 0) {
-            next = (n - 1)
-        }
-        if (next >= n) {
+        ; NO WRAP: past either end the Tab is the page's, and the focus
+        ; leaves the card rather than cycling it forever.
+        if (at < 0) {
             next = 0
+            if back {
+                next = (n - 1)
+            }
+        }
+        if ((next < 0) || (next >= n)) {
+            this.leaveFocus("")
+            focused = ""
+            this.rebuild()
+            return false
         }
         def landing:string (itemAt r next)
         this.leaveFocus(landing)
@@ -761,6 +771,18 @@ class MetadataDemo {
     fn setHover:void (id:string) { hovered = id }
     fn setPressed:void (id:string) { pressed = id }
     fn setFocus:void (id:string) { focused = id }
+
+    ; The highlighted option of the combobox whose input is `tid`, for the
+    ; page to name as that input's aria-activedescendant.
+    fn activeDescendant:string (tid:string) {
+        if (tid == (cls.inputTid())) {
+            return (cls.activeOptionTid())
+        }
+        if (tid == (customer.inputTid())) {
+            return (customer.activeOptionTid())
+        }
+        return ""
+    }
 
     fn rebuild:void () {
         root = (this.page())

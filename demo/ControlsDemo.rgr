@@ -71,9 +71,9 @@ treefactory Ctl {
     tag Panel     EVGElement (props (className "cx-panel"))
     tag PanelLbl  EVGElement (props (className "cx-panellbl") (elementType 1))
     tag NumRow    EVGElement (props (className "cx-numrow"))
-    tag NumBtn    EVGElement (props (className "cx-numbtn") (role "button"))
+    tag NumBtn    EVGElement (props (className "cx-numbtn") (role "button") (a11yFocusable true))
     tag NumBtnTxt EVGElement (props (className "cx-numbtntxt") (elementType 1) (a11yHidden true))
-    tag NumBox    EVGElement (props (className "cx-numbox") (role "textbox") (a11yRoleDescription "Number field"))
+    tag NumBox    EVGElement (props (className "cx-numbox") (role "textbox") (a11yRoleDescription "Number field") (a11yFocusable true))
     tag NumTxt    EVGElement (props (className "cx-numtxt") (elementType 1) (a11yHidden true))
     tag NumHint   EVGElement (props (className "cx-numhint") (elementType 1))
 
@@ -92,7 +92,7 @@ treefactory Ctl {
     tag SlideLbl  EVGElement (props (className "cx-slidelbl") (elementType 1))
     tag Track     EVGElement (props (className "cx-track"))
     tag Range     EVGElement (props (className "cx-range"))
-    tag Thumb     EVGElement (props (className "cx-thumb") (role "slider"))
+    tag Thumb     EVGElement (props (className "cx-thumb") (role "slider") (a11yFocusable true))
     tag Refs      EVGElement (props (className "cx-refs"))
     tag RefTxt    EVGElement (props (className "cx-reftxt") (elementType 1) (a11yHidden true))
     tag Ticks     EVGElement (props (className "cx-ticks"))
@@ -105,7 +105,7 @@ treefactory Ctl {
     tag BandTxt   EVGElement (props (className "cx-bandtxt") (elementType 1) (a11yHidden true))
 
     tag Actions   EVGElement (props (className "cx-actions"))
-    tag Btn       EVGElement (props (className "cx-btn") (role "button"))
+    tag Btn       EVGElement (props (className "cx-btn") (role "button") (a11yFocusable true))
     tag BtnTxt    EVGElement (props (className "cx-btntxt") (elementType 1) (a11yHidden true))
     tag Note      EVGElement (props (className "cx-note") (elementType 1))
 }

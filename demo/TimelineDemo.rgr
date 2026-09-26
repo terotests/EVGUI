@@ -292,6 +292,12 @@ class TimelineDemo {
 
     fn listBlock:EVGElement () {
         def t (tree Tl (List (props (id "tl") (key "tl"))))
+        ; The list is the one thing a keyboard can reach here: a click steps
+        ; the timeline on, and so do Space, Enter and the arrows once the list
+        ; has the focus — otherwise the demo's one interaction is mouse-only.
+        t.a11yFocusable = true
+        t.a11yLabel = "Activity"
+        t.a11yDescription = "Press Space or the arrow keys to step through the events"
         host.enter("tl")
         def i:int 0
         while (i < (array_length events)) {
@@ -347,6 +353,29 @@ class TimelineDemo {
     }
 
     fn key:boolean (k:string) {
+        if (focused != "tl") {
+            return false
+        }
+        def n:int (array_length events)
+        if ((k == " ") || ((k == "Enter") || ((k == "ArrowRight") || (k == "ArrowDown")))) {
+            return (this.press("tl"))
+        }
+        if ((k == "ArrowLeft") || (k == "ArrowUp")) {
+            def back:int (value - 1)
+            if (back < 0) {
+                back = n
+            }
+            this.setValue(back)
+            return true
+        }
+        if (k == "Home") {
+            this.setValue(0)
+            return true
+        }
+        if (k == "End") {
+            this.setValue(n)
+            return true
+        }
         return false
     }
 

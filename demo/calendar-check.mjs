@@ -133,10 +133,20 @@ console.log("typing a date moves the calendar");
   d.keyWith("Tab", false, false);
   d.keyWith("Tab", false, false);
   ok("Tab walks to the year", d.focused === "cd-box-year", d.focused);
-  d.keyWith("Tab", false, false);
-  ok("and out of the field onto the grid's resting day", d.focused.startsWith("cal-2026-01-"), d.focused);
-  d.keyWith("Tab", true, false);
-  ok("Shift+Tab from the grid comes back into the year", d.focused === "cd-box-year", d.focused);
+  // Off the end of the field the Tab is the PAGE's: it walks the accessible
+  // tree's stops — the month buttons, then the grid's one stop — and leaves
+  // the demo after the last. (The field used to jump straight to the grid,
+  // skipping the month buttons, which were not reachable at all.)
+  const off = d.keyWith("Tab", false, false);
+  ok("and off the end of the field the Tab is the page's", off === false && d.focused === "cd-box-year", `${off} ${d.focused}`);
+  const stops = JSON.parse(d.a11yJson(1, "")).nodes.filter((n) => n.focusable).map((n) => n.id);
+  ok("where the month buttons, the year and ONE day of the grid are the next stops",
+    ["cal-prev", "cal-year", "cal-next"].every((id) => stops.includes(id)) &&
+      stops.filter((id) => /^cal-\d/.test(id)).length === 1 && stops.some((id) => id.startsWith("cal-2026-01-")),
+    stops.join(" "));
+  d.setFocus(stops.find((id) => /^cal-\d/.test(id)));
+  ok("and Shift+Tab from the grid is the page's too", d.keyWith("Tab", true, false) === false);
+  d.setFocus("cd-box-year");
   d.key("a");
   ok("a letter changes nothing", shown() === "mm/25/2026", shown());
   const tree = JSON.parse(d.a11yJson(1, ""));

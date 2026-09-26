@@ -2134,6 +2134,13 @@ class DashboardDemo {
             if (this.tableKey(k)) {
                 return true
             }
+            ; On a tab the arrows, Home and End walk the TAB LIST (the page's
+            ; roving handler does that), not the scroll region.
+            if ((strlen focused) > 7) {
+                if ((substring focused 0 7) == "db-tab-") {
+                    return false
+                }
+            }
             ; Nothing else wanted it, so it goes to the scroll region. LAST,
             ; not first: a Home that moves between range buttons and a Home
             ; that jumps to the top of the page are the same key, and the

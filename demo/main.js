@@ -1323,7 +1323,16 @@ function keySortable(key) {
     state.over = "";
     return true;
   }
-  if (!state.dragging) return false;
+  if (!state.dragging) {
+    // Not carrying anything: the arrows walk the rows (every row is also a
+    // Tab stop), so the list can be browsed before a row is picked up.
+    const at = state.order.indexOf(focused);
+    const to = key === "ArrowDown" ? at + 1 : key === "ArrowUp" ? at - 1
+      : key === "Home" ? 0 : key === "End" ? state.order.length - 1 : -1;
+    if (to < 0 || to >= state.order.length || to === at) return false;
+    state.focus = `sr-row-${state.order[to]}`;
+    return true;
+  }
   const step = key === "ArrowDown" ? 1 : key === "ArrowUp" ? -1 : 0;
   if (!step) return false;
   const at = state.order.indexOf(state.dragging);
@@ -1848,6 +1857,7 @@ function paint() {
     tree.byId = new Map(tree.nodes.map((n) => [n.id, n]));
     lastTree = tree;
     mirror.update(tree);
+    kbAfterPaint(tree);
     syncControls();
     inspectorTick();
   } catch (e) {
@@ -2596,20 +2606,20 @@ const consumesText = (el) => {
 window.addEventListener("keydown", (ev) => {
   if (consumesText(ev.target)) return;
   const d0 = demo();
-  // TAB IS THE BROWSER'S unless the demo says otherwise. Every demo's `key`
-  // used to be offered it, and `DropdownDemo.key` — like the tree's — answers
-  // "taken" to anything at all, so the page called `preventDefault()` on Tab
-  // and the focus never moved: there was no way to reach the demo from the
-  // keyboard, and no way to leave it. The five demos that own a tab ring of
-  // their own (the form, the profile card, the metadata card, the OTP boxes
-  // and the calendar) say `ownsTab` and still get it.
-  if (ev.key === "Tab" && !d0.ownsTab) return;
+  // Keys reach the demo only while the keyboard is IN it, and Tab is the
+  // keyboard section's (see "KEYBOARD" below): one stop per widget, and out
+  // of the canvas after the last one.
+  if (!kbInside()) return;
+  if (ev.key === "Tab") {
+    if (kbTab(ev.shiftKey)) ev.preventDefault();
+    return;
+  }
   // A demo that reads modifiers gets them; the rest keep the one-argument
   // door they have always had.
   const took = d0.keyWith
     ? d0.keyWith(ev.key, ev.shiftKey, ev.ctrlKey || ev.metaKey, ev.altKey)
     : d0.key(ev.key);
-  if (!took) return;
+  if (!took && !(!ev.ctrlKey && !ev.metaKey && !ev.altKey && kbFallbackKey(ev.key))) return;
   ev.preventDefault();
   paint();
   // A key can put the focus back in a field without the pointer — Escape out
@@ -2661,6 +2671,8 @@ const textInput = createTextInputBridge({
     // Three keys are the application's on every page, and a demo may claim
     // more for the field that has the focus: the combobox wants its arrows,
     // because there they walk the list rather than the caret.
+    // Tab is the keyboard section's, here as on the window — see `kbTab`.
+    if (k.key === "Tab") return kbTab(k.shiftKey);
     const claimed = typeof d.ownsKey === "function" && d.ownsKey(k.key, k);
     if (!claimed && k.key !== "Tab" && k.key !== "Escape" && k.key !== "Enter") return false;
     const took = d.keyWith ? d.keyWith(k.key, k.shiftKey, k.ctrlKey || k.metaKey, k.altKey) : false;
@@ -2726,17 +2738,507 @@ window.__resetDemo = (name) => {
   return true;
 };
 
+// =============================================================================
+// KEYBOARD — tab stops, roving arrows, a visible focus ring
+// (WCAG 2.1.1 keyboard, 2.1.2 no keyboard trap, 2.4.7 focus visible)
+// =============================================================================
+//
+// ONE MECHANISM FOR EVERY DEMO, read off the accessible tree the page already
+// has. The model is shadcn's, which is Radix's:
+//
+//   * every standalone control is a Tab stop, in tree order;
+//   * a COMPOSITE widget — a toolbar, a tab list, a radio group, a tree, a
+//     grid, a menubar — is ONE stop, and the arrows rove inside it;
+//   * a popup (a menu, a listbox) is not a stop at all: it is reached from its
+//     trigger, and a Tab from inside one closes it first;
+//   * Tab after the last stop, and Shift+Tab before the first, LEAVE the
+//     canvas for whatever the page has next — the browser's own sequential
+//     navigation does that part, so a radio group or a <details> on the page
+//     is walked the way the browser walks it;
+//   * keys reach the demo only while the keyboard is in it;
+//   * the control with the focus gets a ring when the keyboard put it there
+//     (a text field gets one however it was focused, as :focus-visible does).
+//
+// A demo with a Tab ring of its own (`ownsTab`: the form, the profile card,
+// the metadata card, the OTP boxes, the calendar) is asked first — its ring
+// knows things the tree does not, such as a date field's segments — and says
+// "not mine" at its ends, which is where this takes over and leaves.
+//
+// Every mirror element that is a stop gets tabindex=0 and every other one -1,
+// so a Tab from the page ENTERS at the first stop and a Shift+Tab from below
+// enters at the last. Inside, Tab is handled here rather than left to the DOM
+// order of the mirror, which drifts from the tree's as nodes come and go.
+
+const KB_COMPOSITE = new Set(["menubar", "menu", "toolbar", "tablist", "tree", "treegrid", "grid", "listbox", "radiogroup"]);
+const KB_POPUP = new Set(["menu", "listbox"]);
+// Roles a key activates when the demo did not take the key itself: the same
+// press a pointer gives, at the middle of the node.
+const KB_ACTIVATE = new Set(["button", "link", "checkbox", "switch", "radio", "tab", "menuitem",
+  "menuitemcheckbox", "menuitemradio", "option", "treeitem"]);
+// A text field shows its ring however it got the focus; everything else only
+// when the keyboard moved it, which is the :focus-visible rule.
+const KB_TEXT = new Set(["textbox", "combobox", "spinbutton", "searchbox"]);
+// The row highlight IS the focus indicator in an open menu or list, so a
+// popup and anything in one get no ring (a menubar's triggers still do).
+const KB_NO_RING = new Set(["menu", "listbox"]);
+
+// Where the keyboard last was, for the moments the focused element has gone
+// (a node removed under it leaves the focus on <body>).
+let kbHome = false;
+// Between a Tab that leaves and the browser moving the focus out.
+let kbLeaving = false;
+// :focus-visible's rule — did the keyboard or a pointer move things last?
+let kbKeyboardMode = false;
+
+/** Is the keyboard in the demo? Keys go to it only then. */
+function kbInside() {
+  const a = document.activeElement;
+  if (a && a !== document.body && a !== document.documentElement) return stage.contains(a);
+  return kbHome;
+}
+
+const kbNode = (id) => (id && lastTree && lastTree.byId ? lastTree.byId.get(id) : null) || null;
+const kbParent = (n) => (n && n.p ? kbNode(n.p) : null);
+
+/** The app's focus, or the mirror element's when the app keeps none. */
+function kbFocusId() {
+  const f = appFocus();
+  if (f) return f;
+  const a = document.activeElement;
+  const el = a && a.closest ? a.closest("[data-a11y-id]") : null;
+  return el && stage.contains(el) ? el.dataset.a11yId : "";
+}
+
+function kbInPopup(n) {
+  for (let a = kbParent(n); a; a = kbParent(a)) if (KB_POPUP.has(a.role)) return true;
+  return false;
+}
+
+/** The OUTERMOST composite a node is in: a radio group inside a toolbar is the toolbar's. */
+function kbGroupOf(n) {
+  let g = null;
+  for (let a = kbParent(n); a; a = kbParent(a)) if (KB_COMPOSITE.has(a.role)) g = a;
+  return g;
+}
+
+function kbWithin(n, anc) {
+  for (let a = n; a; a = kbParent(a)) if (a === anc) return true;
+  return false;
+}
+
+/** Can this node take the keyboard at all? */
+function kbFocusable(n, modal) {
+  if (!n.focusable || n.disabled) return false;
+  if (modal && !kbWithin(n, modal)) return false;
+  return !kbInPopup(n);
+}
+
+/**
+ * The Tab stops, in tree order: `{id, pos, group}`. A composite is one entry
+ * — the member with the focus, else the chosen one (a radio group's checked
+ * radio, a tab list's selected tab), else its first.
+ */
+function kbStops(tree, focusId) {
+  if (!tree || !tree.nodes) return [];
+  const modal = tree.nodes.find((n) => n.modal) || null;
+  const out = [];
+  const groups = new Map();
+  tree.nodes.forEach((n, pos) => {
+    if (!kbFocusable(n, modal)) return;
+    const group = kbGroupOf(n);
+    if (!group) {
+      out.push({ id: n.id, pos, group: null });
+      return;
+    }
+    let g = groups.get(group.id);
+    if (!g) {
+      g = { id: "", pos, group, members: [] };
+      groups.set(group.id, g);
+      out.push(g);
+    }
+    g.members.push(n);
+  });
+  for (const g of groups.values()) {
+    const m = g.members;
+    const chosen = g.group.role === "toolbar" || g.group.role === "menubar"
+      ? null
+      : m.find((n) => n.selected) || m.find((n) => n.checked === 2) || m.find((n) => n.current);
+    g.id = (m.find((n) => n.id === focusId) || chosen || m[0]).id;
+  }
+  return out;
+}
+
+/** Where a Tab goes from here, or null for "out of the canvas". */
+function kbTarget(back) {
+  const tree = lastTree;
+  const focus = kbFocusId();
+  const stops = kbStops(tree, focus);
+  if (!stops.length) return null;
+  const node = kbNode(focus);
+  // Nothing focused inside — the canvas itself, after a click on empty space.
+  // It sits before the mirror in the page, so forward is the first stop.
+  if (!node) return back ? null : stops[0];
+  const i = stops.findIndex((s) => s.id === focus || (s.group && kbWithin(node, s.group)));
+  if (i >= 0) return stops[back ? i - 1 : i + 1] || null;
+  // Focus on something that is not a stop (a row of an open popup, a control
+  // the tree does not call focusable): carry on from where it is.
+  const pos = tree.nodes.indexOf(node);
+  if (back) {
+    for (let k = stops.length - 1; k >= 0; k--) if (stops[k].pos < pos) return stops[k];
+    return null;
+  }
+  return stops.find((s) => s.pos > pos) || null;
+}
+
+/** Hand the demo a focus the keyboard chose. */
+function kbSetFocus(id) {
+  const d = instance();
+  if (!d) {
+    state.focus = id;
+    return;
+  }
+  if (typeof d.setFocus !== "function") return;
+  d.setFocus(id);
+  // Most demos draw their focus when the tree is BUILT, and `setFocus` only
+  // records it.
+  if (typeof d.rebuild === "function") d.rebuild();
+}
+
+/** After a key moved the focus: draw it, and put the DOM focus where it is. */
+function kbSettle() {
+  paint();
+  syncTextSession();
+  if (settlePendingRow()) paint();
+  const want = kbFocusId();
+  if (want && !textInput.isActive()) {
+    const el = mirror.elementOf(want);
+    if (el && document.activeElement !== el) el.focus({ preventScroll: true });
+  }
+  kbRingUpdate();
+  if (demo().animated) animate();
+}
+
+function kbDemoKey(k, shift) {
+  const d = demo();
+  return d.keyWith ? d.keyWith(k, !!shift, false, false) : d.key(k);
+}
+
+/** A Tab from inside a menu or a list closes it first, back to its trigger. */
+function kbEscapePopups() {
+  for (let k = 0; k < 3; k++) {
+    const n = kbNode(kbFocusId());
+    if (!n || !kbInPopup(n)) return;
+    if (!kbDemoKey("Escape")) return;
+    paint();
+    if (settlePendingRow()) paint();
+  }
+}
+
+/**
+ * Tab or Shift+Tab with the keyboard in the demo. True when it was handled
+ * here (the caller prevents the default); false when the browser should carry
+ * the focus out of the canvas.
+ */
+function kbTab(back) {
+  const d = demo();
+  kbEscapePopups();
+  if (d.ownsTab && kbDemoKey("Tab", back)) {
+    kbSettle();
+    return true;
+  }
+  const next = kbTarget(back);
+  if (next) {
+    kbSetFocus(next.id);
+    kbSettle();
+    // A demo with no focus of its own (the motion cards) follows the DOM.
+    const el = mirror.elementOf(next.id);
+    if (el && !textInput.isActive() && document.activeElement !== el) el.focus({ preventScroll: true });
+    kbRingUpdate();
+    return true;
+  }
+  kbLeave();
+  return false;
+}
+
+/**
+ * Out of the canvas. Every mirror element leaves the tab order for this one
+ * keystroke, so the browser's own Tab — which runs after this handler —
+ * moves past the whole stage to the page's next (or previous) control. The
+ * demo is told its focus is gone once the browser has moved it.
+ */
+function kbLeave() {
+  kbLeaving = true;
+  kbHome = false;
+  for (const el of mirror.root.querySelectorAll("[data-a11y-id]")) {
+    if (el.tabIndex >= 0) el.tabIndex = -1;
+  }
+  kbRing.style.display = "none";
+  setTimeout(() => {
+    kbLeaving = false;
+    // Already back (a Shift+Tab straight after): nothing to blur.
+    if (stage.contains(document.activeElement)) return;
+    kbHome = false;
+    textInput.release();
+    kbSetFocus("");
+    paint();
+    if (demo().animated) animate();
+  }, 0);
+}
+
+/** Focus moved into the mirror by itself — a Tab from the page, or a reader. */
+function kbAdopt(node) {
+  const before = kbFocusId();
+  adoptFocus(node);
+  const d = instance();
+  if (d && before !== node.id && typeof d.rebuild === "function" && d.focused === node.id) {
+    d.rebuild();
+    paint();
+  }
+  if (demo().textSession) syncTextSession();
+  kbRingUpdate();
+}
+
+/** Which way an arrow goes in a composite, or null when it is not one of its keys. */
+function kbArrowStep(group, key) {
+  if (key === "Home") return "first";
+  if (key === "End") return "last";
+  const role = group.role;
+  if (role === "grid" || role === "treegrid") return null;
+  const vertical = group.orientation === "vertical" ||
+    role === "tree" || role === "listbox" || role === "menu";
+  const both = role === "radiogroup";
+  if (both || !vertical) {
+    if (key === "ArrowRight") return 1;
+    if (key === "ArrowLeft") return -1;
+  }
+  if (both || vertical) {
+    if (key === "ArrowDown") return 1;
+    if (key === "ArrowUp") return -1;
+  }
+  return null;
+}
+
+/**
+ * The keys a demo did not take. Arrows rove inside a composite (a tab list and
+ * a radio group select as they go, as Radix's do), and Enter or Space works
+ * the control under the focus with the press a pointer would give it.
+ */
+function kbFallbackKey(key) {
+  const node = kbNode(kbFocusId());
+  if (!node) return false;
+  const group = kbGroupOf(node);
+  const step = group && !kbInPopup(node) ? kbArrowStep(group, key) : null;
+  if (step !== null) {
+    const modal = lastTree.nodes.find((n) => n.modal) || null;
+    const members = lastTree.nodes.filter((n) => kbFocusable(n, modal) && kbWithin(n, group));
+    if (!members.length) return false;
+    const at = Math.max(0, members.findIndex((n) => n.id === node.id));
+    const n = members.length;
+    const to = step === "first" ? 0 : step === "last" ? n - 1 : (at + step + n) % n;
+    const target = members[to];
+    kbSetFocus(target.id);
+    if (group.role === "tablist" || group.role === "radiogroup") {
+      if (!(target.selected || target.checked === 2)) pressAtCentre(target, press);
+      kbSetFocus(target.id);
+    }
+    return true;
+  }
+  if ((key === "Enter" || key === " ") && KB_ACTIVATE.has(node.role)) {
+    pressAtCentre(node, press);
+    // A surface that ripples under a finger ripples under a key press too.
+    const d = demo();
+    if (d.ripple && node.b) {
+      d.ripple(node.b[0] + node.b[2] / 2, node.b[1] + node.b[3] / 2);
+      setTimeout(() => { if (d.rippleEnd) d.rippleEnd(); animate(); }, 150);
+      animate();
+    }
+    return true;
+  }
+  return false;
+}
+
+// --- the ring -----------------------------------------------------------------
+// Drawn over the canvas rather than into it, so it is the same ring on every
+// demo and needs nothing from twenty stylesheets. It sits in #stage, which
+// carries the phone scale, so it scales with the picture it rings.
+const kbRing = document.createElement("div");
+kbRing.className = "evg-focus-ring";
+kbRing.setAttribute("aria-hidden", "true");
+Object.assign(kbRing.style, {
+  position: "absolute",
+  pointerEvents: "none",
+  display: "none",
+  borderRadius: "6px",
+  boxShadow: "0 0 0 2px #ffffff, 0 0 0 4px #6366f1",
+  zIndex: "3",
+});
+stage.appendChild(kbRing);
+
+/**
+ * The box to ring, and its corner radius. A combobox's input is drawn INSIDE
+ * a box that also holds its chips, its clear button and its chevron, and a
+ * ring round the input alone rings a strip in the middle of the control. So
+ * the ring goes round the tightest BORDER the picture actually drew around the
+ * node — read off the display list — when there is one barely bigger than it;
+ * otherwise round the node's own rectangle.
+ */
+let kbStrokes = { src: null, list: [] };
+function kbRingBox(node) {
+  const src = window.__lastList;
+  if (src !== kbStrokes.src) {
+    let list = [];
+    try {
+      list = (JSON.parse(src).cmds || []).filter((c) => c.k === 1 && c.w > 0 && c.h > 0);
+    } catch (e) {
+      list = [];
+    }
+    kbStrokes = { src, list };
+  }
+  const [x, y, w, h] = node.b;
+  let best = null;
+  for (const c of kbStrokes.list) {
+    if (c.x > x + 0.5 || c.y > y + 0.5 || c.x + c.w < x + w - 0.5 || c.y + c.h < y + h - 0.5) continue;
+    if (c.h > h + 24 || c.w > Math.max(w + 24, w * 1.4, KB_TEXT.has(node.role) ? w * 4 : 0)) continue;
+    if (!best || c.w * c.h < best.w * best.h) best = c;
+  }
+  return best ? [best.x, best.y, best.w, best.h, best.r || 6] : [x, y, w, h, 6];
+}
+
+function kbRingUpdate() {
+  const node = kbNode(kbFocusId());
+  const a = document.activeElement;
+  const show = !!node && !kbLeaving && !!a && stage.contains(a) &&
+    !KB_NO_RING.has(node.role) && !kbInPopup(node) && (kbKeyboardMode || KB_TEXT.has(node.role)) &&
+    !!node.b && node.b[2] > 0 && node.b[3] > 0;
+  if (!show) {
+    if (kbRing.style.display !== "none") kbRing.style.display = "none";
+    return;
+  }
+  const [x, y, w, h, r] = kbRingBox(node);
+  Object.assign(kbRing.style, {
+    display: "block",
+    borderRadius: r + "px",
+    left: x + "px",
+    top: y + "px",
+    width: w + "px",
+    height: h + "px",
+  });
+}
+
+// --- after every paint --------------------------------------------------------
+/**
+ * The tab order and what a combobox is pointing at, onto the mirror the paint
+ * just updated.
+ *
+ * `aria-activedescendant` is the combobox pattern's whole trick — the DOM
+ * focus stays in the box while the arrows walk the list — and the tree has no
+ * field for it. It does not need one: a demo whose combobox keeps a highlight
+ * says which option it is on through `activeDescendant(tid)`.
+ */
+function kbApplyStops(tree) {
+  const stops = kbLeaving ? [] : kbStops(tree, kbFocusId());
+  const ids = new Set(stops.map((s) => s.id));
+  for (const el of mirror.root.querySelectorAll("[data-a11y-id]")) {
+    const want = ids.has(el.dataset.a11yId) ? 0 : -1;
+    if (el.tabIndex !== want) el.tabIndex = want;
+  }
+}
+
+function kbAfterPaint(tree) {
+  kbApplyStops(tree);
+  const domId = (id) => "evg-" + String(id).replace(/[^A-Za-z0-9_-]/g, "_");
+  for (const n of tree.nodes) {
+    if (n.role !== "combobox") continue;
+    const el = mirror.elementOf(n.id);
+    if (!el) continue;
+    let list = null;
+    let opt = null;
+    if (n.expanded === 2) {
+      const at = tree.nodes.indexOf(n);
+      const lists = tree.nodes.filter((x) => x.role === "listbox");
+      list = lists.find((x) => tree.nodes.indexOf(x) > at) || lists[0] || null;
+      // The demo says where its highlight is. One that moves the real focus
+      // onto the options instead (the profile's select, as Radix's does)
+      // says nothing, and needs nothing.
+      const inst = instance();
+      const named = inst && typeof inst.activeDescendant === "function" ? inst.activeDescendant(n.id) : "";
+      if (named) opt = tree.byId.get(named) || null;
+    }
+    const listEl = list && mirror.elementOf(list.id);
+    const optEl = opt && mirror.elementOf(opt.id);
+    if (listEl && !listEl.id) listEl.id = domId(list.id);
+    if (optEl && !optEl.id) optEl.id = domId(opt.id);
+    const ctl = listEl ? listEl.id : null;
+    const act = optEl ? optEl.id : null;
+    if (ctl) el.setAttribute("aria-controls", ctl); else el.removeAttribute("aria-controls");
+    if (act) el.setAttribute("aria-activedescendant", act); else el.removeAttribute("aria-activedescendant");
+  }
+  kbRingUpdate();
+  kbKeepInView();
+}
+
+/**
+ * A control the keyboard moved to is a control on the screen. The dashboard
+ * scrolls its own main region, so a Tab to a row below the fold scrolled
+ * nothing and the focus went somewhere nobody could see. Only when the focus
+ * CHANGES — a wheel that scrolls away from the focused control is left alone.
+ */
+let kbInViewFor = "";
+function kbKeepInView() {
+  const id = kbFocusId();
+  if (id === kbInViewFor) return;
+  kbInViewFor = id;
+  const d = demo();
+  const node = kbNode(id);
+  if (!d.scroll || !node || !node.b || !kbInside() || !kbKeyboardMode) return;
+  const H = typeof d.height === "function" ? d.height() : d.height;
+  const y = node.b[1];
+  const h = node.b[3];
+  const m = 24;
+  let dy = 0;
+  if (y < m) dy = y - m;
+  else if (y + h > H - m) dy = y + h - (H - m);
+  if (dy) requestAnimationFrame(() => { if (d.scroll(dy)) paint(); });
+}
+
+document.addEventListener("focusin", (ev) => {
+  kbHome = stage.contains(ev.target);
+  // The Tab that left has landed: the demo is back in the tab order at once,
+  // so a Shift+Tab straight after comes back in (the rest of leaving — the
+  // demo's own blur — waits for the timer in `kbLeave`).
+  if (kbLeaving && !kbHome) {
+    kbLeaving = false;
+    if (lastTree) kbApplyStops(lastTree);
+  }
+  kbRingUpdate();
+}, true);
+window.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Shift" && ev.key !== "Control" && ev.key !== "Alt" && ev.key !== "Meta") kbKeyboardMode = true;
+}, true);
+window.addEventListener("pointerdown", () => {
+  kbKeyboardMode = false;
+}, true);
+
+// For checks driving the page: the stops the next Tab walks.
+window.__kbStops = () => kbStops(lastTree, kbFocusId()).map((s) => s.id);
+window.__kbFocus = () => kbFocusId();
+// ============================================================ end KEYBOARD ===
+
+
 mirror = createA11yMirror(stage, {
   canvas,
   label: "Ranger tree literal demos",
-  // Focus that arrived on its own is the demo's to record — see `adoptFocus`.
-  onFocus: adoptFocus,
+  // Focus that arrived on its own is the demo's to record — see `adoptFocus`
+  // (and `kbAdopt`, which also hands a text field its editing session).
+  onFocus: kbAdopt,
   // While a text field owns the keyboard, the element holding it is the
   // bridge's transparent <input> and not the mirror's node for the same field.
   // The mirror follows the app's focus by calling `.focus()`, so without this
   // the two would take the field off each other every paint and every second
   // keystroke would land in the one nobody is reading.
-  canMoveFocus: () => !textInput.isActive(),
+  // And only while the keyboard is in the demo at all: a repaint must not
+  // pull the focus back off the sidebar control a Tab just left it on.
+  canMoveFocus: () => !textInput.isActive() && kbInside(),
   // A reader pressed something: press the app in the middle of the rectangle
   // the reader was given. Not a table from node ids to commands — there is
   // nothing to keep in step, and the rectangle is the one that was drawn.

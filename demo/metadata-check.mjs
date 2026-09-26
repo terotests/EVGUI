@@ -184,10 +184,20 @@ console.log("--- the ring, and a blur that settles the combobox ---");
 {
   const d = fresh();
   const stops = [];
-  for (let i = 0; i < 11; i++) { d.key("Tab"); stops.push(d.focused); }
-  eq("Tab walks one stop per control, three inside the date field, then the buttons, then round",
+  for (let i = 0; i < 8; i++) { d.key("Tab"); stops.push(d.focused); }
+  eq("Tab walks one stop per control, three inside the date field",
     stops.join(" "),
-    "md-class-input md-number md-customer-input md-amount md-due-month md-due-day md-due-year md-approved-no md-save md-discard md-title");
+    "md-class-input md-number md-customer-input md-amount md-due-month md-due-day md-due-year md-approved-no");
+  // And then LETS GO rather than going round: the page moves the focus out of
+  // the card (a ring that wrapped was a keyboard trap on the page). Save and
+  // Discard are drawn above the fields, so they are where the ring starts.
+  eq("past the last stop the Tab is the page's", d.key("Tab"), false);
+  eq("and the card lets go of the focus", d.focused, "");
+  d.key("Tab");
+  eq("a Tab into the card starts at Save, which is drawn first", d.focused, "md-save");
+  d.key("Tab");
+  d.key("Tab");
+  eq("then Discard, then the first field", d.focused, "md-title");
   d.press("md-class-input");
   d.keyWith("a", false, true);
   for (const ch of "zz") d.type(ch);

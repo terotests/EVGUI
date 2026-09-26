@@ -29,7 +29,7 @@ treefactory Cal {
     tag FieldLbl  EVGElement (props (className "cd-field-label") (elementType 1))
     tag Card      EVGElement (props (className "cd-card"))
     tag Nav       EVGElement (props (className "cd-nav") (role "navigation") (a11yLabel "Navigation bar"))
-    tag NavBtn    EVGElement (props (className "cd-navbtn") (role "button"))
+    tag NavBtn    EVGElement (props (className "cd-navbtn") (role "button") (a11yFocusable true))
     tag NavGlyph  EVGElement (props (className "cd-navglyph") (elementType 1) (a11yHidden true))
     ; The caption keeps `role="status"` — arrowing into another month has to be
     ; announced — but it is no longer a text run: it holds the month and the
@@ -39,7 +39,7 @@ treefactory Cal {
     ; be one text run — which is why the only way to 2019 was forty-eight
     ; presses of the arrow beside it.
     tag MonthTxt  EVGElement (props (className "cd-monthtxt") (elementType 1))
-    tag YearBtn   EVGElement (props (className "cd-yearbtn") (role "button") (a11yHasPopup "listbox"))
+    tag YearBtn   EVGElement (props (className "cd-yearbtn") (role "button") (a11yHasPopup "listbox") (a11yFocusable true))
     tag YearTxt   EVGElement (props (className "cd-yeartxt") (elementType 1) (a11yHidden true))
     ; The panel, hung off the year as an overlay so it draws OVER the grid
     ; instead of pushing it down: a calendar that changes height when you
@@ -281,6 +281,17 @@ class CalView {
                                 (a11yLabel (model.dayLabel(day))))
                         (DayNum (props (className (CalView.numClass(model day))))
                                 ("" + (itemAt p 2)))))
+                ; THE GRID'S ONE TAB STOP is the day the cursor rests on — the
+                ; roving tabindex react-day-picker gives its focused day — and
+                ; the chosen day says so, as aria-selected.
+                if (day == (model.currentFocusDay())) {
+                    cell.a11yFocusable = true
+                }
+                if model.hasSelection {
+                    if (day == model.selectedDay) {
+                        cell.a11ySelected = (EVGA11yTri.yes())
+                    }
+                }
                 week.addChild(cell)
                 i = (i + 1)
             }

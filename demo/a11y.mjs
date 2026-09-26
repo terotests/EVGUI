@@ -3,7 +3,7 @@
  *
  *   node gallery/evgui/demo/a11y.mjs
  *
- * Two checks, and neither one is enough on its own:
+ * Three checks, and none of them is enough on its own:
  *
  *   EVGA11yTree.lint()   no browser: a focusable row with no accessible name,
  *                        a duplicate id, a parent that is not in the tree.
@@ -12,6 +12,9 @@
  *                        tree into. Auditing the canvas would be auditing one
  *                        empty graphic, which is the whole problem this is
  *                        here to solve.
+ *   the keyboard         the real page (bundle.js), every demo: Tab from the
+ *                        page reaches a control in the demo and, after the
+ *                        last one, leaves it again; Shift+Tab comes back in.
  *
  * The trees are computed in Node, straight out of the compiled demos, and the
  * page below only mirrors them. So this audits the same JSON the live page
@@ -47,6 +50,14 @@ const { ResizeDemo } = require(path.join(ROOT, "gallery/evgui/bin/ResizeDemo.cjs
 const { FormDemo } = require(path.join(ROOT, "gallery/evgui/bin/FormDemo.cjs"));
 const { DashboardDemo } = require(path.join(ROOT, "gallery/evgui/bin/DashboardDemo.cjs"));
 const { CalendarDemo } = require(path.join(ROOT, "gallery/evgui/bin/CalendarDemo.cjs"));
+const { ProfileDemo } = require(path.join(ROOT, "gallery/evgui/bin/ProfileDemo.cjs"));
+const { EffectsDemo } = require(path.join(ROOT, "gallery/evgui/bin/EffectsDemo.cjs"));
+const { MetadataDemo } = require(path.join(ROOT, "gallery/evgui/bin/MetadataDemo.cjs"));
+const { OtpDemo } = require(path.join(ROOT, "gallery/evgui/bin/OtpDemo.cjs"));
+const { FilterDemo } = require(path.join(ROOT, "gallery/evgui/bin/FilterDemo.cjs"));
+const { EventCalDemo } = require(path.join(ROOT, "gallery/evgui/bin/EventCalDemo.cjs"));
+const { MessageDemo } = require(path.join(ROOT, "gallery/evgui/bin/MessageDemo.cjs"));
+const { ControlsDemo } = require(path.join(ROOT, "gallery/evgui/bin/ControlsDemo.cjs"));
 const MENUBAR_CSS = fs.readFileSync(path.join(HERE, "menubar.css"), "utf8");
 const TOOLBAR_CSS = fs.readFileSync(path.join(HERE, "toolbar.css"), "utf8");
 const SORTABLE_CSS = fs.readFileSync(path.join(HERE, "sortable.css"), "utf8");
@@ -60,6 +71,40 @@ const RESIZE_CSS = fs.readFileSync(path.join(HERE, "resize.css"), "utf8");
 const FORM_CSS = fs.readFileSync(path.join(HERE, "form.css"), "utf8");
 const CALENDAR_CSS = fs.readFileSync(path.join(HERE, "calendar.css"), "utf8");
 const DASHBOARD_CSS = fs.readFileSync(path.join(HERE, "dashboard.css"), "utf8");
+
+// The eight demos this audit used to skip, each at rest. Built the way the
+// page builds them — `new`, then `init` with the demo's own stylesheet — and
+// audited by the same two instruments as the rest.
+const atRest = (Cls, file) => {
+  const d = new Cls();
+  d.init(fs.readFileSync(path.join(HERE, file), "utf8"));
+  if (typeof d.displayListJson === "function") d.displayListJson();
+  return d;
+};
+const profile = atRest(ProfileDemo, "profile.css");
+const effects = atRest(EffectsDemo, "effects.css");
+const metadata = atRest(MetadataDemo, "metadata.css");
+const otp = atRest(OtpDemo, "otp.css");
+const filters = atRest(FilterDemo, "filters.css");
+const eventcal = atRest(EventCalDemo, "eventcal.css");
+const message = atRest(MessageDemo, "message.css");
+const controls = atRest(ControlsDemo, "controls.css");
+const sizeOf = (d) => [typeof d.widthPx === "function" ? d.widthPx() : 900, d.heightPx()];
+const REST = [
+  ["profile — a label-left form", profile, 40],
+  ["effects — surface effects over a sky", effects, 41],
+  ["metadata — two comboboxes, a date field and a pill pair", metadata, 42],
+  ["otp — two one-time-code fields", otp, 43],
+  ["filters — a filter bar and its results", filters, 44],
+  ["eventcal — a week of events", eventcal, 45],
+  ["message — a chat transcript", message, 46],
+  ["controls — stepper, sliders and a number field", controls, 47],
+].map(([name, d, gen]) => ({
+  name,
+  size: sizeOf(d),
+  lint: () => d.a11yProblems(),
+  tree: () => d.a11yJson(gen, d.focused || ""),
+}));
 
 // The showcase keeps its tree, so unlike the other three it is an instance and
 // the audit holds one — the same one for both states below, which is also a
@@ -351,6 +396,8 @@ const STATES = [
   },
 ];
 
+STATES.push(...REST);
+
 const AXE = fs.readFileSync(domRequire.resolve("axe-core"), "utf8");
 
 const html = `<!doctype html><meta charset="utf-8">
@@ -381,7 +428,10 @@ const server = createServer((req, res) => {
     res.writeHead(404).end("not found");
     return;
   }
-  const type = file.endsWith(".js") || file.endsWith(".mjs") ? "text/javascript" : "text/html";
+  const type = file.endsWith(".js") || file.endsWith(".mjs") ? "text/javascript"
+    : file.endsWith(".css") ? "text/css" : file.endsWith(".json") ? "application/json"
+    : file.endsWith(".png") ? "image/png" : file.endsWith(".svg") ? "image/svg+xml"
+    : file.endsWith(".woff2") ? "font/woff2" : "text/html";
   res.writeHead(200, { "content-type": type }).end(fs.readFileSync(file));
 });
 await new Promise((r) => server.listen(0, r));
@@ -428,6 +478,78 @@ for (const state of STATES) {
   for (const v of violations) {
     console.log(`    axe [${v.impact}] ${v.id}: ${v.help} (${v.nodes} nodes) ${v.targets.join(" ")}`);
   }
+}
+
+// --- the keyboard, on the real page -----------------------------------------
+//
+// The trees above are right or wrong on their own; whether a KEYBOARD can use
+// them is a question only the page can answer, because the page is what turns
+// a tree into tab stops (see "KEYBOARD" in main.js). So every demo is loaded
+// as a person loads it, the focus is put on the last control BEFORE the
+// canvas, and Tab is pressed until the focus leaves it:
+//
+//   * Tab has to reach at least one control inside the demo (WCAG 2.1.1) —
+//     a demo you cannot Tab into is a demo only a mouse can use;
+//   * and it has to come OUT again, onto the page after the canvas, within a
+//     bounded number of presses (2.1.2, no keyboard trap) — the form, the
+//     profile card, the metadata card and the OTP boxes used to cycle their
+//     fields forever;
+//   * Shift+Tab from there has to land back inside, which is the reverse
+//     entry at the last stop.
+console.log("\n--- the keyboard: Tab reaches the demo and leaves it ---");
+if (!fs.existsSync(path.join(HERE, "bundle.js"))) {
+  console.log("  FAIL bundle.js missing — run `node gallery/evgui/demo/build.mjs` first");
+  failures += 1;
+} else {
+  const kb = await browser.newPage({ viewport: { width: 1500, height: 1000 } });
+  const kbErrors = [];
+  kb.on("pageerror", (e) => kbErrors.push(e.message.split("\n")[0]));
+  await kb.goto(`http://127.0.0.1:${port}/gallery/evgui/demo/index.html`);
+  await kb.waitForFunction("document.querySelector('#stage canvas') && window.__lastA11y", null, { timeout: 30000 });
+  const demos = await kb.evaluate(() =>
+    [...document.querySelectorAll("#demos input[type=radio]")].map((r) => r.value));
+  const where = () => kb.evaluate(() => {
+    const a = document.activeElement;
+    const inside = document.getElementById("stage").contains(a);
+    return { inside, id: inside ? window.__kbFocus() || (a.dataset && a.dataset.a11yId) || a.tagName : a.id || a.tagName };
+  });
+  for (const name of demos) {
+    kbErrors.length = 0;
+    await kb.goto(`http://127.0.0.1:${port}/gallery/evgui/demo/index.html?demo=${name}`);
+    await kb.waitForFunction("document.querySelector('#stage canvas') && window.__lastA11y", null, { timeout: 30000 });
+    await kb.evaluate(() => {
+      const stage = document.getElementById("stage");
+      const before = [...document.querySelectorAll("a[href],button,input,select,textarea,summary,[tabindex]")]
+        .filter((e) => !stage.contains(e) && e.tabIndex >= 0 && !e.disabled && e.getClientRects().length)
+        .filter((e) => stage.compareDocumentPosition(e) & Node.DOCUMENT_POSITION_PRECEDING);
+      before[before.length - 1].focus();
+    });
+    const walked = [];
+    let out = null;
+    for (let i = 0; i < 120 && !out; i++) {
+      await kb.keyboard.press("Tab");
+      const w = await where();
+      if (w.inside) walked.push(w.id);
+      else out = w;
+    }
+    let back = null;
+    if (out) {
+      await kb.keyboard.press("Shift+Tab");
+      back = await where();
+    }
+    const reached = walked.length > 0;
+    const left = !!out;
+    const reentered = !!back && back.inside;
+    const ok = reached && left && reentered && kbErrors.length === 0;
+    if (!ok) failures += 1;
+    const said = !reached ? "Tab never reached a control"
+      : !left ? `Tab never left (trapped after ${walked.length} presses: …${walked.slice(-4).join(" ")})`
+      : !reentered ? "Shift+Tab from after the canvas did not come back in"
+      : kbErrors.length ? kbErrors.join("; ")
+      : `${walked.length} stop(s), out to #${out.id}, back in at ${back.id}`;
+    console.log(`  ${ok ? "PASS" : "FAIL"} ${name} — ${said}`);
+  }
+  await kb.close();
 }
 
 await browser.close();

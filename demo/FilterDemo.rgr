@@ -40,7 +40,7 @@ treefactory Flt {
     tag Page     EVGElement (props (className "fd-page"))
     tag Title    EVGElement (props (className "fd-title") (elementType 1))
     tag Bar      EVGElement (props (className "fd-bar") (role "toolbar") (a11yLabel "Filters"))
-    tag Chip     EVGElement (props (className "fd-chip") (role "group"))
+    tag Chip     EVGElement (props (className "fd-chip") (role "group") (a11yFocusable true))
     tag Part     EVGElement (props (className "fd-part") (role "button"))
     tag PartTxt  EVGElement (props (className "fd-part-text") (elementType 1) (a11yHidden true))
     tag OpTxt    EVGElement (props (className "fd-op-text") (elementType 1) (a11yHidden true))
@@ -61,7 +61,7 @@ treefactory Flt {
     tag MLabel   EVGElement (props (className "fd-mlabel") (elementType 1))
     tag MHint    EVGElement (props (className "fd-mhint") (elementType 1) (a11yHidden true))
     tag MSep     EVGElement (props (className "fd-msep") (role "separator"))
-    tag Add      EVGElement (props (className "fd-add") (role "button"))
+    tag Add      EVGElement (props (className "fd-add") (role "button") (a11yFocusable true))
     tag AddTxt   EVGElement (props (className "fd-add-text") (elementType 1) (a11yHidden true))
     tag List     EVGElement (props (className "fd-list") (role "listbox") (isOverlay true) (overlaySide "bottom") (overlayAlign "start"))
     tag Opt      EVGElement (props (className "fd-opt") (role "option"))
@@ -707,6 +707,11 @@ class FilterDemo {
         focused = id
         if menu.open {
             menu.activeTid = id
+        }
+        ; A chip or Add reached by Tab is where the arrows start from: the
+        ; bar's roving cursor follows the focus the page gave it.
+        if (model.has(id) || (id == "add")) {
+            model.activeId = id
         }
     }
 

@@ -109,7 +109,7 @@ treefactory Fm {
     tag Ghost   EVGElement (props (className "fm-text fm-ghost") (elementType 1))
     tag Caret   EVGElement (props (className "fm-caret") (a11yHidden true))
     tag Band    EVGElement (props (className "fm-band") (a11yHidden true))
-    tag Eye     EVGElement (props (className "fm-eye") (elementType 1) (role "button"))
+    tag Eye     EVGElement (props (className "fm-eye") (elementType 1) (role "button") (a11yFocusable true))
     tag Check   EVGElement (props (className "fm-check") (role "checkbox"))
     tag Tick    EVGElement (props (className "fm-tick") (elementType 1) (a11yHidden true))
     tag CheckLb EVGElement (props (className "fm-check-label") (elementType 1))
@@ -126,8 +126,8 @@ treefactory Fm {
     tag Ring    EVGElement (props (className "fm-ring") (a11yHidden true))
     tag RadioLb EVGElement (props (className "fm-radio-label") (elementType 1))
     tag Foot    EVGElement (props (className "fm-foot"))
-    tag Submit  EVGElement (props (className "fm-submit") (elementType 1) (role "button"))
-    tag Cancel  EVGElement (props (className "fm-cancel") (elementType 1) (role "button"))
+    tag Submit  EVGElement (props (className "fm-submit") (elementType 1) (role "button") (a11yFocusable true))
+    tag Cancel  EVGElement (props (className "fm-cancel") (elementType 1) (role "button") (a11yFocusable true))
     tag Note    EVGElement (props (className "fm-note") (elementType 1))
 }
 
@@ -972,8 +972,20 @@ class FormDemo {
         ; be read and copied from — and taking it out of the ring would be
         ; skipping past something a keyboard user is entitled to reach.
         push a "fm-invoice"
-        push a "fm-delivery-post"
-        push a "fm-delivery-email"
+        ; ONE stop for the radio group, as a browser gives it: the chosen
+        ; radio (or the one the arrows are on). The arrows walk the rest.
+        def radio:string ("fm-delivery-" + delivery.value)
+        if ((strlen focused) > 12) {
+            if (((substring focused 0 12)) == "fm-delivery-") {
+                radio = focused
+            }
+        }
+        if ((strlen delivery.value) == 0) {
+            if (radio == "fm-delivery-") {
+                radio = "fm-delivery-post"
+            }
+        }
+        push a radio
         push a "fm-terms"
         push a "fm-cancel"
         push a "fm-submit"
@@ -998,11 +1010,19 @@ class FormDemo {
         if back {
             next = (at - 1)
         }
-        if (next < 0) {
-            next = (n - 1)
-        }
-        if (next >= n) {
+        ; NO WRAP. Past either end the Tab belongs to the page — the focus
+        ; leaves the form for the next control on it — so the ring says "not
+        ; mine" and lets go, rather than cycling the fields forever.
+        if (at < 0) {
             next = 0
+            if back {
+                next = (n - 1)
+            }
+        }
+        if ((next < 0) || (next >= n)) {
+            focused = ""
+            this.rebuild()
+            return false
         }
         focused = (itemAt r next)
         this.rebuild()
@@ -1515,6 +1535,15 @@ class FormDemo {
     fn setHover:void (id:string) { hovered = id }
     fn setPressed:void (id:string) { pressed = id }
     fn setFocus:void (id:string) { focused = id }
+
+    ; The highlighted option of the combobox whose input is `tid`, for the
+    ; page to name as that input's aria-activedescendant.
+    fn activeDescendant:string (tid:string) {
+        if (tid == (search.inputTid())) {
+            return (search.activeOptionTid())
+        }
+        return ""
+    }
 
     ; --- what the page asks for -----------------------------------------------
 

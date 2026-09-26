@@ -113,7 +113,7 @@ treefactory Pf {
     tag Popover  EVGElement (props (className "pf-popover") (isOverlay true) (overlaySide "bottom") (overlayAlign "start") (role "dialog"))
 
     tag Avatar  EVGElement (props (className "pf-avatar") (role "img") (a11yLabel "Noa Brooks"))
-    tag Btn     EVGElement (props (className "pf-btn") (role "button"))
+    tag Btn     EVGElement (props (className "pf-btn") (role "button") (a11yFocusable true))
     tag BtnTx   EVGElement (props (className "pf-btn-text") (elementType 1))
     tag BtnIcon EVGElement (props (className "pf-btn-icon") (elementType 1) (a11yHidden true))
 
@@ -144,8 +144,8 @@ treefactory Pf {
     tag Foot    EVGElement (props (className "pf-foot"))
     tag FootTx  EVGElement (props (className "pf-foot-text") (elementType 1))
     tag FootBtn EVGElement (props (className "pf-foot-btns"))
-    tag Ghost2  EVGElement (props (className "pf-btn pf-btn-ghost") (role "button"))
-    tag Solid   EVGElement (props (className "pf-btn pf-btn-solid") (role "button"))
+    tag Ghost2  EVGElement (props (className "pf-btn pf-btn-ghost") (role "button") (a11yFocusable true))
+    tag Solid   EVGElement (props (className "pf-btn pf-btn-solid") (role "button") (a11yFocusable true))
     tag SolidTx EVGElement (props (className "pf-btn-text pf-btn-text-solid") (elementType 1))
     tag Note    EVGElement (props (className "pf-note") (elementType 1))
 }
@@ -1062,11 +1062,18 @@ class ProfileDemo {
         if back {
             next = (at - 1)
         }
-        if (next < 0) {
-            next = (n - 1)
-        }
-        if (next >= n) {
+        ; NO WRAP: past either end the Tab is the page's, and the focus
+        ; leaves the card rather than cycling it forever.
+        if (at < 0) {
             next = 0
+            if back {
+                next = (n - 1)
+            }
+        }
+        if ((next < 0) || (next >= n)) {
+            focused = ""
+            this.rebuild()
+            return false
         }
         focused = (itemAt r next)
         this.rebuild()
@@ -1113,6 +1120,10 @@ class ProfileDemo {
         ; returns.
         if visibility.open {
             def land:string (visibility.keyDown(focused k))
+            ; The trigger is drawn as "pf-visibility" — see `press`.
+            if (land == (visibility.triggerTid())) {
+                land = "pf-visibility"
+            }
             if ((strlen land) > 0) {
                 focused = land
             }
@@ -1123,7 +1134,14 @@ class ProfileDemo {
         ; either arrow, which is the pattern for a collapsed combobox.
         if (focused == "pf-visibility") {
             if (((k == "Enter") || (k == " ")) || ((k == "ArrowDown") || (k == "ArrowUp"))) {
-                visibility.openList()
+                ; Open ONTO the chosen option, as Radix's select does — the
+                ; controller says where; ignoring it left the focus on the
+                ; trigger, where the arrows had nowhere to start from and Tab
+                ; was taken by a list the focus was not in.
+                def landOpen:string (visibility.openList())
+                if (landOpen != (visibility.contentTid())) {
+                    focused = landOpen
+                }
                 this.rebuild()
                 return true
             }
@@ -1186,7 +1204,10 @@ class ProfileDemo {
             ; and returns the tid the focus lands on.
             def act:string (visibility.activate(target))
             if ((strlen act) > 0) {
-                focused = (visibility.triggerTid())
+                ; Back to the TRIGGER, by the id it is drawn with: the
+                ; controller's `triggerTid()` names no element on this page,
+                ; so the focus fell to <body> after every choice.
+                focused = "pf-visibility"
                 this.rebuild()
                 return true
             }

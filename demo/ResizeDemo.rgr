@@ -70,7 +70,7 @@ treefactory Rz {
     tag Crumbs EVGElement (props (className "rz-crumbs") (role "navigation") (a11yLabel "Breadcrumb"))
     tag List   EVGElement (props (className "rz-crumb-list") (role "list"))
     tag Item   EVGElement (props (className "rz-crumb-li") (role "listitem"))
-    tag Link   EVGElement (props (className "rz-crumb") (elementType 1) (role "link"))
+    tag Link   EVGElement (props (className "rz-crumb") (elementType 1) (role "link") (a11yFocusable true))
     tag Sep2   EVGElement (props (className "rz-crumb-sep") (elementType 1) (a11yHidden true))
     tag Dots   EVGElement (props (className "rz-crumb-dots") (elementType 1))
     tag Note   EVGElement (props (className "rz-note") (elementType 1))
@@ -379,6 +379,22 @@ class ResizeDemo {
     ; --- input --------------------------------------------------------------------
 
     fn key:boolean (k:string) {
+        ; Each separator answers to ITS OWN group: the vertical one in the
+        ; right-hand panel used to be handed to the outer group, which does
+        ; not know it, so its arrows did nothing.
+        if (focused == (inner.sepTid(0))) {
+            def nextIn:string (inner.keyDown(focused k))
+            if ((strlen nextIn) > 0) {
+                focused = nextIn
+            }
+            this.rebuild()
+            return true
+        }
+        ; Anything that is not a separator — a breadcrumb link — is not this
+        ; handler's: the page presses a link on Enter.
+        if ((outer.isFocusable(focused)) == false) {
+            return false
+        }
         def next:string (outer.keyDown(focused k))
         if ((strlen next) > 0) {
             focused = next
