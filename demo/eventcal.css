@@ -125,6 +125,7 @@
 .ec-bandev {
   position: absolute;
   display: flex;
+  flex-direction: row;
   align-items: center;
   height: 18px;
   padding-left: 6px;
@@ -198,23 +199,65 @@
 }
 
 .ec-monthweek {
+  position: relative;
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
   gap: 4px;
 }
 
+/* The cell backgrounds, one layer under the row. A cell that painted its own
+ * background painted over the overhang of the chip in the cell before it. */
+.ec-monthbg {
+  position: absolute;
+  left: 0px;
+  top: 0px;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.ec-monthbgcell {
+  height: 74px;
+  border-radius: 6px;
+  background-color: #fafafa;
+}
+
+/* 74px: five rows and their gaps have to fit under the header in the 520px
+ * page, and at 84 the fifth row was cut off. Room for the day number, two
+ * lanes of chips and a "+N more". */
 .ec-monthcell {
   display: flex;
   flex-direction: column;
   flex-wrap: nowrap;
   gap: 2px;
-  border-radius: 6px;
-  background-color: #fafafa;
   padding: 4px 4px 4px 4px;
-  height: 84px;
+  height: 74px;
   overflow: visible;
 }
+
+/* An empty lane: a chip from an earlier cell runs through it, or nothing does
+ * and a later lane still needs to sit at its own height. */
+.ec-chipgap {
+  height: 16px;
+}
+
+.ec-more {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 14px;
+  padding: 0 4px 0 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.ec-more:hover {
+  background-color: #f4f4f5;
+}
+
+.ec-moretxt { color: #52525b; font-family: Arial; font-size: 11px; }
 
 .ec-monthnum { color: #71717a; font-family: Arial; font-size: 11px; height: 14px; }
 
@@ -226,7 +269,7 @@
   border-radius: 4px;
   background-color: #dbeafe;
   padding: 0 6px 0 6px;
-  height: 18px;
+  height: 16px;
   cursor: pointer;
 }
 

@@ -66,6 +66,7 @@
  * options. A chip that is one button cannot express that. */
 .fd-part {
   display: flex;
+  flex-direction: row;
   align-items: center;
   height: 32px;
   padding-left: 10px;
@@ -150,6 +151,7 @@
 
 .fd-opt {
   display: flex;
+  flex-direction: row;
   align-items: center;
   height: 26px;
   padding-left: 8px;
@@ -193,6 +195,7 @@
 
 .fd-row {
   display: flex;
+  flex-direction: row;
   align-items: center;
   height: 28px;
   padding-left: 10px;

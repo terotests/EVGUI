@@ -257,6 +257,62 @@ console.log("a day view clips what runs past it, and hides what never reaches it
     d.model.events.every((e) => !d.model.isVisible(e.id) || e.clipStart >= shown));
 }
 
+console.log("every view can be left for every other one");
+{
+  // Month used to `return body` from page() instead of the page, so it drew
+  // without its header — no arrows, no caption, no view buttons — and once in
+  // Month there was nothing left to press.
+  const d = fresh();
+  const pressId = (id) => {
+    const b = byId(d, id);
+    if (!b) return false;
+    d.press(d.hitId(b.calculatedX + b.calculatedWidth / 2, b.calculatedY + b.calculatedHeight / 2));
+    d.displayListJson();
+    return true;
+  };
+  const on = (v) => (byId(d, "ec-view-" + v)?.className || "").includes("ec-viewbtn-on");
+  const caption = () => JSON.parse(d.a11yJson(5, "")).nodes.find((n) => n.role === "status")?.name || "";
+  for (const from of ["day", "week", "month"]) {
+    for (const to of ["day", "week", "month"]) {
+      if (from === to) continue;
+      pressId("ec-view-" + from);
+      ok(`${from}: all the view buttons and the arrows are drawn`,
+        ["ec-view-day", "ec-view-week", "ec-view-month", "ec-prev", "ec-next", "ec-today"].every((id) => byId(d, id)));
+      ok(`${from} -> ${to} by pointer`, pressId("ec-view-" + to) && on(to) && !on(from));
+    }
+  }
+  pressId("ec-view-month");
+  eq("month caption", caption(), "May 2026");
+  pressId("ec-next");
+  eq("next month", caption(), "June 2026");
+  pressId("ec-prev");
+  pressId("ec-prev");
+  eq("previous month", caption(), "April 2026");
+  pressId("ec-today");
+  eq("today, in the month", caption(), "May 2026");
+  ok("the month's arrows are named for months", /month/.test(byId(d, "ec-next").a11yLabel), byId(d, "ec-next").a11yLabel);
+  const more = flat(d).find((e) => (e.id || "").startsWith("ec-more-"));
+  ok("a crowded day says how many more it holds", !!more, "");
+  pressId(more.id);
+  ok("and opens that day", on("day") && /May 11th/.test(caption()), caption());
+  pressId("ec-next");
+  eq("next day", caption(), "Tuesday, May 12th, 2026");
+  pressId("ec-view-week");
+  ok("a week holds the day you were on, from its Monday", /^Monday, May 11th/.test(caption()), caption());
+  pressId("ec-view-day");
+  eq("and back to that same day", caption(), "Tuesday, May 12th, 2026");
+  d.key("ArrowRight");
+  d.displayListJson();
+  eq("the arrow keys step in the view's unit", caption(), "Wednesday, May 13th, 2026");
+  pressId("ec-today");
+  eq("today, in the day", caption(), "Monday, May 11th, 2026");
+  // Clipped to the day: the two-day "On call" band must not run off the page.
+  const oncall = box(d, "ec-j");
+  const col = box(d, "ec-col-0");
+  ok("a band that runs past the day stops at its edge", oncall && col && oncall.x + oncall.w <= col.x + col.w + 1,
+    `${JSON.stringify(oncall)} vs ${JSON.stringify(col)}`);
+}
+
 console.log(`\npassed=${passed} failed=${failed}`);
 if (failed > 0) process.exit(1);
 console.log("ALL PASS");

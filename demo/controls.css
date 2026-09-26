@@ -161,6 +161,7 @@
 
 .cx-badge {
   display: flex;
+  flex-direction: row;
   align-items: center;
   height: 17px;
   padding-left: 6px;
@@ -212,6 +213,7 @@
 
 .cx-panelbox {
   display: flex;
+  flex-direction: row;
   align-items: center;
   border-width: 1px;
   border-color: #e4e4e7;

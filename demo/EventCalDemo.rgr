@@ -58,6 +58,15 @@ treefactory Ec {
     tag MonthCell EVGElement (props (className "ec-monthcell") (role "gridcell"))
     tag MonthNum  EVGElement (props (className "ec-monthnum") (elementType 1) (a11yHidden true))
     tag Chip      EVGElement (props (className "ec-chip") (role "button") (a11yFocusable true))
+    ; The row's cell backgrounds, drawn BEHIND the cells as one layer. A chip
+    ; that spans three days overhangs into the next two cells; while each cell
+    ; painted its own background, the cell after it painted over the overhang
+    ; and a three-day chip read as one day plus a sliver in every gap.
+    tag MonthBg   EVGElement (props (className "ec-monthbg") (a11yHidden true))
+    tag MonthBgCell EVGElement (props (className "ec-monthbgcell") (a11yHidden true))
+    tag ChipGap   EVGElement (props (className "ec-chipgap") (a11yHidden true))
+    tag More      EVGElement (props (className "ec-more") (role "button"))
+    tag MoreTxt   EVGElement (props (className "ec-moretxt") (elementType 1) (a11yHidden true))
     tag ChipTxt   EVGElement (props (className "ec-chiptxt") (elementType 1) (a11yHidden true))
     tag DayCols  EVGElement (props (className "ec-daycols"))
     tag DayHead  EVGElement (props (className "ec-dayhead") (elementType 1) (a11yHidden true))
@@ -84,6 +93,12 @@ class EventCalDemo {
     def pageW:double 900.0
     def pageH:double 520.0
 
+    ; The day the demo calls today, and the day the user is looking at. The
+    ; cursor is kept apart from `model.weekStart` because a week view snaps
+    ; to its Monday: without it, Day -> Week -> Day lost the day you were on.
+    def today:int 0
+    def cursor:int 0
+
     ; The drawn grid. Only the working day is shown, because a 24-hour column
     ; 300 pixels tall gives an hour twelve pixels and nothing in it is legible
     ; — but the FRACTIONS stay whole-day, so what is drawn is a window onto the
@@ -102,6 +117,8 @@ class EventCalDemo {
         model.name = "Week"
         def mon:int (UiDate.toDays(2026 5 11))
         model.weekStart = mon
+        today = mon
+        cursor = mon
 
         ; The oracle's own events, so the picture and the gate are the same
         ; data. The 09:00 cluster is the one that proves the overlay: A keeps
@@ -170,6 +187,37 @@ class EventCalDemo {
         return (((pageW - 120.0) - (colGap * 6.0)) / 7.0)
     }
 
+    ; Lanes a cell has room for. The rest are counted into "+N more", which
+    ; opens that day in the day view — the reference's month does the same,
+    ; and ten chips in an 80-pixel cell were drawn on top of one another.
+    def monthLanes:int 2
+
+    ; The visible event in `lane` that covers `day`, or "" when there is none.
+    fn laneEventOn:string (lane:int day:int) {
+        def i:int 0
+        while (i < (array_length model.events)) {
+            def e:CalEvent (itemAt model.events i)
+            if ((model.isVisible(e.id)) && (e.lane == lane) && (e.clipStart <= day) && (e.clipEnd >= day)) {
+                return e.id
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    fn hiddenOn:int (day:int) {
+        def n:int 0
+        def i:int 0
+        while (i < (array_length model.events)) {
+            def e:CalEvent (itemAt model.events i)
+            if ((model.isVisible(e.id)) && (e.lane > monthLanes) && (e.clipStart <= day) && (e.clipEnd >= day)) {
+                n = (n + 1)
+            }
+            i = (i + 1)
+        }
+        return n
+    }
+
     fn monthGrid:EVGElement () {
         def grid (tree Ec (MonthGrid (props (id "ec-month"))))
         def start:int (model.firstDay())
@@ -177,6 +225,15 @@ class EventCalDemo {
         def row:int 0
         while (row < 5) {
             def wk (tree Ec (MonthWeek (props (id ("ec-week-" + (to_string row))))))
+            def bg (tree Ec (MonthBg))
+            def b:int 0
+            while (b < 7) {
+                def bc (tree Ec (MonthBgCell))
+                UiTree.inline(bc "width" (EventCalDemo.px(cw)))
+                bg.addChild(bc)
+                b = (b + 1)
+            }
+            wk.addChild(bg)
             def c:int 0
             while (c < 7) {
                 def day:int ((start + (row * 7)) + c)
@@ -191,27 +248,49 @@ class EventCalDemo {
                 ; tag of treefactory Ec".
                 def dayNum:string (to_string (itemAt p 2))
                 cell.addChild((tree Ec (MonthNum dayNum)))
-                ; The chips that BEGIN in this cell. One pass over the events
-                ; rather than a per-cell search of all of them, because a chip
-                ; belongs to exactly one cell and the rest of its width is
-                ; overhang.
-                def i:int 0
-                while (i < (array_length model.events)) {
-                    def e:CalEvent (itemAt model.events i)
-                    if ((model.isVisible(e.id)) && (e.clipStart == day)) {
-                        def span:int (model.chipSpan(e.id))
-                        def chip (tree Ec
-                            (Chip (props (id ("ec-" + e.id)) (a11yLabel (this.chipLabel(e))))
-                                (ChipTxt e.title)))
-                        ; Wide enough to cover its days, gaps included, and
-                        ; lifted into its lane so two chips on one day stack
-                        ; rather than collide.
-                        def w:double ((cw * (to_double span)) + (colGap * (to_double (span - 1))))
-                        UiTree.inline(chip "width" (EventCalDemo.px(w)))
-                        UiTree.inline(chip "z-index" (to_string e.lane))
-                        cell.addChild(chip)
+                ; One slot per lane, so a chip sits at the same height in every
+                ; cell it crosses. A chip is drawn in the cell it STARTS in —
+                ; or at the start of a week row it continues into — widened
+                ; across its days up to the row's end; a lane taken by a chip
+                ; from an earlier cell gets an empty slot of the same height.
+                def lane:int 1
+                while (lane <= monthLanes) {
+                    def eid:string (this.laneEventOn(lane day))
+                    if (eid == "") {
+                        cell.addChild((tree Ec (ChipGap)))
+                    } {
+                        def e:CalEvent (model.event(eid))
+                        if ((e.clipStart == day) || (c == 0)) {
+                            def span:int ((e.clipEnd - day) + 1)
+                            if (span > (7 - c)) {
+                                span = (7 - c)
+                            }
+                            def cid:string ("ec-" + e.id)
+                            if (e.clipStart != day) {
+                                cid = (cid + "-w" + (to_string row))
+                            }
+                            def chip (tree Ec
+                                (Chip (props (id cid) (a11yLabel (this.chipLabel(e))))
+                                    (ChipTxt e.title)))
+                            ; Wide enough to cover its days, gaps included, less
+                            ; the cell's own padding on either side.
+                            def w:double (((cw * (to_double span)) + (colGap * (to_double (span - 1)))) - 8.0)
+                            UiTree.inline(chip "width" (EventCalDemo.px(w)))
+                            cell.addChild(chip)
+                        } {
+                            cell.addChild((tree Ec (ChipGap)))
+                        }
                     }
-                    i = (i + 1)
+                    lane = (lane + 1)
+                }
+                def more:int (this.hiddenOn(day))
+                if (more > 0) {
+                    def moreTxt:string ("+" + (to_string more) + " more")
+                    def mb (tree Ec
+                        (More (props (id ("ec-more-" + (to_string day)))
+                                     (a11yLabel ((to_string more) + " more events on " + cell.a11yLabel + ", open the day")))
+                            (MoreTxt moreTxt)))
+                    cell.addChild(mb)
                 }
                 wk.addChild(cell)
                 c = (c + 1)
@@ -295,14 +374,33 @@ class EventCalDemo {
         return "ec-viewtxt"
     }
 
+    ; What one step is called in the current view, for the arrows' names.
+    fn unitName:string () {
+        if (model.view == "day") {
+            return "day"
+        }
+        if (model.view == "month") {
+            return "month"
+        }
+        return "week"
+    }
+
+    fn note:EVGElement () {
+        return (tree Ec (Note
+            "Three overlapping events fan out to the right: the first keeps the full width and each later one overlays it. Measured, not guessed."))
+    }
+
     fn page:EVGElement () {
         def page (tree Ec (Page))
 
+        def unit:string (this.unitName())
         def head (tree Ec
             (Head
-                (NavBtn (props (id "ec-prev") (a11yLabel "Previous week")) (NavGlyph "‹"))
+                (NavBtn (props (id "ec-prev") (a11yLabel ("Previous " + unit))) (NavGlyph "‹"))
                 (Caption (props (id "ec-caption")) (model.label()))
-                (NavBtn (props (id "ec-next") (a11yLabel "Next week")) (NavGlyph "›"))))
+                (NavBtn (props (id "ec-next") (a11yLabel ("Next " + unit))) (NavGlyph "›"))
+                (ViewBtn (props (id "ec-today") (a11yLabel "Today"))
+                    (ViewTxt "Today"))))
         def vi:int 0
         def views:[string] ([] _:string ( "day" "week" "month" ))
         def labels:[string] ([] _:string ( "Day" "Week" "Month" ))
@@ -343,9 +441,13 @@ class EventCalDemo {
         ; the reference gives every event in it a `grid-row` and a day span and
         ; not one a `top` or a `height`, timed events included. Drawing the
         ; hour rows under it would be drawing a time axis that means nothing.
+        ; It used to `return body` here — the BODY, not the page — so the
+        ; month drew without its header: no arrows, no caption and no view
+        ; buttons, and once in Month there was nothing to press to leave it.
         if (model.view == "month") {
             body.addChild((this.monthGrid()))
-            return body
+            page.addChild(body)
+            return page
         }
 
         ; --- the all-day band, one row per lane ------------------------------
@@ -355,7 +457,7 @@ class EventCalDemo {
         def bi:int 0
         while (bi < (array_length bandItems)) {
             def be:CalEvent (itemAt bandItems bi)
-            if (be.lane > maxLane) {
+            if ((model.isVisible(be.id)) && (be.lane > maxLane)) {
                 maxLane = be.lane
             }
             bi = (bi + 1)
@@ -366,9 +468,12 @@ class EventCalDemo {
             def bj:int 0
             while (bj < (array_length bandItems)) {
                 def be:CalEvent (itemAt bandItems bj)
-                if (be.lane == lane) {
-                    def offset:int (be.startDay - model.weekStart)
-                    def spanDays:int ((be.endDay - be.startDay) + 1)
+                ; CLIPPED to the days on screen: a day view used to draw a
+                ; two-day band two columns wide, off the right of the page,
+                ; and a band on another day one column to the right of it.
+                if ((be.lane == lane) && (model.isVisible(be.id))) {
+                    def offset:int (be.clipStart - (model.firstDay()))
+                    def spanDays:int ((be.clipEnd - be.clipStart) + 1)
                     def chip (tree Ec
                         (BandEv (props (id ("ec-" + be.id)) (a11yLabel (be.title + ", all day")))
                             (BandTxt be.title)))
@@ -425,8 +530,7 @@ class EventCalDemo {
         body.addChild(grid)
         page.addChild(body)
 
-        page.addChild((tree Ec (Note
-            "Three overlapping events fan out to the right: the first keeps the full width and each later one overlays it. Measured, not guessed.")))
+        page.addChild((this.note()))
         return page
     }
 
@@ -437,18 +541,28 @@ class EventCalDemo {
             return false
         }
         if (target == "ec-prev") {
-            model.step(-1)
-            model.layout()
-            this.rebuild()
-            return true
+            return (this.go(-1))
         }
         if (target == "ec-next") {
-            model.step(1)
-            model.layout()
-            this.rebuild()
+            return (this.go(1))
+        }
+        if (target == "ec-today") {
+            cursor = today
+            this.show()
             return true
         }
         if (target == "ec-view-day") { return (this.pickView("day")) }
+        if ((strlen target) > 8) {
+            if ((substring target 0 8) == "ec-more-") {
+                def parsed@(optional):int (to_int (substring target 8 (strlen target)))
+                if (null? parsed) {
+                    return false
+                }
+                def dayNo:int (unwrap parsed)
+                cursor = dayNo
+                return (this.pickView("day"))
+            }
+        }
         if (target == "ec-view-week") { return (this.pickView("week")) }
         if (target == "ec-view-month") { return (this.pickView("month")) }
         focused = target
@@ -457,8 +571,38 @@ class EventCalDemo {
         return true
     }
 
+    ; Point the model at the cursor, the way the current view wants it: a day
+    ; and a month show the cursor's day and month, a week the Monday on or
+    ; before it (the week view's columns start on Monday).
+    fn applyCursor:void () {
+        if (model.view == "week") {
+            def dow:int (UiDate.weekday(cursor))
+            model.weekStart = (cursor - ((dow + 6) % 7))
+            return
+        }
+        model.weekStart = cursor
+    }
+
+    fn show:void () {
+        this.applyCursor()
+        model.layout()
+        this.rebuild()
+    }
+
+    ; One step in the current view's unit. The model's `step` knows the units
+    ; (a month keeps the day of the month, clamped); it is run from the cursor
+    ; so a week step moves the day being looked at by seven as well.
+    fn go:boolean (delta:int) {
+        model.weekStart = cursor
+        model.step(delta)
+        cursor = model.weekStart
+        this.show()
+        return true
+    }
+
     fn pickView:boolean (v:string) {
         model.setView(v)
+        this.applyCursor()
         ; RE-LAY IT OUT. `setView` changes which days are shown and therefore
         ; every clip, every lane and every column; without this the new view
         ; was drawn from the old view's arithmetic. `ec-prev` and `ec-next`
@@ -471,16 +615,10 @@ class EventCalDemo {
 
     fn key:boolean (k:string) {
         if (k == "ArrowLeft") {
-            model.step(-1)
-            model.layout()
-            this.rebuild()
-            return true
+            return (this.go(-1))
         }
         if (k == "ArrowRight") {
-            model.step(1)
-            model.layout()
-            this.rebuild()
-            return true
+            return (this.go(1))
         }
         return false
     }

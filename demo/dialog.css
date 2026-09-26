@@ -237,8 +237,12 @@
 
 .dg-label { color: #09090b; font-size: 14px; font-weight: bold; height: 20px; }
 
+/* `flex-direction: row` is load-bearing: EVG's flex default is COLUMN (as in
+ * Yoga), not CSS's row, so without it `align-items: center` centred the value
+ * sideways and left it stuck to the top of the 40px box. */
 .dg-input {
   display: flex;
+  flex-direction: row;
   align-items: center;
   border: 1px solid #e4e4e7;
   border-radius: 8px;
