@@ -429,6 +429,16 @@ class DropdownDemo {
         def next:string (model.hover(id))
         if ((strlen next) > 0) {
             focused = next
+        } {
+            ; Off a row — onto a header, a separator, the page. Radix hands
+            ; focus back to the row's own menu surface on pointerleave, so the
+            ; highlight goes with the pointer instead of staying behind on the
+            ; last row it touched; the next arrow then enters from the surface
+            ; (down takes the first row, up the last), which keyDown knows.
+            if (model.open && ((model.rowIndexOf(focused)) >= 0)) {
+                focused = (model.ownerOf(focused))
+                model.activeTid = focused
+            }
         }
         root = (this.page())
     }

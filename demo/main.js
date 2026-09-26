@@ -925,6 +925,9 @@ const DEMOS = {
       setPressed: (id) => filters.setPressed(id),
       root: () => null,
     }),
+    // For the chip menu's clock: a submenu opens after the pointer has rested
+    // on its row for 100ms, and only a running clock gets there.
+    animated: true,
   },
 
   eventcal: {
