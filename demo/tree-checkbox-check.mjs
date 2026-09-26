@@ -31,7 +31,7 @@
 //   begins on the first move past a threshold, which is what lets one gesture
 //   be both "open this folder" and "carry it somewhere".
 //
-//   node gallery/ui/demo/tree-checkbox-check.mjs
+//   node gallery/evgui/demo/tree-checkbox-check.mjs
 
 import fs from "node:fs";
 import path from "node:path";
@@ -42,7 +42,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
 const require = createRequire(import.meta.url);
 
-const M = require(path.join(ROOT, "gallery/ui/bin/TreeDemo.cjs"));
+const M = require(path.join(ROOT, "gallery/evgui/bin/TreeDemo.cjs"));
 const CSS = fs.readFileSync(path.join(HERE, "tree.css"), "utf8");
 
 let passed = 0;

@@ -3,7 +3,7 @@
 //
 // The message transcript: what it looks like, and what a reader is told.
 //
-//   node gallery/ui/demo/message-check.mjs
+//   node gallery/evgui/demo/message-check.mjs
 //
 // SPECIFIED, NOT MEASURED. Base UI has no message, bubble or marker
 // primitive and ui.shadcn.com is refused by the proxy, so this is the
@@ -32,7 +32,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
 const require = createRequire(import.meta.url);
 
-const M = require(path.join(ROOT, "gallery/ui/bin/MessageDemo.cjs"));
+const M = require(path.join(ROOT, "gallery/evgui/bin/MessageDemo.cjs"));
 const CSS = fs.readFileSync(path.join(HERE, "message.css"), "utf8");
 
 let passed = 0;

@@ -16,7 +16,7 @@ const ROOT = path.resolve(HERE, "..", "..", "..");
 const PORT = Number(process.env.PORT || 8173);
 // The page "/" lands on. The demo server reuses this file with a different
 // one, because both pages need the repository root for lib/evg's painter.
-const PAGE = process.env.PAGE || "/gallery/ui/web/index.html";
+const PAGE = process.env.PAGE || "/gallery/evgui/web/index.html";
 
 const TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -42,7 +42,7 @@ const TYPES = {
 // This end of it is small on purpose: watch the demo's .css files, and say
 // which one changed. The page decides what to do about it, which is to fetch
 // the file and give it to the app. Nothing here knows what a rule is.
-const CSS_DIR = path.join(ROOT, "gallery/ui/demo");
+const CSS_DIR = path.join(ROOT, "gallery/evgui/demo");
 const cssClients = new Set();
 let cssPending = null;
 
@@ -52,7 +52,7 @@ function cssChanged(file) {
   // sheet three times would relayout three times and log three times.
   clearTimeout(cssPending);
   cssPending = setTimeout(() => {
-    const line = JSON.stringify({ file, href: "/gallery/ui/demo/" + file });
+    const line = JSON.stringify({ file, href: "/gallery/evgui/demo/" + file });
     for (const res of cssClients) {
       try { res.write(`data: ${line}\n\n`); } catch { cssClients.delete(res); }
     }
@@ -75,7 +75,7 @@ const server = http.createServer((req, res) => {
   // putting the text where the input came from — after which the watch above
   // picks it up and every other page open on it re-cascades too.
   //
-  // Narrow on purpose: a .css file directly inside gallery/ui/demo, and
+  // Narrow on purpose: a .css file directly inside gallery/evgui/demo, and
   // nothing else. This server exists to serve a demo on a developer's own
   // machine and a PUT that could reach further would be a worse thing than the
   // convenience is worth.
@@ -83,7 +83,7 @@ const server = http.createServer((req, res) => {
     const rel = decodeURIComponent(url.pathname);
     const okPath = /^\/gallery\/ui\/demo\/[A-Za-z0-9_.-]+\.css$/.test(rel);
     if (!okPath) {
-      res.writeHead(403, { "content-type": "text/plain" }).end("only gallery/ui/demo/*.css");
+      res.writeHead(403, { "content-type": "text/plain" }).end("only gallery/evgui/demo/*.css");
       return;
     }
     const chunks = [];
@@ -144,12 +144,12 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`\n  conformance playground → http://127.0.0.1:${PORT}/gallery/ui/web/index.html`);
-  console.log(`  tree-literal demos     → http://127.0.0.1:${PORT}/gallery/ui/demo/index.html`);
-  console.log(`  the same, inspected    → http://127.0.0.1:${PORT}/gallery/ui/demo/index.html?inspect=1&demo=dashboard\n`);
+  console.log(`\n  conformance playground → http://127.0.0.1:${PORT}/gallery/evgui/web/index.html`);
+  console.log(`  tree-literal demos     → http://127.0.0.1:${PORT}/gallery/evgui/demo/index.html`);
+  console.log(`  the same, inspected    → http://127.0.0.1:${PORT}/gallery/evgui/demo/index.html?inspect=1&demo=dashboard\n`);
   console.log("  The playground puts Radix beside Ranger's EVG controllers and diffs");
   console.log("  them live. The demos are the menubar and toolbar built with `tree`.");
-  console.log("  Edit gallery/ui/demo/*.css with the inspector open and the page");
+  console.log("  Edit gallery/evgui/demo/*.css with the inspector open and the page");
   console.log("  re-cascades on save — the sheet is an input, so nothing is patched.\n");
   console.log("  Ctrl+C to stop.\n");
 });

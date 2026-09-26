@@ -3,7 +3,7 @@
 //
 // What a screen reader is told about a form field, on the ELEMENT path.
 //
-//   node gallery/ui/demo/semantics-check.mjs
+//   node gallery/evgui/demo/semantics-check.mjs
 //
 // There are two accessible-tree producers in this repo and they are not the
 // same thing:
@@ -35,7 +35,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
 const require = createRequire(import.meta.url);
 
-const M = require(path.join(ROOT, "gallery/ui/bin/FormDemo.cjs"));
+const M = require(path.join(ROOT, "gallery/evgui/bin/FormDemo.cjs"));
 const CSS = fs.readFileSync(path.join(HERE, "form.css"), "utf8");
 
 let passed = 0;

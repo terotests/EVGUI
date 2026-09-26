@@ -14,16 +14,15 @@
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-ranger="${RANGER_DIR:-$HERE/../../Ranger}"
+ranger_args=()
 browser=1
 while [ $# -gt 0 ]; do
   case "$1" in
-    --ranger) ranger="$2"; shift 2 ;;
+    --ranger) ranger_args=(--ranger "$(cd "$2" && pwd)"); shift 2 ;;
     --no-browser) browser=0; shift ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
-ranger="$(cd "$ranger" && pwd)"
 
 SUITES=(
   ui:sortable:motion
@@ -57,12 +56,12 @@ BROWSER_SUITES=(
 [ $browser -eq 1 ] && SUITES+=("${BROWSER_SUITES[@]}")
 
 # Put this repository's sources in place once; every suite then runs on them.
-node "$HERE/run.mjs" --ranger "$ranger" ui:demo:build >/dev/null || exit 1
+node "$HERE/run.mjs" "${ranger_args[@]}" ui:demo:build >/dev/null || exit 1
 
 failed=()
 for suite in "${SUITES[@]}"; do
   printf '==> %s\n' "$suite"
-  out="$(node "$HERE/run.mjs" --ranger "$ranger" --no-overlay "$suite" 2>&1)"
+  out="$(node "$HERE/run.mjs" "${ranger_args[@]}" --no-overlay "$suite" 2>&1)"
   status=$?
   bad=""
   if [ $status -ne 0 ]; then

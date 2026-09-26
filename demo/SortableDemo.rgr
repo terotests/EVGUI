@@ -6,7 +6,7 @@
 ; The reference is ReUI's Sortable (https://reui.io/components/sortable): a
 ; column of cards, each with a drag handle, a type icon, a title with a line of
 ; description under it, a coloured badge and a size at the far right. The
-; behaviour underneath it is @dnd-kit, which `SortableCtl` in gallery/ui/src is
+; behaviour underneath it is @dnd-kit, which `SortableCtl` in gallery/evgui/src is
 ; measured against; this is the same interaction wearing the clothes the
 ; reference wears, because "does it work" and "does it look like the thing"
 ; are two different questions and the conformance host only answers the first.

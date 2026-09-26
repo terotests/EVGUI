@@ -18,7 +18,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { MissingDomDeps, requireHostTool } from "../conformance/dom-adapter.mjs";
+import { MissingDomDeps, requireHostTool } from "../../ui/conformance/dom-adapter.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const UI = path.join(HERE, "..");

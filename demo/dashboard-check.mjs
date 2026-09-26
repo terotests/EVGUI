@@ -15,7 +15,7 @@
 // A picture with no numbers on its axes still looks like a chart, which is
 // exactly why the check below counts words as well as outlines.
 //
-//   node gallery/ui/demo/dashboard-check.mjs
+//   node gallery/evgui/demo/dashboard-check.mjs
 
 import fs from "node:fs";
 import path from "node:path";
@@ -26,7 +26,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
 const require = createRequire(import.meta.url);
 
-const M = require(path.join(ROOT, "gallery/ui/bin/DashboardDemo.cjs"));
+const M = require(path.join(ROOT, "gallery/evgui/bin/DashboardDemo.cjs"));
 const CSS = fs.readFileSync(path.join(HERE, "dashboard.css"), "utf8");
 // `line-height: normal`, from the browser capture rather than from a constant
 // typed here — the same number the measurer was built against.

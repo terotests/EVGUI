@@ -3,9 +3,9 @@
 //
 // Drive the PUBLISHED tree, not the sources.
 //
-//   node gallery/ui/web/pages-smoke.mjs --dist gallery/ui/web/dist
+//   node gallery/evgui/web/pages-smoke.mjs --dist gallery/evgui/web/dist
 //
-// `ui:demo:page` serves the repository and opens /gallery/ui/demo/index.html.
+// `ui:demo:page` serves the repository and opens /gallery/evgui/demo/index.html.
 // GitHub Pages serves a different tree: /ui/ redirects to /ui/demo/, and the
 // playground is /ui/web/. A bundle that works at the first URL can 404 at the
 // second — relative `./bundle.js` is fine, an absolute /gallery/… link is not.
@@ -15,7 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
-import { requireHostTool, findChromium } from "../conformance/dom-adapter.mjs";
+import { requireHostTool, findChromium } from "../../ui/conformance/dom-adapter.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);

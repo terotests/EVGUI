@@ -28,7 +28,7 @@
 // of a 1600-row table logically dirties one background colour; if patch tracks
 // retained, nothing is being avoided.
 //
-//   node gallery/ui/bench/ui-bench.mjs [--rows 200,800,1600] [--paint] [--json]
+//   node gallery/evgui/bench/ui-bench.mjs [--rows 200,800,1600] [--paint] [--json]
 
 import fs from "node:fs";
 import path from "node:path";
@@ -39,8 +39,8 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
 const require = createRequire(import.meta.url);
 
-const M = require(path.join(ROOT, "gallery/ui/bin/UiBench.cjs"));
-const CSS = fs.readFileSync(path.join(ROOT, "gallery/ui/demo/table.css"), "utf8");
+const M = require(path.join(ROOT, "gallery/evgui/bin/UiBench.cjs"));
+const CSS = fs.readFileSync(path.join(ROOT, "gallery/evgui/demo/table.css"), "utf8");
 
 const argv = process.argv.slice(2);
 const arg = (name, fallback) => {
@@ -164,7 +164,7 @@ function measure(rows) {
 
 // --- paint, in a real browser ---------------------------------------------------
 async function paintTimes(results) {
-  const { requireDom, findChromium } = await import("../conformance/dom-adapter.mjs");
+  const { requireDom, findChromium } = await import("../../ui/conformance/dom-adapter.mjs");
   const docs = results.map((r) => {
     const s = M.UiBench.sheetFor(CSS);
     const root = M.UiBench.page(r.rows, -1);

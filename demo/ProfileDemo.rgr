@@ -21,14 +21,19 @@
 ; (`InputCtl`, nine conformance specs), the switch (`SwitchCtl`) and the select
 ; (`SelectCtl`).
 ;
-; DRAWN, and said so rather than implied: the Birth Date and Dismissal Time
-; boxes are text fields with an icon beside them. The reference's are date and
-; time pickers, and segmented editing — where ArrowUp on the month changes the
-; month and not the caret — is its own contract that the plan declines until it
-; has been measured. An icon that opens nothing would be a lie about what is
-; here; an icon that says "this field holds a date" is what the reference's
-; own affordance is when the picker is closed, so it stays and the header says
-; what it is.
+; The two DATE boxes are text fields with a calendar BUTTON at their end. The
+; button ("Choose date", aria-haspopup="dialog", aria-expanded) opens a
+; popover under the field holding the calendar demo's own card — `CalView`,
+; driven by the same `CalendarCtl` — on the month of the field's value.
+; Picking a day writes it back in the field's own format and closes; Escape
+; or a click outside closes and puts focus back in the field. Click the icon,
+; or press Enter / Space / Alt+ArrowDown on it, or Alt+ArrowDown in the field.
+;
+; Still DRAWN, and said so rather than implied: segmented editing — where
+; ArrowUp on the month changes the month and not the caret — is its own
+; contract that the plan declines until it has been measured, so the text
+; itself stays free text. The Dismissal Time box is a text field with a clock
+; beside it and no picker.
 ;
 ; The select is a CLOSED trigger. Opening it needs the overlay layer the
 ; dropdown demo has, which is real work rather than a line of CSS, so the
@@ -45,6 +50,9 @@ Import "../src/InputCtl.rgr"
 Import "../src/CheckboxCtl.rgr"
 Import "../src/SelectCtl.rgr"
 Import "../src/UiCtl.rgr"
+Import "../src/CalendarCtl.rgr"
+Import "../src/UiDate.rgr"
+Import "CalView.rgr"
 Import "pkg:evg/EVGElement.rgr"
 Import "pkg:evg/EVGUnit.rgr"
 Import "pkg:evg/EVGLayout.rgr"
@@ -91,6 +99,18 @@ treefactory Pf {
     ; it holds, and a calendar glyph announced beside it says it twice.
     tag Icon    EVGElement (props (className "pf-icon") (elementType 1) (a11yHidden true))
     tag Spacer  EVGElement (props (className "pf-spacer"))
+
+    ; THE DATE PICKER. The calendar glyph at the end of a date box is a real
+    ; button: it has a name, it says it opens a dialog, and it says whether
+    ; that dialog is open. The glyph inside it stays hidden — the name says
+    ; what it does.
+    tag Pick     EVGElement (props (className "pf-pick") (role "button") (a11yLabel "Choose date") (a11yHasPopup "dialog"))
+    tag PickIcon EVGElement (props (className "pf-icon pf-pick-icon") (elementType 1) (a11yHidden true))
+    ; The box and its popover are SIBLINGS in a wrapper, like the select's:
+    ; the overlay pass anchors a surface to the anchor before it, and the
+    ; popover belongs under the whole field rather than under the glyph.
+    tag DateWrap EVGElement (props (className "pf-datewrap"))
+    tag Popover  EVGElement (props (className "pf-popover") (isOverlay true) (overlaySide "bottom") (overlayAlign "start") (role "dialog"))
 
     tag Avatar  EVGElement (props (className "pf-avatar") (role "img") (a11yLabel "Noa Brooks"))
     tag Btn     EVGElement (props (className "pf-btn") (role "button"))
@@ -154,6 +174,11 @@ class ProfileDemo {
     def phone:InputCtl (new InputCtl())
     def visibility:SelectCtl (new SelectCtl())
     def hire:SwitchCtl (new SwitchCtl())
+    ; The one calendar both date fields share — only one popover is ever open.
+    ; `pickFor` is the field it belongs to, "" while it is shut.
+    def cal:CalendarCtl (new CalendarCtl())
+    def pickFor:string ""
+    def calScroll:double 0.0
 
     def root@(optional):EVGElement
     def sheet@(optional):EVGStyleSheet
@@ -386,6 +411,425 @@ class ProfileDemo {
         return box
     }
 
+    ; --- the date picker ------------------------------------------------------
+
+    fn pickTid:string (fieldTid:string) {
+        return (fieldTid + "-pick")
+    }
+
+    fn popTid:string (fieldTid:string) {
+        return (fieldTid + "-cal")
+    }
+
+    fn isDateField:boolean (tid:string) {
+        return ((tid == birth.tid) || (tid == available.tid))
+    }
+
+    ; The date field a pick button belongs to, or "".
+    fn fieldOfPick:string (tid:string) {
+        if (tid == (this.pickTid(birth.tid))) {
+            return birth.tid
+        }
+        if (tid == (this.pickTid(available.tid))) {
+            return available.tid
+        }
+        return ""
+    }
+
+    ; A date box: the plain text box with the calendar button at its far end,
+    ; and — while it is open — the popover as the box's overlay sibling.
+    fn dateBoxFor:EVGElement (c:InputCtl) {
+        def box:EVGElement (this.boxFor(c "" false))
+        def open:boolean (pickFor == c.tid)
+        def btn (tree Pf (Pick (props (id (this.pickTid(c.tid))))))
+        btn.a11yFocusable = true
+        ; Which field it picks for, since both buttons are "Choose date".
+        btn.a11yDescription = c.name
+        if open {
+            btn.a11yExpanded = (EVGA11yTri.yes())
+        } {
+            btn.a11yExpanded = (EVGA11yTri.no())
+        }
+        btn.addChild((tree Pf (PickIcon "🗓")))
+        box.addChild((tree Pf (Spacer)))
+        box.addChild(btn)
+        def wrap (tree Pf (DateWrap))
+        wrap.addChild(box)
+        if open {
+            box.isOverlayAnchor = true
+            def pop (tree Pf (Popover (props (id (this.popTid(c.tid))) (a11yLabel ("Choose " + c.name)))))
+            pop.addChild((CalView.card(cal calScroll)))
+            wrap.addChild(pop)
+        }
+        return wrap
+    }
+
+    ; --- reading and writing a date in the field's own words ----------------
+    ;
+    ; The two fields keep their dates differently: "Sep 18, 1991" and
+    ; "April 24th, 2026 - 10:30". Reading is forgiving — a month name (its
+    ; first three letters are enough), a one- or two-digit day with or without
+    ; an ordinal, a four-digit year, in any order the text happens to have —
+    ; and writing is in the field's own format, so a pick looks like the value
+    ; it replaced.
+
+    sfn isDigit:boolean (ch:int) {
+        return ((ch >= 48) && (ch <= 57))
+    }
+
+    sfn isLetter:boolean (ch:int) {
+        if ((ch >= 65) && (ch <= 90)) {
+            return true
+        }
+        return ((ch >= 97) && (ch <= 122))
+    }
+
+    ; Fills `out` with year, month, day. False when the text holds no whole,
+    ; possible date — the calendar then opens on today's month with nothing
+    ; chosen.
+    sfn parseDate:boolean (text:string out:[int]) {
+        def y:int -1
+        def m:int -1
+        def d:int -1
+        def n:int (strlen text)
+        def i:int 0
+        while (i < n) {
+            def ch:int (charAt text i)
+            if (ProfileDemo.isDigit(ch)) {
+                def j:int i
+                def v:int 0
+                while ((j < n) && (ProfileDemo.isDigit((charAt text j)))) {
+                    v = ((v * 10) + ((charAt text j) - 48))
+                    j = (j + 1)
+                }
+                def len:int (j - i)
+                if ((len == 4) && (y < 0)) {
+                    y = v
+                }
+                if ((len <= 2) && (d < 0)) {
+                    d = v
+                }
+                i = j
+            } {
+                if (ProfileDemo.isLetter(ch)) {
+                    def j:int i
+                    while ((j < n) && (ProfileDemo.isLetter((charAt text j)))) {
+                        j = (j + 1)
+                    }
+                    def word:string (to_lowercase (substring text i j))
+                    if ((m < 0) && ((strlen word) >= 3)) {
+                        def k:int 1
+                        while (k <= 12) {
+                            def name:string (to_lowercase (UiDate.monthName(k)))
+                            if ((substring name 0 3) == (substring word 0 3)) {
+                                m = k
+                                k = 13
+                            }
+                            k = (k + 1)
+                        }
+                    }
+                    i = j
+                } {
+                    i = (i + 1)
+                }
+            }
+        }
+        if ((y < 0) || (m < 0)) {
+            return false
+        }
+        if ((d < 1) || (d > (UiDate.daysInMonth(y m)))) {
+            return false
+        }
+        set out 0 y
+        set out 1 m
+        set out 2 d
+        return true
+    }
+
+    ; The date written the way this field writes it. The availability field
+    ; carries a time after " - "; only the date part is the picker's, so the
+    ; time is kept as it was.
+    fn formatFor:string (c:InputCtl y:int m:int d:int) {
+        def month:string (UiDate.monthName(m))
+        if (c.tid == available.tid) {
+            def text:string ((((month + " ") + (UiDate.ordinal(d))) + ", ") + y)
+            def at:int (indexOf c.value " - ")
+            if (at >= 0) {
+                text = (text + (substring c.value at (strlen c.value)))
+            }
+            return text
+        }
+        return (((((substring month 0 3) + " ") + d) + ", ") + y)
+    }
+
+    ; --- opening, choosing, closing -----------------------------------------
+
+    fn openPicker:void (fieldTid:string) {
+        def c:InputCtl (this.inputFor(fieldTid))
+        cal.tid = "pf-cal"
+        cal.name = c.name
+        ; Today is pinned, as the calendar demo's is: a page whose picture
+        ; changes overnight cannot be snapshotted.
+        cal.setToday(2026 5 14)
+        cal.reverseYears = true
+        cal.startYear = 2016
+        cal.endYear = 2036
+        if (fieldTid == birth.tid) {
+            cal.startYear = 1920
+            cal.endYear = 2026
+        }
+        cal.yearPanelOpen = false
+        def p:[int] ([] _:int ( 0 0 0 ))
+        if (ProfileDemo.parseDate(c.value p)) {
+            def y:int (itemAt p 0)
+            if (y < cal.startYear) {
+                cal.startYear = y
+            }
+            if (y > cal.endYear) {
+                cal.endYear = y
+            }
+            ; THE MONTH OF THE VALUE, not today's: a birth date in 1991 opens
+            ; on September 1991, with the day chosen and the keyboard on it.
+            cal.setSelected(y (itemAt p 1) (itemAt p 2))
+            cal.setMonth(y (itemAt p 1))
+            cal.focusDay = cal.selectedDay
+            cal.hasFocusDay = true
+        } {
+            cal.clearSelected()
+            cal.setMonth(2026 5)
+            cal.hasFocusDay = false
+        }
+        cal.build()
+        pickFor = fieldTid
+        calScroll = 0.0
+        focused = (cal.dayTid((cal.currentFocusDay())))
+        this.rebuild()
+    }
+
+    ; Shut, and the focus goes back to the field the popover belonged to —
+    ; the dialog pattern's rule, and the only place a keyboard user can
+    ; sensibly be left.
+    fn closePicker:void () {
+        if (pickFor == "") {
+            return
+        }
+        focused = pickFor
+        pickFor = ""
+        cal.yearPanelOpen = false
+        this.rebuild()
+    }
+
+    ; A day was chosen. Choosing the day already chosen chooses it again —
+    ; unlike the bare calendar, whose second click CLEARS: a picker that
+    ; emptied its field when you confirmed the date it showed would be a trap.
+    fn commitDay:void (day:int) {
+        if (cal.isDisabledDay(day)) {
+            return
+        }
+        def c:InputCtl (this.inputFor(pickFor))
+        def p:[int] ([] _:int ( 0 0 0 ))
+        UiDate.fromDays(day p)
+        c.value = (this.formatFor(c (itemAt p 0) (itemAt p 1) (itemAt p 2)))
+        c.caret = (strlen c.value)
+        c.anchor = c.caret
+        c.ensureCaretVisible((this.engine()))
+        this.closePicker()
+    }
+
+    fn inPopover:boolean (target:string) {
+        if (pickFor == "") {
+            return false
+        }
+        this.laidOutOnce()
+        def r:EVGElement (unwrap root)
+        def pop:EVGElement (ProfileDemo.byId(r (this.popTid(pickFor))))
+        if (pop.id != (this.popTid(pickFor))) {
+            return false
+        }
+        def inner:EVGElement (ProfileDemo.byId(pop target))
+        return (inner.id == target)
+    }
+
+    ; A press while the popover is open. Inside it, the calendar's controls do
+    ; what they do in the calendar demo, except that a day is a CHOICE and
+    ; closes; anywhere else closes and returns focus to the field.
+    fn pickerPress:boolean (target:string) {
+        if (target == (this.pickTid(pickFor))) {
+            this.closePicker()
+            return true
+        }
+        if ((this.inPopover(target)) == false) {
+            this.closePicker()
+            return true
+        }
+        def day:int (cal.dayOfTid(target))
+        if (day >= 0) {
+            this.commitDay(day)
+            return true
+        }
+        if ((((target == (cal.prevTid())) || (target == (cal.nextTid()))) || (target == (cal.yearTid()))) || ((cal.yearOfTid(target)) >= 0)) {
+            this.calActivate(target)
+            return true
+        }
+        ; The card, the caption, the weekday strip: inside, and inert.
+        this.rebuild()
+        return true
+    }
+
+    ; A nav button, the year button or a year option, by pointer or key.
+    fn calActivate:void (target:string) {
+        def wasOpen:boolean cal.yearPanelOpen
+        def pickedYear:boolean ((cal.yearOfTid(target)) >= 0)
+        cal.activate(target)
+        focused = target
+        if cal.yearPanelOpen {
+            if (wasOpen == false) {
+                calScroll = (CalView.centredYearScroll(cal))
+                focused = (cal.yearOptTid(cal.viewYear))
+            }
+        }
+        if pickedYear {
+            focused = (cal.yearTid())
+        }
+        if (target == (cal.yearTid())) {
+            if (cal.yearPanelOpen == false) {
+                focused = (cal.yearTid())
+            }
+        }
+        this.rebuild()
+    }
+
+    ; The popover's own tab ring: previous month, the year, next month, and the
+    ; grid's one tab stop. Tab does not leave an open popover — Escape does.
+    fn pickerTab:void (back:boolean) {
+        if cal.yearPanelOpen {
+            cal.closeYearPanel()
+        }
+        def stops:[string]
+        push stops (cal.prevTid())
+        push stops (cal.yearTid())
+        push stops (cal.nextTid())
+        push stops (cal.dayTid((cal.currentFocusDay())))
+        def n:int (array_length stops)
+        def at:int (n - 1)
+        def i:int 0
+        while (i < n) {
+            if ((itemAt stops i) == focused) {
+                at = i
+            }
+            i = (i + 1)
+        }
+        def next:int (at + 1)
+        if back {
+            next = (at - 1)
+        }
+        if (next < 0) {
+            next = (n - 1)
+        }
+        if (next >= n) {
+            next = 0
+        }
+        focused = (itemAt stops next)
+        this.rebuild()
+    }
+
+    ; Walking the year list with the arrows, keeping the row in view.
+    fn yearStep:void (delta:int) {
+        def y:int (cal.yearOfTid(focused))
+        def i:int ((cal.indexOfYear(y)) + delta)
+        if (i < 0) {
+            i = 0
+        }
+        if (i >= (cal.yearCount())) {
+            i = ((cal.yearCount()) - 1)
+        }
+        focused = (cal.yearOptTid((cal.yearAt(i))))
+        def top:double ((to_double i) * (CalView.yearRowH()))
+        if (top < calScroll) {
+            calScroll = top
+        }
+        def bottom:double (top + (CalView.yearRowH()))
+        def view:double ((CalView.yearPanelH()) - 10.0)
+        if (bottom > (calScroll + view)) {
+            calScroll = (CalView.clampYearScroll(cal (bottom - view)))
+        }
+        this.rebuild()
+    }
+
+    ; Every key while the popover is open is the popover's.
+    fn pickerKey:boolean (k:string shift:boolean) {
+        if (k == "Escape") {
+            if cal.yearPanelOpen {
+                cal.closeYearPanel()
+                focused = (cal.yearTid())
+                this.rebuild()
+                return true
+            }
+            this.closePicker()
+            return true
+        }
+        if (k == "Tab") {
+            this.pickerTab(shift)
+            return true
+        }
+        def day:int (cal.dayOfTid(focused))
+        if (day >= 0) {
+            if (UiCtl.activatesOn(k)) {
+                this.commitDay(day)
+                return true
+            }
+            def landed:string (cal.keyDown(focused k))
+            if ((strlen landed) > 0) {
+                focused = landed
+            }
+            this.rebuild()
+            return true
+        }
+        if ((cal.yearOfTid(focused)) >= 0) {
+            if (k == "ArrowDown") {
+                this.yearStep(1)
+                return true
+            }
+            if (k == "ArrowUp") {
+                this.yearStep(-1)
+                return true
+            }
+        }
+        if (UiCtl.activatesOn(k)) {
+            this.calActivate(focused)
+            return true
+        }
+        return true
+    }
+
+    ; The wheel over the open year list. `false` leaves the page to scroll.
+    fn scrollBy:boolean (dy:double) {
+        if (pickFor == "") {
+            return false
+        }
+        if (cal.yearPanelOpen == false) {
+            return false
+        }
+        def next:double (CalView.clampYearScroll(cal (calScroll + dy)))
+        if (next == calScroll) {
+            return false
+        }
+        calScroll = next
+        this.rebuild()
+        return true
+    }
+
+    ; Keys the page must hand back out of the field's editing session: Alt+
+    ; ArrowDown in a date field opens its picker rather than moving a caret.
+    fn ownsKeyAlt:boolean (k:string alt:boolean) {
+        if alt {
+            if (k == "ArrowDown") {
+                return (this.isDateField(focused))
+            }
+        }
+        return false
+    }
+
     ; A whole row: the label column, then whatever control the caller built.
     fn rowFor2:EVGElement (r:PfRow control:EVGElement) {
         def row (tree Pf (Row (props (id (r.tid + "-row")))))
@@ -517,8 +961,8 @@ class ProfileDemo {
         def body (tree Pf (Body (props (id "pf"))))
         body.addChild((this.rowFor2((this.rowFor("pf-photo")) (this.photoRow()))))
         body.addChild((this.rowFor2((this.rowFor("pf-name")) (this.boxFor(fullName "" false)))))
-        body.addChild((this.rowFor2((this.rowFor("pf-birth")) (this.boxFor(birth "🗓" false)))))
-        body.addChild((this.rowFor2((this.rowFor("pf-available")) (this.boxFor(available "🗓" false)))))
+        body.addChild((this.rowFor2((this.rowFor("pf-birth")) (this.dateBoxFor(birth)))))
+        body.addChild((this.rowFor2((this.rowFor("pf-available")) (this.dateBoxFor(available)))))
         body.addChild((this.rowFor2((this.rowFor("pf-company")) (this.boxFor(company "" false)))))
         body.addChild((this.rowFor2((this.rowFor("pf-dismissal")) (this.boxFor(dismissal "◷  " true)))))
         body.addChild((this.rowFor2((this.rowFor("pf-phone")) (this.boxFor(phone "" false)))))
@@ -542,7 +986,7 @@ class ProfileDemo {
         card.addChild(foot)
 
         page.addChild(card)
-        page.addChild((tree Pf (Note "Every control's left edge is on one column. The date and time boxes are text fields with an icon — segmented editing is not built here.")))
+        page.addChild((tree Pf (Note "Every control's left edge is on one column. The calendar button opens a picker; typing is free text — segmented editing is not built here.")))
         return page
     }
 
@@ -590,7 +1034,9 @@ class ProfileDemo {
         push a "pf-photo-remove"
         push a "pf-name"
         push a "pf-birth"
+        push a "pf-birth-pick"
         push a "pf-available"
+        push a "pf-available-pick"
         push a "pf-company"
         push a "pf-dismissal"
         push a "pf-phone"
@@ -632,6 +1078,31 @@ class ProfileDemo {
     }
 
     fn keyWith:boolean (k:string shift:boolean ctrl:boolean) {
+        return (this.keyWithAlt(k shift ctrl false))
+    }
+
+    fn keyWithAlt:boolean (k:string shift:boolean ctrl:boolean alt:boolean) {
+        ; AN OPEN DATE PICKER TAKES THE KEYBOARD FIRST, Tab included — the
+        ; popover is a dialog, and Escape is the way out of it.
+        if (pickFor != "") {
+            return (this.pickerKey(k shift))
+        }
+        ; The keys that open it: Enter, Space or Alt+ArrowDown on the calendar
+        ; button, and Alt+ArrowDown in the date field itself — the platform's
+        ; own date input opens its picker on that chord.
+        def owner:string (this.fieldOfPick(focused))
+        if ((strlen owner) > 0) {
+            if ((UiCtl.activatesOn(k)) || ((k == "ArrowDown") && alt)) {
+                this.openPicker(owner)
+                return true
+            }
+        }
+        if ((k == "ArrowDown") && alt) {
+            if (this.isDateField(focused)) {
+                this.openPicker(focused)
+                return true
+            }
+        }
         ; THE OPEN LIST TAKES THE KEYBOARD FIRST, including Tab. A select whose
         ; list is open and whose Tab moves to the next field is a select you
         ; cannot close without the mouse, and Radix does not do that.
@@ -691,6 +1162,11 @@ class ProfileDemo {
     }
 
     fn press:boolean (target:string) {
+        ; The date picker's popover, when one is open, answers every press:
+        ; inside it the calendar works, outside it closes.
+        if (pickFor != "") {
+            return (this.pickerPress(target))
+        }
         ; THE SELECT, BEFORE THE FOCUS RING. Every decision goes through the
         ; controller: this asks it what a press on that target means and draws
         ; whatever it says afterwards. Nothing here decides whether the list is
@@ -718,6 +1194,12 @@ class ProfileDemo {
             ; click outside does in the reference.
             visibility.closeList()
             this.rebuild()
+            return true
+        }
+        ; The calendar button opens the picker under its field.
+        def owner:string (this.fieldOfPick(target))
+        if ((strlen owner) > 0) {
+            this.openPicker(owner)
             return true
         }
         if (target == "pf-hire") {
@@ -830,6 +1312,12 @@ class ProfileDemo {
     }
 
     fn beginSelection:boolean (rawTarget:string px:double extend:boolean) {
+        ; Not a caret placement: a press in (or out of) the open picker, or on
+        ; a calendar button, is a press and nothing else.
+        if ((pickFor != "") || ((strlen (this.fieldOfPick(rawTarget))) > 0)) {
+            dragField = ""
+            return (this.press(rawTarget))
+        }
         def target:string (this.fieldOwning(rawTarget))
         def took:boolean (this.press(target))
         if (took == false) {
@@ -904,9 +1392,35 @@ class ProfileDemo {
     ; It matters more than it sounds: an I-beam is how a person knows a
     ; rectangle is text they can put a caret in, and without one a drawn form
     ; reads as a picture of a form.
+    sfn within:boolean (el:EVGElement px:double py:double) {
+        if ((px < el.calculatedX) || (px > (el.calculatedX + el.calculatedWidth))) {
+            return false
+        }
+        return ((py >= el.calculatedY) && (py <= (el.calculatedY + el.calculatedHeight)))
+    }
+
     fn cursorAt:string (px:double py:double) {
         this.laidOutOnce()
         def r:EVGElement (unwrap root)
+        ; The popover and the calendar buttons are not text: "" leaves the
+        ; page to pick the cursor from the accessible tree, a pointer on a day
+        ; or a button.
+        if (pickFor != "") {
+            def pop:EVGElement (ProfileDemo.byId(r (this.popTid(pickFor))))
+            if (pop.id == (this.popTid(pickFor))) {
+                if (ProfileDemo.within(pop px py)) {
+                    return ""
+                }
+            }
+        }
+        def pb:EVGElement (ProfileDemo.byId(r (this.pickTid(birth.tid))))
+        if ((pb.id == (this.pickTid(birth.tid))) && (ProfileDemo.within(pb px py))) {
+            return ""
+        }
+        def pa:EVGElement (ProfileDemo.byId(r (this.pickTid(available.tid))))
+        if ((pa.id == (this.pickTid(available.tid))) && (ProfileDemo.within(pa px py))) {
+            return ""
+        }
         def all:[InputCtl] (this.inputs())
         def i:int 0
         while (i < (array_length all)) {

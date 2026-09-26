@@ -693,7 +693,12 @@ const DEMOS = {
       profile.setHover(id);
       return true;
     },
-    keyWith: (k, shift, ctrl) => profile.keyWith(k, shift, ctrl),
+    // Alt as well: Alt+ArrowDown opens a date field's calendar popover.
+    keyWith: (k, shift, ctrl, alt) => profile.keyWithAlt(k, shift, ctrl, !!alt),
+    // …and so the field's editing session has to hand that chord back.
+    ownsKey: (k, ev) => profile.ownsKeyAlt(k, !!(ev && ev.altKey)),
+    // The wheel over the date picker's year list.
+    scroll: (dy) => profile.scrollBy(dy),
     // The demo owns its own tab ring — see the keydown handler.
     ownsTab: true,
     key: (k) => profile.key(k),
@@ -920,6 +925,9 @@ const DEMOS = {
       setPressed: (id) => filters.setPressed(id),
       root: () => null,
     }),
+    // For the chip menu's clock: a submenu opens after the pointer has rested
+    // on its row for 100ms, and only a running clock gets there.
+    animated: true,
   },
 
   eventcal: {
@@ -1783,6 +1791,7 @@ function paint() {
     // reason.
     window.__lastList = listJson;
     const list = JSON.parse(listJson);
+    previewBg(list);
     // THE EFFECTS' CLOCK. Any list that carries element-scoped effects gets
     // its events aged and the clock stamped on before the painter reads them —
     // the driver keys its state by the element's id, so a list parsed afresh
@@ -1902,7 +1911,7 @@ function inspectorAdapter() {
   if (d.css && typeof app.inspectCss === "function") {
     adapter.css = () => ({
       name: d.css,
-      href: "/gallery/ui/demo/" + d.css,
+      href: "/gallery/evgui/demo/" + d.css,
       text: app.inspectCss(),
       errors: JSON.parse(app.inspectStyleErrors()),
     });
@@ -1912,7 +1921,7 @@ function inspectorAdapter() {
     // the page that wrote it does not need to re-apply its own text.
     adapter.saveCss = async (text) => {
       lastSentCss = text;
-      const r = await fetch("/gallery/ui/demo/" + d.css, { method: "PUT", body: text });
+      const r = await fetch("/gallery/evgui/demo/" + d.css, { method: "PUT", body: text });
       if (!r.ok) throw new Error("save failed: " + r.status + " " + (await r.text()));
     };
   }
@@ -1921,7 +1930,7 @@ function inspectorAdapter() {
 
 // --- live CSS from disk -------------------------------------------------------
 //
-// `serve.mjs` watches gallery/ui/demo/*.css and says which one changed. This
+// `serve.mjs` watches gallery/evgui/demo/*.css and says which one changed. This
 // end fetches it and hands it to the app, which re-parses and re-cascades the
 // way it did at `init` — the sheet is the app's INPUT, so there is nothing to
 // patch and nothing to hold over its head.
@@ -2056,6 +2065,7 @@ function syncPanels() {
   for (const el of document.querySelectorAll("[data-for]")) {
     el.hidden = el.dataset.for !== state.which;
   }
+  syncChrome();
 }
 
 // `?demo=dashboard` lands on one directly. A page with eighteen demos and one
@@ -2089,6 +2099,251 @@ radios(
     startClock();
   },
 );
+setupChrome();
+
+// --- the page chrome -----------------------------------------------------------
+// Everything round the stage: the component list's names and counts, the
+// search and filter boxes, the title / description / source link of the demo
+// on screen, the theme toggle and the phone drawer. The words live in
+// index.html (`#demo-meta`); this only puts them where they go. None of it
+// touches a demo's state — choosing a demo is still a click on its radio.
+
+const SOURCE_BASE = "https://github.com/terotests/EVGUI/blob/main/demo/";
+
+function demoMeta(name) {
+  if (!demoMeta.all) {
+    try {
+      demoMeta.all = JSON.parse(document.getElementById("demo-meta").textContent);
+    } catch (e) {
+      demoMeta.all = {};
+    }
+  }
+  return demoMeta.all[name] || { title: name, desc: "", caption: "", src: "" };
+}
+
+/** How many things-to-try and notes the page has for a demo: the sidebar count. */
+function noteCount(name) {
+  return document.querySelectorAll(
+    `[data-for="${name}"] p.hint:not(#order), p.note[data-for="${name}"]`,
+  ).length;
+}
+
+/** The demo's page colour, painted round the canvas so the card is one surface. */
+function previewBg(list) {
+  const el = document.getElementById("preview");
+  if (!el) return;
+  const c = list && list.cmds && list.cmds[0];
+  const bg = c && c.k === 0 && !c.x && !c.y && Array.isArray(c.c)
+    ? `rgba(${c.c[0]}, ${c.c[1]}, ${c.c[2]}, ${c.c[3] == null ? 1 : c.c[3]})`
+    : "";
+  if (el.dataset.bg === bg) return;
+  el.dataset.bg = bg;
+  if (bg) el.style.setProperty("--preview-bg", bg);
+  else el.style.removeProperty("--preview-bg");
+}
+
+function chooseDemo(name) {
+  const input = document.querySelector(`#demos input[value="${name}"]`);
+  if (input && !input.checked) input.click();
+  setDrawer(false);
+}
+
+function setDrawer(open) {
+  document.body.classList.toggle("drawer-open", open);
+  for (const id of ["navtoggle", "mobilepick"]) {
+    const b = document.getElementById(id);
+    if (b) b.setAttribute("aria-expanded", String(open));
+  }
+}
+
+function matches(name, q) {
+  if (!q) return true;
+  const m = demoMeta(name);
+  return (name + " " + m.title).toLowerCase().includes(q.trim().toLowerCase());
+}
+
+function syncChrome() {
+  const name = state.which;
+  const m = demoMeta(name);
+  const set = (id, text) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  };
+  set("crumb", m.title);
+  set("demotitle", m.title);
+  set("demodesc", m.desc || "");
+  set("caption", m.caption || "");
+  set("mobilepicklabel", m.title);
+  document.title = `${m.title} — EVGUI`;
+  const src = document.getElementById("viewsource");
+  if (src && m.src) {
+    src.href = SOURCE_BASE + m.src + ".rgr";
+    src.setAttribute("aria-label", `View the source of the ${m.title} demo on GitHub`);
+  }
+  // The controls panel only when this demo has controls.
+  const panel = document.getElementById("picker");
+  if (panel) panel.hidden = !panel.querySelector("[data-for]:not([hidden])");
+  // The address says which demo is on screen, so a copied link lands on it.
+  const url = new URL(location.href);
+  if (url.searchParams.get("demo") !== name) {
+    url.searchParams.set("demo", name);
+    history.replaceState(history.state, "", url);
+  }
+}
+
+function setupChrome() {
+  // The rows main.js built are `<label><input>name</label>`; give each its
+  // display name and count without replacing the radio the checks click.
+  for (const label of document.querySelectorAll("#demos label")) {
+    const input = label.querySelector("input");
+    if (!input) continue;
+    const name = input.value;
+    for (const n of [...label.childNodes]) if (n !== input) n.remove();
+    const title = document.createElement("span");
+    title.className = "name";
+    title.textContent = demoMeta(name).title;
+    label.append(title);
+    const k = noteCount(name);
+    if (k) {
+      const count = document.createElement("span");
+      count.className = "count";
+      count.textContent = String(k);
+      count.title = `${k} note${k === 1 ? "" : "s"} on what to try`;
+      label.append(count);
+    }
+    label.dataset.name = name;
+  }
+
+  const filter = document.getElementById("demofilter");
+  if (filter) {
+    filter.addEventListener("input", () => {
+      let shown = 0;
+      for (const label of document.querySelectorAll("#demos label")) {
+        const ok = matches(label.dataset.name || "", filter.value);
+        label.hidden = !ok;
+        if (ok) shown += 1;
+      }
+      const none = document.getElementById("nomatch");
+      if (none) none.hidden = shown > 0;
+    });
+  }
+
+  const search = document.getElementById("demosearch");
+  const results = document.getElementById("searchresults");
+  if (search && results) {
+    let hits = [];
+    let at = 0;
+    const close = () => {
+      results.hidden = true;
+      search.setAttribute("aria-expanded", "false");
+      search.removeAttribute("aria-activedescendant");
+    };
+    const render = () => {
+      const q = search.value.trim();
+      if (!q) return close();
+      hits = DEMO_NAMES.filter((n) => matches(n, q));
+      at = Math.min(at, Math.max(0, hits.length - 1));
+      results.replaceChildren(...(hits.length ? hits.map((n, i) => {
+        const li = document.createElement("li");
+        const b = document.createElement("button");
+        b.type = "button";
+        b.id = "sr-" + n;
+        b.setAttribute("role", "option");
+        b.setAttribute("aria-selected", String(i === at));
+        b.tabIndex = -1;
+        if (i === at) b.className = "on";
+        const t = document.createElement("strong");
+        t.textContent = demoMeta(n).title;
+        const d = document.createElement("span");
+        d.textContent = demoMeta(n).caption || "";
+        b.append(t, d);
+        b.addEventListener("mousedown", (e) => e.preventDefault());
+        b.addEventListener("click", () => {
+          chooseDemo(n);
+          search.value = "";
+          close();
+        });
+        li.append(b);
+        return li;
+      }) : [Object.assign(document.createElement("li"), { className: "empty", textContent: "No component matches." })]));
+      results.hidden = false;
+      search.setAttribute("aria-expanded", "true");
+      if (hits.length) search.setAttribute("aria-activedescendant", "sr-" + hits[at]);
+    };
+    search.addEventListener("input", () => { at = 0; render(); });
+    search.addEventListener("focus", render);
+    search.addEventListener("blur", close);
+    search.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        if (!hits.length) return;
+        e.preventDefault();
+        at = (at + (e.key === "ArrowDown" ? 1 : hits.length - 1)) % hits.length;
+        render();
+      } else if (e.key === "Enter") {
+        if (!hits.length || results.hidden) return;
+        e.preventDefault();
+        chooseDemo(hits[at]);
+        search.value = "";
+        close();
+      } else if (e.key === "Escape") {
+        search.value = "";
+        close();
+      }
+    });
+  }
+
+  const copy = document.getElementById("copylink");
+  if (copy) {
+    copy.addEventListener("click", async () => {
+      let ok = false;
+      try {
+        await navigator.clipboard.writeText(location.href);
+        ok = true;
+      } catch (e) {
+        ok = false;
+      }
+      copy.classList.toggle("done", ok);
+      copy.title = ok ? "Link copied" : "Copy failed — the address bar has the link";
+      setTimeout(() => {
+        copy.classList.remove("done");
+        copy.title = "Copy link";
+      }, 1600);
+    });
+  }
+
+  const theme = document.getElementById("themetoggle");
+  if (theme) {
+    theme.addEventListener("click", () => {
+      const root = document.documentElement;
+      const dark = root.dataset.theme
+        ? root.dataset.theme === "dark"
+        : matchMedia("(prefers-color-scheme: dark)").matches;
+      const next = dark ? "light" : "dark";
+      root.dataset.theme = next;
+      try {
+        localStorage.setItem("evgui-theme", next);
+      } catch (e) {
+        // A private window: the choice lasts until the page is closed.
+      }
+    });
+  }
+
+  for (const id of ["navtoggle", "mobilepick"]) {
+    const b = document.getElementById(id);
+    if (b) b.addEventListener("click", () => setDrawer(!document.body.classList.contains("drawer-open")));
+  }
+  const scrim = document.getElementById("scrim");
+  if (scrim) scrim.addEventListener("click", () => setDrawer(false));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && document.body.classList.contains("drawer-open")) setDrawer(false);
+  });
+  const demos = document.getElementById("demos");
+  // Picking a row on a phone closes the drawer; arrowing through the radios
+  // (a keyboard change) leaves it open.
+  if (demos) demos.addEventListener("click", (e) => {
+    if (e.target instanceof HTMLInputElement && e.detail > 0) setDrawer(false);
+  });
+}
 function syncFxSwitches() {
   const host = document.getElementById("fxswitches");
   if (!host) return;
@@ -2376,11 +2631,15 @@ window.addEventListener("keydown", (ev) => {
   // A demo that reads modifiers gets them; the rest keep the one-argument
   // door they have always had.
   const took = d0.keyWith
-    ? d0.keyWith(ev.key, ev.shiftKey, ev.ctrlKey || ev.metaKey)
+    ? d0.keyWith(ev.key, ev.shiftKey, ev.ctrlKey || ev.metaKey, ev.altKey)
     : d0.key(ev.key);
   if (!took) return;
   ev.preventDefault();
   paint();
+  // A key can put the focus back in a field without the pointer — Escape out
+  // of the profile's date picker returns it to the date box — and the editing
+  // session has to follow, or the next keystroke types nowhere.
+  if (d0.textSession) syncTextSession();
   // A key that opened a menu asked for a row inside it, and the rows only
   // exist once that paint has built them. One more pass settles it.
   if (settlePendingRow()) paint();
@@ -2426,9 +2685,9 @@ const textInput = createTextInputBridge({
     // Three keys are the application's on every page, and a demo may claim
     // more for the field that has the focus: the combobox wants its arrows,
     // because there they walk the list rather than the caret.
-    const claimed = typeof d.ownsKey === "function" && d.ownsKey(k.key);
+    const claimed = typeof d.ownsKey === "function" && d.ownsKey(k.key, k);
     if (!claimed && k.key !== "Tab" && k.key !== "Escape" && k.key !== "Enter") return false;
-    const took = d.keyWith ? d.keyWith(k.key, k.shiftKey, k.ctrlKey || k.metaKey) : false;
+    const took = d.keyWith ? d.keyWith(k.key, k.shiftKey, k.ctrlKey || k.metaKey, k.altKey) : false;
     // Focus may have moved to another field, or off the fields entirely.
     syncTextSession();
     if (took) {
