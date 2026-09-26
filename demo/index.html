@@ -27,6 +27,12 @@
       aside h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--dim); margin: 0 0 8px; font-weight: 500; }
       aside section { margin-bottom: 20px; }
       aside section[hidden] { display: none; }
+      aside button {
+        font: inherit; color: var(--ink); background: #1b2440; border: 1px solid var(--line);
+        border-radius: 6px; padding: 5px 12px; cursor: pointer;
+      }
+      aside button:hover { border-color: var(--accent); }
+      aside button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
       label { display: flex; gap: 8px; align-items: center; color: var(--dim); font-size: 13px; padding: 3px 0; cursor: pointer; }
       label:hover { color: var(--ink); }
       .hint { color: var(--dim); font-size: 12.5px; margin: 2px 0 0; line-height: 1.7; }
@@ -571,6 +577,15 @@
           </p>
         </section>
         <section data-for="motion">
+          <h2>replay</h2>
+          <p>
+            <button type="button" id="motionreplay" aria-label="Replay the animations">&#8635; Replay</button>
+          </p>
+          <p class="hint">
+            Puts every dot, bar and tile back at its start and sends it off
+            again. The <strong>Replay</strong> button above the panels does the
+            same.
+          </p>
           <h2>what to look at</h2>
           <p class="hint">
             The seven dots leave together and arrive together. Everything
@@ -648,8 +663,9 @@
           <code>MotionDemo.rgr</code> knows what a pointer is: the tree is boxes
           with class names, and every hover, press and journey on this page is a
           rule in <code>motion.css</code>. The page&rsquo;s only job is to turn a
-          theme over every 1.7 seconds and to hand the engine the real elapsed
-          time each frame.
+          theme over — three times, 1.7 seconds apart, and again from the start
+          whenever <strong>Replay</strong> is pressed — and to hand the engine the
+          real elapsed time each frame.
         </p>
         <p class="note" data-for="motion">
           <strong>Cross the slow card quickly.</strong> Its transition is 900ms,
