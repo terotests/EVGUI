@@ -47,6 +47,9 @@ treefactory Dlg {
     text  textContent
 
     tag Page     EVGElement (props (className "dg-page"))
+    ; The two triggers, in a row of their own above the sheet. They used to be
+    ; loose children of the page and drew as bare text under the card.
+    tag Actions  EVGElement (props (className "dg-actions"))
     ; What the dialog covers, so there is something to see softened. Not
     ; decoration: a scrim over a blank page proves nothing about a blur.
     tag Sheet    EVGElement (props (className "dg-sheet"))
@@ -212,12 +215,101 @@ class DialogDemo {
         return s
     }
 
+    ; THE WINDOW'S ROOT GOES FIRST. Overlay surfaces paint in the order the
+    ; tree reaches them, so with the modal first the movable window drew over
+    ; the modal's scrim and card and covered its description — a modal that
+    ; is not on top is not modal. The sheet places the window's trigger to
+    ; the right, so the row still reads "Edit profile, Filters".
     fn page:EVGElement () {
         def p (tree Dlg (Page (props (id "page"))))
+        def acts (tree Dlg (Actions (props (id "dg-actions"))))
+        acts.addChild((unwrap window.rootEl))
+        acts.addChild((unwrap modal.rootEl))
+        p.addChild(acts)
         p.addChild((this.sheetBlock()))
-        p.addChild((unwrap modal.rootEl))
-        p.addChild((unwrap window.rootEl))
         return p
+    }
+
+    ; --- the keyboard ------------------------------------------------------------
+    ;
+    ; The page gives the demo its own Tab (`ownsTab`), because the mirror is a
+    ; roving tabindex — one tab stop for the whole canvas — and without a ring
+    ; here Tab from the close button left the dialog for the document body and
+    ; the two fields could not be reached at all.
+
+    ; While the modal is open this IS the ring, and Tab wraps inside it: the
+    ; focus trap a modal owes. Otherwise the triggers and the open window.
+    fn tabRing:[string] () {
+        def r:[string]
+        if modal.open {
+            push r "dlg-close"
+            push r "dlg-input-name"
+            push r "dlg-input-username"
+            push r "dlg-cancel"
+            push r "dlg-save"
+            return r
+        }
+        push r "dlg-trigger"
+        push r "win-trigger"
+        if window.open {
+            push r "win-titlebar"
+            push r "win-close"
+        }
+        return r
+    }
+
+    fn tab:boolean (back:boolean) {
+        def r:[string] (this.tabRing())
+        def n:int (array_length r)
+        def at:int -1
+        def i:int 0
+        while (i < n) {
+            if ((itemAt r i) == focused) {
+                at = i
+            }
+            i = (i + 1)
+        }
+        if (at < 0) {
+            if back {
+                focused = (itemAt r (n - 1))
+            } {
+                focused = (itemAt r 0)
+            }
+            return true
+        }
+        if back {
+            at = (at - 1)
+        } {
+            at = (at + 1)
+        }
+        if modal.open {
+            ; Trapped: past either end comes round to the other.
+            if (at < 0) {
+                at = (n - 1)
+            }
+            if (at >= n) {
+                at = 0
+            }
+        } {
+            ; Not trapped: past either end, the browser takes the Tab and the
+            ; focus leaves the demo the way it came in.
+            if ((at < 0) || (at >= n)) {
+                return false
+            }
+        }
+        focused = (itemAt r at)
+        return true
+    }
+
+    fn keyWith:boolean (k:string shift:boolean ctrl:boolean) {
+        if (k == "Tab") {
+            if (this.tab(shift)) {
+                root = (this.page())
+                return true
+            }
+            return false
+        }
+        return (this.key(k))
     }
 
     ; --- the host ---------------------------------------------------------------
@@ -240,21 +332,71 @@ class DialogDemo {
         if (target == "dlg-save") {
             focused = (modal.closeWindow())
         }
+        ; A click in a field puts the keyboard there.
+        if ((target == "dlg-input-name") || (target == "dlg-input-username")) {
+            focused = target
+        }
         root = (this.page())
         return true
     }
 
+    fn ownedByModal:boolean (id:string) {
+        if ((strlen id) < 3) {
+            return false
+        }
+        return ((substring id 0 3) == "dlg")
+    }
+
+    fn ownedByWindow:boolean (id:string) {
+        if ((strlen id) < 3) {
+            return false
+        }
+        return ((substring id 0 3) == "win")
+    }
+
     fn key:boolean (k:string) {
-        def next:string (modal.keyDown(focused k))
-        if ((strlen next) > 0) {
-            focused = next
+        ; ESCAPE CLOSES THE TOPMOST, and only that. Both controllers used to be
+        ; handed every key, so one Escape closed the modal AND the window, and
+        ; the focus went to whichever answered last — the window's trigger.
+        if (k == "Escape") {
+            if modal.open {
+                focused = (modal.closeWindow())
+            } {
+                if window.open {
+                    focused = (window.closeWindow())
+                } {
+                    return false
+                }
+            }
+            root = (this.page())
+            return true
         }
-        def next2:string (window.keyDown(focused k))
-        if ((strlen next2) > 0) {
-            focused = next2
+        ; Every other key goes to the controller that owns the focus. With the
+        ; modal open that can only be the modal: everything else is inert.
+        if (this.ownedByModal(focused)) {
+            if ((UiCtl.activatesOn(k)) && ((focused == "dlg-cancel") || (focused == "dlg-save"))) {
+                return (this.press(focused))
+            }
+            def next:string (modal.keyDown(focused k))
+            if ((strlen next) > 0) {
+                focused = next
+                root = (this.page())
+                return true
+            }
+            return false
         }
-        root = (this.page())
-        return true
+        if modal.open {
+            return false
+        }
+        if (this.ownedByWindow(focused)) {
+            def next2:string (window.keyDown(focused k))
+            if ((strlen next2) > 0) {
+                focused = next2
+                root = (this.page())
+                return true
+            }
+        }
+        return false
     }
 
     ; --- moving the window -------------------------------------------------------

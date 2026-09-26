@@ -315,6 +315,39 @@ console.log("reaching a year");
     Array.from(d.a11yProblems()).length === 0, Array.from(d.a11yProblems()).join(" | "));
 }
 
+// Audit P1-1 (calendar): typed segments stay in range. "45" in the day is
+// the native rule — 4 cannot start a two-digit day, so it is 04 and the 5
+// carries into the year — but a year of "0005" is no longer committed (the
+// calendar used to jump to December 5 AD) and the field says what is wrong.
+console.log("typed segments stay in range");
+{
+  const d = fresh();
+  const type = (s) => { for (const k of s) d.keyWith(k, false, false); d.displayListJson(); };
+  d.press(d.field.segTid(0));
+  type("1245");
+  ok("the carried digit is shown as the year it made", d.field.shown(2) === "0005", d.field.shown(2));
+  ok("and it is not committed to the calendar", d.model.hasSelection === false);
+  ok("which stays in a year it can show", d.model.viewYear === 2026, d.model.viewYear + "-" + d.model.viewMonth);
+  ok("no message while the year is still being typed", !byId(d, "cd-box-error"));
+  d.keyWith("Tab", false, false); d.displayListJson();
+  const msg = byId(d, "cd-box-error");
+  ok("leaving it says the year needs four digits", msg && /four-digit year/.test(msg.textContent), msg && msg.textContent);
+  ok("with the box drawn in error", hasClass(byId(d, "cd-box"), "cd-box-bad"));
+  const yr = JSON.parse(d.a11yJson(4, d.focused)).nodes.find((n) => n.id === "cd-box-year");
+  ok("and the year segment aria-invalid, described by the message", yr.invalid === "true" && yr.describedby === "cd-box-error", JSON.stringify(yr));
+  // A day past the month's end is clamped once the date is otherwise whole.
+  const e = fresh();
+  const typeE = (s) => { for (const k of s) e.keyWith(k, false, false); e.displayListJson(); };
+  e.press(e.field.segTid(0));
+  typeE("04312026");
+  ok("April 31 is clamped to April 30", e.field.isoValue() === "2026-04-30", e.field.isoValue());
+  ok("and chosen in the calendar", e.model.hasSelection === true);
+  typeE("2027");
+  ok("a full year retyped starts over rather than clamping to 9999", e.field.shown(2) === "2027", e.field.shown(2));
+  typeE("1999");
+  ok("a year the calendar cannot show is not committed", e.model.hasSelection === false);
+}
+
 console.log("");
 console.log(failed ? `RESULT FAIL — passed=${passed} failed=${failed}` : `RESULT OK — passed=${passed} failed=0`);
 process.exitCode = failed ? 1 : 0;

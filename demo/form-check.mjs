@@ -486,6 +486,48 @@ console.log("--- the radios take the keyboard, and the focus is drawn ---");
   ok("and the others do not", nm && nm.el.isFocused === false);
 }
 
+// Audit P1-1 / P1-13: required fields say so (shadcn-style) — red border,
+// the message under the box, aria-invalid, and aria-describedby pointing at
+// the message — once the field was touched or the form submitted.
+console.log("validation: required fields, touched and submitted");
+{
+  const d = fresh();
+  const node = (id) => JSON.parse(d.a11yJson(7, d.focused)).nodes.find((n) => n.id === id);
+  // Empty the name without leaving it: nothing shows yet.
+  d.press("fm-name");
+  d.name.value = ""; d.name.caret = 0; d.name.anchor = 0; d.rebuild(); d.displayListJson();
+  ok("an untouched empty required field shows no error yet", !one(d, "fm-name-error"));
+  d.press("fm-amount"); d.displayListJson();
+  const err = one(d, "fm-name-error");
+  ok("leaving it empty shows the message under it", err && err.el.textContent === "Enter your full name.", err && err.el.textContent);
+  ok("with the red border", has(one(d, "fm-name"), "fm-box-bad"), one(d, "fm-name").cls);
+  const nn = node("fm-name");
+  ok("and aria-invalid", nn && nn.invalid === "true", nn && nn.invalid);
+  ok("and aria-describedby naming the message", nn && nn.describedby === "fm-name-error", nn && nn.describedby);
+  ok("which is itself in the tree", !!node("fm-name-error"));
+  // Typing fixes it live.
+  d.press("fm-name"); d.type("A"); d.displayListJson();
+  ok("typing a name clears it", !one(d, "fm-name-error"));
+
+  // Submit: an untouched short password is reported, and focus goes to it.
+  const e = fresh();
+  e.secret.value = "abc"; e.secret.caret = 3; e.secret.anchor = 3; e.rebuild();
+  e.email.value = "ada@example.com"; e.rebuild(); e.displayListJson();
+  ok("a short password is not reported before submit", !one(e, "fm-secret-error"));
+  e.press("fm-submit"); e.displayListJson();
+  const pe = one(e, "fm-secret-error");
+  ok("submit reports it", pe && pe.el.textContent === "Use at least 8 characters.", pe && pe.el.textContent);
+  ok("and moves focus to the first invalid field", e.focused === "fm-secret", e.focused);
+  e.secret.value = ""; e.rebuild(); e.displayListJson();
+  const pe2 = one(e, "fm-secret-error");
+  ok("an empty password says it is required", pe2 && pe2.el.textContent === "Enter a password.", pe2 && pe2.el.textContent);
+
+  // The terms checkbox unchecked is an empty box.
+  const t = fresh();
+  t.press("fm-terms"); t.displayListJson();
+  ok("an unchecked terms box is drawn empty", has(one(t, "fm-terms"), "fm-check-off"), one(t, "fm-terms").cls);
+}
+
 console.log("");
 console.log("passed=" + passed + " failed=" + failed);
 if (failed > 0) { console.log("FAILURES"); process.exit(1); }

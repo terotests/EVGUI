@@ -97,6 +97,8 @@ treefactory Md {
     tag Error   EVGElement (props (className "md-hint md-error") (elementType 1) (a11yHidden true))
     tag Band    EVGElement (props (className "md-band") (a11yHidden true))
     tag Auto    EVGElement (props (className "md-auto") (elementType 1))
+    ; The read-only Created / Last modified rows, spaced off the rule above.
+    tag Meta    EVGElement (props (className "md-meta"))
     tag Note    EVGElement (props (className "md-note") (elementType 1))
 }
 
@@ -395,15 +397,26 @@ class MetadataDemo {
     ; height — a chip box with two rows of chips is taller than a text box.
     fn row:EVGElement (f:UiField control:EVGElement) {
         def r (tree Md (Row (props (id (f.tid + "-row")))))
-        r.addChild((this.labelFor(f)))
+        def lbl:EVGElement (this.labelFor(f))
+        r.addChild(lbl)
         def cell (tree Md (Cell))
         cell.addChild(control)
+        def under:boolean false
         if (f.isBad()) {
             cell.addChild((tree Md (Error f.error)))
+            under = true
         } {
             if ((strlen f.hint) > 0) {
                 cell.addChild((tree Md (Hint f.hint)))
+                under = true
             }
+        }
+        ; With a line under the control, the label lines up with the CONTROL
+        ; and not with control + line: the row is top-aligned and the label
+        ; is the control's height (see `.md-row-top` in metadata.css).
+        if under {
+            UiTree.addClass(r "md-row-top")
+            UiTree.addClass(lbl "md-label-top")
         }
         r.addChild(cell)
         return r
@@ -525,8 +538,10 @@ class MetadataDemo {
         card.addChild(form)
 
         card.addChild((tree Md (Sep)))
-        card.addChild((this.autoRow("Created" "12/1/2023 8:01 AM")))
-        card.addChild((this.autoRow("Last modified" "1/9/2024 3:47 PM")))
+        def meta (tree Md (Meta))
+        meta.addChild((this.autoRow("Created" "12/1/2023 8:01 AM")))
+        meta.addChild((this.autoRow("Last modified" "1/9/2024 3:47 PM")))
+        card.addChild(meta)
         page.addChild(card)
         page.addChild((tree Md (Note "Click Customer and type, or press Backspace in its empty box. Class is the same control with one value. Save with an empty required field to see the error take the hint's line.")))
         return page

@@ -133,9 +133,10 @@
   width: 16px;
 }
 
-/* Auto height: a hint that wraps (the combobox's, in a half-width column) grows
-   its field instead of running into the next label. */
-.fm-hint { color: #71717a; font-size: 11px; height: auto; line-height: 16px; }
+/* A gap above the line under the box, so it does not sit on the border, and
+ * no fixed height: the combobox's hint is two lines at half width and a 16px
+ * box drew the second one over the next row's label. */
+.fm-hint { color: #71717a; font-size: 11px; padding: 4px 0 0 0; height: auto; line-height: 16px; }
 .fm-error { color: #dc2626; }
 
 .fm-check-row {
@@ -160,6 +161,9 @@
   height: 16px;
 }
 
+/* Unchecked: an empty box with a grey border, not the checked blue fill with
+ * the tick taken out. */
+.fm-check-off { background-color: #ffffff; border-color: #a1a1aa; }
 .fm-tick { color: #ffffff; font-family: Arial; font-size: 11px; height: 14px; line-height: 14px; }
 .fm-check-label { color: #3f3f46; font-size: 12px; height: 18px; line-height: 18px; }
 
@@ -342,7 +346,10 @@
  * only what the box asks for before the row is shared out. 210 was wider than
  * the half-width field it sits in, and a flex base that does not fit is not
  * shrunk — the trigger beside it was pushed past the border. */
-.ui-combobox-input-single { width: 80px; }
+/* The single-value input takes the row's free width. At a fixed 80px the
+ * placeholder "Search customers" wrapped to two lines and the second was
+ * clipped. `nowrap` keeps a long query on one line too — it scrolls. */
+.ui-combobox-input-single { min-width: 0; white-space: nowrap; }
 /* The box INSIDE the group, which the controller builds and this file's
  * `.fm-box` rules cannot reach — a different class on a different tree. It
  * carries no border of its own (the group has it) and is the positioning
@@ -361,23 +368,31 @@
  * paler ink, and repeating the font here is a second place to change it. */
 .ui-input-placeholder { color: #a1a1aa; }
 .ui-input-caret { position: absolute; top: 8px; width: 2px; height: 18px; background-color: #2563eb; }
-.ui-combobox-grow { flex-grow: 1; min-width: 4px; height: 4px; }
+/* The chips' click-target spacer. This form's combobox is single-value, so
+ * the spacer must not take half the free width from the input beside it —
+ * that is what clipped the placeholder to "Search cus". */
+.ui-combobox-grow { flex-grow: 0; min-width: 0; width: 0; height: 4px; }
 .ui-combobox-clear {
   width: 20px; height: 20px; border-radius: 10px;
   color: #71717a; font-size: 14px; text-align: center;
 }
 .ui-combobox-clear:hover { background-color: #f4f4f5; }
 .ui-combobox-trigger { width: 20px; height: 20px; line-height: 20px; color: #71717a; font-size: 11px; text-align: center; }
+/* As wide as the trigger it hangs from, and its rows stretch across it so a
+ * highlighted row is a full-width band rather than one the width of its text. */
 .ui-combobox-content {
   display: flex;
   flex-direction: column;
-  width: 260px;
+  align-items: stretch;
+  width: 100%;
   padding: 4px 0;
   border: 1px solid #e4e4e7;
   border-radius: 8px;
   background-color: #ffffff;
 }
-.ui-combobox-item { color: #18181b; font-size: 13px; height: 32px; padding: 7px 12px; }
+/* At least 32px; a name too long for the trigger's width wraps and the row
+ * grows with it instead of running into the next one. */
+.ui-combobox-item { color: #18181b; font-size: 13px; min-height: 32px; height: auto; padding: 7px 12px; width: 100%; }
 .ui-combobox-item:hover { background-color: #f4f4f5; }
 .ui-combobox-item-state-selected { background-color: #f4f4f5; }
 /* WHERE ENTER WILL LAND, which is not the same as what is chosen — the arrows

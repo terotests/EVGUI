@@ -197,7 +197,7 @@ console.log("nothing is drawn dark on dark");
   clickOn(d, "cx-next");
   const dotTxt = byId(d, "cx-step-account").children[0].children[0];
   ok("a completed step's tick has its own token too",
-    (dotTxt.className || "").includes("cx-dottxt-complete"), dotTxt.className);
+    (dotTxt.className || "").includes("cx-icon-completed"), dotTxt.className);
 }
 
 console.log("the number field's own rules survive being drawn");
@@ -232,15 +232,21 @@ console.log("ReUI's step block: icon, eyebrow, title, badge, separator");
 {
   const d = fresh();
   const t = texts(d);
+  // Icons are stroked Lucide outlines now (audit P2-6: a colour emoji lock
+  // beside monochrome glyphs), so they are asked for by class, not by text.
+  const icons = (dd) => flat(dd).filter((e) => (e.className || "").includes("cx-icon-is-"))
+    .map((e) => e.className.split(" ").find((c) => c.startsWith("cx-icon-is-")).slice(11));
+  const ic = icons(d);
   // The icons come from the CONTROLLER as names and are turned into glyphs
   // here. The first version of that assignment used
   // `stepper.stepAt(0).icon = …`, which Ranger accepts and silently applies
   // to a temporary — it compiled clean and set nothing, so every circle drew
   // the fallback. This gate is JavaScript, where that same expression works,
   // so only a rendered check can catch it.
-  ok("the first step draws its own icon, not the fallback", t.includes("☺"), t.join("/"));
-  ok("the second draws its own", t.includes("▤"), t.join("/"));
-  ok("and none of them is the fallback bullet at step one", t.indexOf("☺") < t.indexOf("•"), t.join("/"));
+  ok("the first step draws its own icon, not the fallback", ic[0] === "user", ic.join("/"));
+  ok("the second draws its own", ic[1] === "card", ic.join("/"));
+  ok("and none of them is the fallback dot", !ic.includes("dot"), ic.join("/"));
+  ok("every icon is a stroked path, not a glyph", flat(d).filter((e) => (e.className || "").includes("cx-icon-is-")).every((e) => e.svgPath && e.elementType === 3));
   ok("the eyebrow counts from one", t.includes("Step 1") && t.includes("Step 4"), t.join("/"));
   // ReUI's badge words, not prettified state names.
   ok("the current step reads In Progress", t.includes("In Progress"), t.join("/"));
@@ -258,8 +264,9 @@ console.log("ReUI's step block: icon, eyebrow, title, badge, separator");
   clickOn(d, "cx-next");
   const after = texts(d);
   ok("but once you leave it, it reads Completed", after.includes("Completed"), after.join("/"));
-  ok("and shows a tick instead of its icon", after.includes("✓"), after.join("/"));
-  ok("while its own icon is gone", !after.includes("☺"), after.join("/"));
+  const afterIc = icons(d);
+  ok("and shows a tick instead of its icon", afterIc[0] === "check", afterIc.join("/"));
+  ok("while its own icon is gone", !afterIc.includes("user"), afterIc.join("/"));
 }
 
 console.log("the sliders: four pictures, one measured control");
@@ -382,7 +389,10 @@ console.log("what a reader is told");
   eq("and a percentage said out loud", bar.value, "25%");
   const box = ns.find((n) => n.id === "cx-num");
   eq("the field says what it holds", box.value, "0");
-  eq("and what kind of field it is", box.roledesc, "Number field");
+  // A spinbutton now (audit P1-2), with its range and position published.
+  eq("and what kind of field it is", box.role, "spinbutton");
+  eq("with its range", `${box.min}..${box.max}`, "0..99");
+  eq("and where it sits", box.now, 0);
   // ReUI's badge words, and its precedence: the step you are STANDING ON is
   // "In Progress" even when satisfied, because position wins over completion.
   const here = ns.find((n) => n.id === "cx-step-account");
@@ -511,6 +521,43 @@ console.log("the sliders move");
   // are now three, and the rule is the same one: focus decides.
   ok("so an arrow key belongs to the field again", d.key("ArrowUp"));
   eq("and the slider it left did not move", d.storage.value, heldStorage);
+}
+
+// Audit P1-2: typed digits reach the drawn box, the arrows step it, and the
+// 0–99 range holds. The page hands `key` the key NAME, so a digit arrives as
+// "4"; it used to fall through to the mirror and the canvas kept "—".
+console.log("typing into the number field");
+{
+  const d = fresh();
+  clickOn(d, "cx-num");
+  ok("a digit is taken", d.key("4"));
+  d.key("5");
+  d.displayListJson();
+  ok("and the box draws what was typed", texts(d).includes("45"), texts(d).join("/"));
+  d.key("ArrowUp"); d.displayListJson();
+  ok("ArrowUp steps it", texts(d).includes("46"));
+  d.key("ArrowDown"); d.key("ArrowDown"); d.displayListJson();
+  ok("ArrowDown steps it back", texts(d).includes("44"));
+  d.key("7"); d.displayListJson();
+  ok("a value past the max clamps to 99", texts(d).includes("99"), texts(d).join("/"));
+  ok("letters are refused", !d.key("x"));
+  d.key("Backspace"); d.displayListJson();
+  ok("Backspace edits it", texts(d).includes("9"));
+  const box = JSON.parse(d.a11yJson(9, "cx-num")).nodes.find((n) => n.id === "cx-num");
+  eq("the reader hears the new position", box.now, 9);
+}
+
+// Audit P0-1: the page is as tall as its content, so nothing is drawn below
+// the canvas.
+console.log("the page is as tall as what is on it");
+{
+  const d = fresh();
+  const h = d.heightPx();
+  d.displayListJson();
+  const note = flat(d).find((e) => e.className === "cx-note");
+  const next = byId(d, "cx-next");
+  ok("Next is inside the page", next.calculatedY + next.calculatedHeight <= h, `${next.calculatedY + next.calculatedHeight} > ${h}`);
+  ok("and so is the note under it", note.calculatedY + note.calculatedHeight <= h, `${note.calculatedY + note.calculatedHeight} > ${h}`);
 }
 
 console.log(`\npassed=${passed} failed=${failed}`);

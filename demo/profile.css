@@ -13,7 +13,7 @@
   padding: 24px;
   background-color: #fafafa;
   width: 780px;
-  height: 800px;
+  min-height: 800px;
 }
 
 .pf-card {
@@ -59,7 +59,10 @@
   padding: 5px 10px 5px 10px;
 }
 
-.pf-badge-text { color: #92400e; font-size: 12px; font-weight: 500; height: 18px; line-height: 18px; }
+/* Centred in the pill: the line box is the text's own height and the pill
+ * centres it, rather than an 18px box whose glyphs sat high in it. */
+.pf-badge { justify-content: center; }
+.pf-badge-text { color: #92400e; font-size: 12px; font-weight: 500; line-height: 16px; height: 16px; }
 
 .pf-body {
   display: flex;
@@ -117,12 +120,22 @@
 
 .pf-box-off { background-color: #fafafa; border-color: #f4f4f5; }
 
+/* A field that fails its rule: red border, the message under it. */
+.pf-box-bad { border-color: #dc2626; }
+.pf-error { color: #dc2626; font-size: 12px; padding: 5px 0 0 2px; }
+/* A row with a message under its control is top-aligned, and its label is
+ * the box's height, so the label lines up with the box and not with box +
+ * message. */
+.pf-row-bad { align-items: flex-start; }
+.pf-label-bad { height: 38px; }
+
 /* FOCUS. The invoice form's finding, on this page too: not one `:focus` rule,
  * so Tab walked the ring and drew nothing. The border carries it, as there —
  * the 1px grey turns dark on a box, a button and the select's trigger; the
  * switch's ring is on its knob, by a class the demo writes, because a border
  * on the track would push the knob in from the end it has to reach. */
 .pf-box:focus     { border-color: #18181b; }
+.pf-box-bad:focus { border-color: #991b1b; }
 .pf-btn:focus     { border-color: #18181b; }
 .pf-trigger:focus { border-color: #18181b; }
 .pf-knob-focus    { border: 2px solid #52525b; }
@@ -156,12 +169,19 @@
   gap: 10px;
 }
 
+/* No photo: a placeholder with the person's initials, centred. */
 .pf-avatar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
   border-radius: 20px;
-  background-color: #d4d4d8;
+  background-color: #e4e4e7;
   width: 40px;
   height: 40px;
 }
+
+.pf-initials { color: #52525b; font-size: 14px; font-weight: 600; }
 
 .pf-btn {
   display: flex;
@@ -245,6 +265,8 @@
 .pf-btn-ghost { }
 .pf-btn-solid { background-color: #18181b; border-color: #18181b; }
 .pf-btn-text-solid { color: #ffffff; }
+/* The Save floppy: a white outline on the black button. */
+.pf-pathicon { width: 14px; height: 14px; fill: none; stroke: #ffffff; stroke-width: 2; }
 
 .pf-note { color: #71717a; font-size: 12px; padding: 14px 0 0 0; width: 730px; height: 34px; }
 
@@ -612,6 +634,7 @@
   .pf-body { padding: 4px 16px 4px 16px; }
   .pf-row { flex-direction: column; align-items: stretch; gap: 6px; padding: 8px 0 8px 0; }
   .pf-label { width: 100%; }
+  .pf-label-bad { height: auto; }
   .pf-ctl { width: 100%; }
   .pf-foot { padding: 12px 16px; flex-wrap: wrap; row-gap: 10px; }
   .pf-note { width: 100%; height: auto; }

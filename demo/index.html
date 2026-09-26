@@ -289,6 +289,12 @@
       .try section { max-width: 78ch; }
       .try section[hidden] { display: none; }
       .try section + section { margin-top: 20px; }
+      .try button {
+        font: inherit; font-size: 14px; color: var(--ink); background: transparent; border: 1px solid var(--line);
+        border-radius: 8px; padding: 6px 14px; cursor: pointer; margin: 0 0 10px;
+      }
+      .try button:hover { border-color: var(--accent); }
+      .try button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       .try .hint { font-size: 14.5px; color: var(--ink-2); margin: 0 0 10px; line-height: 1.7; }
       .notes { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--line); }
       .note { color: var(--dim); font-size: 13.5px; margin: 0 0 14px; max-width: 78ch; line-height: 1.7; }
@@ -867,6 +873,19 @@
               using either one twice is wrong in one place.
             </p>
             <p class="hint">
+              <strong>Switch views freely.</strong> Day, Week and Month are
+              always in the header, and &lsaquo; &rsaquo; step by the view&rsquo;s
+              own unit &mdash; a day, a week, a month. <em>Today</em> comes back
+              to the demo&rsquo;s week. A crowded month day shows two chips and
+              &ldquo;+N more&rdquo;, which opens that day.
+            </p>
+            <p class="hint">
+              <strong>Keyboard:</strong> Tab walks the arrows, Today, the views
+              and then every event; Enter or Space presses what has the focus;
+              &larr; and &rarr; step the range. A title too long for what shows
+              of its box ends in an ellipsis.
+            </p>
+            <p class="hint">
               ReUI&rsquo;s own chrome is <em>not</em> drawn here: reui.io is
               refused by the egress proxy, so its view switcher and its colours
               were never seen. What is measured is where the events go.
@@ -904,9 +923,16 @@
               the thing a modal cannot do.
             </p>
             <p class="hint">
-              Tab to the title bar and use the <strong>arrow keys</strong>: a
-              gesture only a pointer can make is a gesture a keyboard cannot make,
-              so the window moves 16&nbsp;px a press.
+              <strong>Escape closes the topmost one only.</strong> The modal is
+              on top while it is open, and Tab stays inside it &mdash; Close, the
+              two fields, Cancel, Save &mdash; until it closes and hands the focus
+              back to <em>Edit profile</em>. Escape again closes the window.
+            </p>
+            <p class="hint">
+              Then drag the window, or Tab to its title bar and use the
+              <strong>arrow keys</strong>: a gesture only a pointer can make is a
+              gesture a keyboard cannot make, so the window moves 16&nbsp;px a
+              press.
             </p>
             <p class="hint">
               The page behind the dialog is <strong>blurred, not just dimmed</strong>
@@ -915,7 +941,30 @@
               uses. Both are declared, so a backend without the blur still dims.
             </p>
           </section>
+          <section data-for="message">
+            <h2>what to try</h2>
+            <p class="hint">
+              Click the field at the bottom, type, and press <strong>Enter</strong>
+              (or <strong>Send</strong>). Your message lands on the right, the
+              transcript follows it to the bottom, and a moment later Oliver
+              starts typing — three pulsing dots — and answers.
+            </p>
+            <p class="hint">
+              Scroll up with the wheel before a reply arrives: the transcript
+              stays where you left it and a <strong>Jump to newest</strong>
+              button appears instead. That policy is <code>ScrollerCtl</code>&rsquo;s.
+            </p>
+          </section>
           <section data-for="motion">
+            <h2>what to try</h2>
+            <p>
+              <button type="button" id="motionreplay" aria-label="Replay the animations">&#8635; Replay</button>
+            </p>
+            <p class="hint">
+              Puts every dot, bar and tile back at its start and sends it off
+              again — there, back, and there again. The <strong>Replay</strong>
+              button above the panels does the same.
+            </p>
             <h2>what to look at</h2>
             <p class="hint">
               The seven dots leave together and arrive together. Everything
@@ -983,8 +1032,9 @@
             <code>MotionDemo.rgr</code> knows what a pointer is: the tree is boxes
             with class names, and every hover, press and journey on this page is a
             rule in <code>motion.css</code>. The page&rsquo;s only job is to turn a
-            theme over every 1.7 seconds and to hand the engine the real elapsed
-            time each frame.
+            theme over — three times, 1.7 seconds apart, and again from the start
+            whenever <strong>Replay</strong> is pressed — and to hand the engine
+            the real elapsed time each frame.
           </p>
           <p class="note" data-for="motion">
             <strong>Cross the slow card quickly.</strong> Its transition is 900ms,
@@ -1110,13 +1160,13 @@
   "title": "Event Calendar",
   "src": "EventCalDemo",
   "caption": "EventCalCtl · measured against @schedule-x/calendar",
-  "desc": "A week of events drawn where EventCalCtl says they go, measured against a rendered @schedule-x/calendar. What is measured is the placement; ReUI's own chrome is not copied because reui.io could not be reached."
+  "desc": "A week of events drawn where EventCalCtl says they go, measured against a rendered @schedule-x/calendar, with Day, Week and Month views, Today, and a keyboard ring through every control and event. What is measured is the placement; ReUI's own chrome is not copied because reui.io could not be reached."
  },
  "message": {
   "title": "Message",
   "src": "MessageDemo",
   "caption": "Specified from shadcn's source and a screenshot · no library to measure",
-  "desc": "shadcn's Message, Bubble and Marker: a chat transcript with grouped bubbles, a pinned reaction, a delivery footer and a typing marker. No headless library exists for it, so it is specified from the component source and a screenshot, not measured."
+  "desc": "shadcn's Message, Bubble and Marker: a chat transcript with grouped bubbles, a pinned reaction, a delivery footer and a live typing marker. Write in the composer and send: the transcript stays pinned to the newest message (ScrollerCtl) and the other side types and replies. No headless library exists for the bubbles, so they are specified from the component source and a screenshot, not measured."
  },
  "controls": {
   "title": "Stepper & Progress",
@@ -1158,7 +1208,7 @@
   "title": "Dialog",
   "src": "DialogDemo",
   "caption": "WindowCtl · modal and movable, one flag apart",
-  "desc": "ReUI's dialog beside a movable window. Both are WindowCtl with one flag different: the modal blurs the page behind it, the other can be dragged aside by its title bar or moved with the arrow keys."
+  "desc": "ReUI's dialog over a movable window. Both are WindowCtl with one flag different: the modal blurs the page behind it and keeps the focus until Escape closes it; the other can be dragged aside by its title bar or moved with the arrow keys."
  },
  "motion": {
   "title": "Motion",

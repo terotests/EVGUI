@@ -113,6 +113,13 @@ treefactory Pf {
     tag Popover  EVGElement (props (className "pf-popover") (isOverlay true) (overlaySide "bottom") (overlayAlign "start") (role "dialog"))
 
     tag Avatar  EVGElement (props (className "pf-avatar") (role "img") (a11yLabel "Noa Brooks"))
+    ; The placeholder avatar's initials, from the Full Name field.
+    tag Initials EVGElement (props (className "pf-initials") (elementType 1) (a11yHidden true))
+    ; A stroked outline icon (Lucide, 24x24) — the Save button's floppy.
+    tag PathIcon EVGElement (props (className "pf-pathicon") (tagName "path") (elementType 3) (viewBox "0 0 24 24") (a11yHidden true))
+    ; The message under a field that fails its rule: the node the field's
+    ; aria-describedby points at. Not hidden, so a reader can also walk to it.
+    tag ErrTx   EVGElement (props (className "pf-error") (elementType 1) (role "text"))
     tag Btn     EVGElement (props (className "pf-btn") (role "button"))
     tag BtnTx   EVGElement (props (className "pf-btn-text") (elementType 1))
     tag BtnIcon EVGElement (props (className "pf-btn-icon") (elementType 1) (a11yHidden true))
@@ -188,6 +195,13 @@ class ProfileDemo {
     def hovered:string ""
     def pressed:string ""
     def focused:string ""
+
+    ; shadcn-style validation, as on the invoice form: an error shows once its
+    ; field has been touched (focused, then left) or Save was pressed, and from
+    ; then on follows every keystroke.
+    def touched:[string]
+    def submitted:boolean false
+    def lastFocus:string ""
 
     def pageW:double 780.0
     def pageH:double 800.0
@@ -349,6 +363,16 @@ class ProfileDemo {
             box = (tree Pf (BoxOff (props (id c.tid) (a11yLabel c.name))))
         }
         box.a11yDescription = c.description
+        def err:string (this.shownError(c.tid))
+        if ((strlen err) > 0) {
+            UiTree.addClass(box "pf-box-bad")
+            box.a11yInvalid = "true"
+            box.a11yDescription = err
+            box.a11yDescribedBy = (c.tid + "-error")
+        }
+        if (c.tid == fullName.tid) {
+            box.a11yRequired = "true"
+        }
         ; What the field contains — see the note in `FormDemo.boxFor`. Empty
         ; for a password, which this form has none of but which the rule
         ; covers anyway rather than waiting for one to arrive.
@@ -841,13 +865,31 @@ class ProfileDemo {
         row.addChild(lb)
         def cell (tree Pf (Ctl))
         cell.addChild(control)
+        def err:string (this.shownError(r.tid))
+        if ((strlen err) > 0) {
+            cell.addChild((tree Pf (ErrTx (props (id (r.tid + "-error"))) err)))
+            ; The label lines up with the BOX, not with box + message: a row
+            ; with an error is top-aligned and its label is the box's height.
+            UiTree.addClass(row "pf-row-bad")
+            UiTree.addClass(lb "pf-label-bad")
+        }
         row.addChild(cell)
         return row
     }
 
     fn photoRow:EVGElement () {
         def wrap (tree Pf (SwRow))
-        wrap.addChild((tree Pf (Avatar (props (id "pf-avatar")))))
+        ; No photo yet: the placeholder carries the person's initials, taken
+        ; from the name as it stands, instead of an empty grey disc.
+        def av (tree Pf (Avatar (props (id "pf-avatar"))))
+        def nm:string (trim fullName.value)
+        if ((strlen nm) > 0) {
+            av.a11yLabel = nm
+        } {
+            av.a11yLabel = "No name"
+        }
+        av.addChild((tree Pf (Initials (ProfileDemo.initialsOf(nm)))))
+        wrap.addChild(av)
         def change (tree Pf (Btn (props (id "pf-photo-change") (a11yLabel "Change photo"))))
         change.addChild((tree Pf (BtnIcon "↥")))
         change.addChild((tree Pf (BtnTx "Change")))
@@ -953,8 +995,9 @@ class ProfileDemo {
         ht.addChild((tree Pf (Sub "Identity and availability.")))
         head.addChild(ht)
         head.addChild((tree Pf (Spacer)))
-        def badge (tree Pf (Badge (props (id "pf-progress") (a11yLabel "Profile 84 percent complete"))))
-        badge.addChild((tree Pf (BadgeTx "84% complete")))
+        def pct:int (this.completePercent())
+        def badge (tree Pf (Badge (props (id "pf-progress") (a11yLabel ("Profile " + (to_string pct) + " percent complete")))))
+        badge.addChild((tree Pf (BadgeTx ((to_string pct) + "% complete"))))
         head.addChild(badge)
         card.addChild(head)
 
@@ -979,7 +1022,9 @@ class ProfileDemo {
         cancel.addChild((tree Pf (BtnTx "Cancel")))
         btns.addChild(cancel)
         def save (tree Pf (Solid (props (id "pf-save") (a11yLabel "Save changes"))))
-        save.addChild((tree Pf (BtnIcon "🖫")))
+        ; A stroked outline in the label's white. The "🖫" glyph drew dark on
+        ; the black button and could not be seen.
+        save.addChild((tree Pf (PathIcon (props (svgPath "M15.2 3 A2 2 0 0 1 16.6 3.6 L20.4 7.4 A2 2 0 0 1 21 8.8 V19 A2 2 0 0 1 19 21 H5 A2 2 0 0 1 3 19 V5 A2 2 0 0 1 5 3 Z M17 21 V14 A1 1 0 0 0 16 13 H8 A1 1 0 0 0 7 14 V21 M7 3 V7 A1 1 0 0 0 8 8 H15")))))
         save.addChild((tree Pf (SolidTx "Save changes")))
         btns.addChild(save)
         foot.addChild(btns)
@@ -991,7 +1036,226 @@ class ProfileDemo {
     }
 
     fn rebuild:void () {
+        ; Leaving a field is what touches it.
+        if (lastFocus != focused) {
+            if ((strlen lastFocus) > 0) {
+                this.touch(lastFocus)
+            }
+            lastFocus = focused
+        }
         root = (this.pageBody())
+    }
+
+    ; --- validation -------------------------------------------------------------
+
+    ; "Noa Brooks" -> "NB": the first letter of the first and the last word.
+    sfn initialsOf:string (name:string) {
+        def n:int (strlen name)
+        def first:string ""
+        def last:string ""
+        def i:int 0
+        def atStart:boolean true
+        while (i < n) {
+            def ch:int (charAt name i)
+            if (ch == 32) {
+                atStart = true
+            } {
+                if atStart {
+                    def one:string (to_uppercase (substring name i (i + 1)))
+                    if ((strlen first) == 0) {
+                        first = one
+                    } {
+                        last = one
+                    }
+                }
+                atStart = false
+            }
+            i = (i + 1)
+        }
+        return (first + last)
+    }
+
+    ; A time of day, 24 hour: H.MM, HH.MM, H:MM or HH:MM, 00.00 to 23.59.
+    sfn isTime:boolean (raw:string) {
+        def t:string (trim raw)
+        def n:int (strlen t)
+        def sep:int (indexOf t ".")
+        if (sep < 0) {
+            sep = (indexOf t ":")
+        }
+        if ((sep < 1) || (sep > 2)) {
+            return false
+        }
+        if ((n - sep) != 3) {
+            return false
+        }
+        def i:int 0
+        while (i < n) {
+            if (i != sep) {
+                if ((ProfileDemo.isDigit((charAt t i))) == false) {
+                    return false
+                }
+            }
+            i = (i + 1)
+        }
+        def h:int 0
+        def m:int 0
+        def k:int 0
+        while (k < n) {
+            def dv:int ((charAt t k) - 48)
+            if (k < sep) {
+                h = ((h * 10) + dv)
+            }
+            if (k > sep) {
+                m = ((m * 10) + dv)
+            }
+            k = (k + 1)
+        }
+        if (h > 23) {
+            return false
+        }
+        return (m <= 59)
+    }
+
+    ; A phone number: digits with the usual punctuation (+ ( ) - . and
+    ; spaces), and at least seven digits.
+    sfn isPhone:boolean (raw:string) {
+        def t:string (trim raw)
+        def n:int (strlen t)
+        def digits:int 0
+        def i:int 0
+        while (i < n) {
+            def ch:int (charAt t i)
+            if (ProfileDemo.isDigit(ch)) {
+                digits = (digits + 1)
+            } {
+                def okc:boolean ((((ch == 43) || (ch == 40)) || ((ch == 41) || (ch == 45))) || ((ch == 46) || (ch == 32)))
+                if (okc == false) {
+                    return false
+                }
+            }
+            i = (i + 1)
+        }
+        return (digits >= 7)
+    }
+
+    ; What is wrong with a field now, whether or not it is shown yet. Only the
+    ; name is required; the rest are checked when they hold something.
+    fn ruleError:string (tid:string) {
+        if (tid == fullName.tid) {
+            if ((strlen (trim fullName.value)) == 0) {
+                return "Enter your full name."
+            }
+            return ""
+        }
+        if ((tid == birth.tid) || (tid == available.tid)) {
+            def c:InputCtl (this.inputFor(tid))
+            if ((strlen (trim c.value)) == 0) {
+                return ""
+            }
+            def ymd:[int] ([] _:int (0 0 0))
+            if ((ProfileDemo.parseDate(c.value ymd)) == false) {
+                if (tid == birth.tid) {
+                    return "Enter a date, like Sep 18, 1991."
+                }
+                return "Enter a date, like April 24th, 2026 - 10:30."
+            }
+            return ""
+        }
+        if (tid == dismissal.tid) {
+            if ((strlen (trim dismissal.value)) == 0) {
+                return ""
+            }
+            if ((ProfileDemo.isTime(dismissal.value)) == false) {
+                return "Enter a time from 00.00 to 23.59."
+            }
+            return ""
+        }
+        if (tid == phone.tid) {
+            if ((strlen (trim phone.value)) == 0) {
+                return ""
+            }
+            if ((ProfileDemo.isPhone(phone.value)) == false) {
+                return "Enter a phone number: digits, spaces and + ( ) -."
+            }
+            return ""
+        }
+        return ""
+    }
+
+    fn isTouched:boolean (tid:string) {
+        def i:int 0
+        while (i < (array_length touched)) {
+            if ((itemAt touched i) == tid) {
+                return true
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    fn touch:void (tid:string) {
+        if ((this.isTouched(tid)) == false) {
+            push touched tid
+        }
+    }
+
+    ; The error a field DRAWS: its rule's, once touched or submitted.
+    fn shownError:string (tid:string) {
+        if (submitted || (this.isTouched(tid))) {
+            return (this.ruleError(tid))
+        }
+        return ""
+    }
+
+    fn checkedFields:[string] () {
+        def a:[string]
+        push a fullName.tid
+        push a birth.tid
+        push a available.tid
+        push a dismissal.tid
+        push a phone.tid
+        return a
+    }
+
+    ; Save: every rule shows, and focus goes to the first field that fails.
+    fn save:boolean () {
+        submitted = true
+        def all:[string] (this.checkedFields())
+        def i:int 0
+        while (i < (array_length all)) {
+            def tid:string (itemAt all i)
+            if ((strlen (this.ruleError(tid))) > 0) {
+                focused = tid
+                lastFocus = tid
+                this.rebuild()
+                return false
+            }
+            i = (i + 1)
+        }
+        focused = "pf-save"
+        this.rebuild()
+        return true
+    }
+
+    ; How much of the profile is filled in: the photo and the six text fields,
+    ; each counted when it holds a value that passes its rule. There is no
+    ; photo here, so a full profile reads 86% until one is added.
+    fn completePercent:int () {
+        def filled:int 0
+        def total:int 7
+        def all:[InputCtl] (this.inputs())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:InputCtl (itemAt all i)
+            if ((strlen (trim c.value)) > 0) {
+                if ((strlen (this.ruleError(c.tid))) == 0) {
+                    filled = (filled + 1)
+                }
+            }
+            i = (i + 1)
+        }
+        return (to_int ((((to_double filled) * 100.0) / (to_double total)) + 0.5))
     }
 
     ; --- layout ---------------------------------------------------------------
@@ -1135,11 +1399,22 @@ class ProfileDemo {
             return (this.tab(shift))
         }
         if (this.hasInput(focused)) {
+            ; Enter in a field saves, as Enter in a <form> submits.
+            if (k == "Enter") {
+                this.save()
+                return true
+            }
             def c:InputCtl (this.inputFor(focused))
             c.keyDownWith(focused k shift ctrl)
             c.ensureCaretVisible((this.engine()))
             this.rebuild()
             return true
+        }
+        if (focused == "pf-save") {
+            if ((k == "Enter") || (k == " ")) {
+                this.save()
+                return true
+            }
         }
         if (focused == "pf-hire") {
             if (k == " ") {
@@ -1209,6 +1484,11 @@ class ProfileDemo {
             focused = target
             hire.checkState = (1 - hire.checkState)
             this.rebuild()
+            return true
+        }
+        if (target == "pf-save") {
+            focused = target
+            this.save()
             return true
         }
         def r:[string] (this.ring())
@@ -1572,5 +1852,31 @@ class ProfileDemo {
     }
 
     fn widthPx:double () { return pageW }
-    fn heightPx:double () { return pageH }
+    ; As tall as what is laid out, and never shorter than the 800 the page was
+    ; drawn at: a message under a field adds a line to its row, and with four
+    ; of them showing the note under the card fell off the canvas.
+    fn heightPx:double () {
+        this.laidOutOnce()
+        def r:EVGElement (unwrap root)
+        def bottom:double 0.0
+        def i:int 0
+        while (i < (array_length r.children)) {
+            def c:EVGElement (itemAt r.children i)
+            def b:double (c.calculatedY + c.calculatedHeight)
+            if (b > bottom) {
+                bottom = b
+            }
+            i = (i + 1)
+        }
+        ; The page's own bottom padding (24px in profile.css).
+        def want:double (to_double (to_int ((bottom + 24.0) + 0.999)))
+        if (want < 800.0) {
+            want = 800.0
+        }
+        if (want != pageH) {
+            pageH = want
+            this.laidOutOnce()
+        }
+        return pageH
+    }
 }

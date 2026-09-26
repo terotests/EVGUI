@@ -34,7 +34,7 @@ import { fileURLToPath } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..");
 const TASKS = JSON.parse(fs.readFileSync(path.join(HERE, "tasks.json"), "utf8"));
-const DIRS = ["src", "theme", "demo", "web", "bench"];
+const DIRS = ["src", "theme", "demo", "web", "bench", "ios"];
 
 const argv = process.argv.slice(2);
 // Inside Ranger/gallery/evgui the checkout is two levels up.
@@ -83,9 +83,13 @@ fs.mkdirSync(path.join(TARGET, "bin"), { recursive: true });
 // task defined here can call another; anything else stays an npm script of
 // Ranger's.
 const self = `node ${JSON.stringify(fileURLToPath(import.meta.url))} --ranger ${JSON.stringify(ranger)} --no-overlay`;
+// EVGUI_PREBUILT names tasks already run for this checkout (scripts/gate.sh
+// builds the demos once and sets it); a task that asks for one of them again
+// skips it rather than recompiling all the demos before a one-second check.
+const PREBUILT = new Set((process.env.EVGUI_PREBUILT || "").split(",").filter(Boolean));
 function expand(cmd) {
   return cmd.replace(/npm run (--silent )?([\w:.-]+)( --silent)?/g, (m, a, name) =>
-    Object.hasOwn(TASKS, name) ? `${self} ${name}` : m,
+    PREBUILT.has(name) ? "true" : Object.hasOwn(TASKS, name) ? `${self} ${name}` : m,
   );
 }
 

@@ -146,8 +146,126 @@ console.log("what a reader is told");
     texts.includes("Reactions: thumbs up"), JSON.stringify(texts));
   const marker = node(d, "ms-marker");
   ok("the typing marker is a live status", marker && marker.role === "status", JSON.stringify(marker));
-  ok("and reads as one sentence", marker && marker.name === "Oliver is typing...",
+  ok("and reads as one sentence", marker && marker.name === "Oliver is typing",
     marker && marker.name);
+  ok("the composer is a named text field",
+    nodes(d).some((n) => n.id === "ms-input" && n.role === "textbox" && n.name === "Message"),
+    JSON.stringify(node(d, "ms-input")));
+  ok("and Send is a named button",
+    nodes(d).some((n) => n.id === "ms-send" && n.role === "button" && n.name === "Send"),
+    JSON.stringify(node(d, "ms-send")));
+}
+
+console.log("the typing line");
+{
+  // "Oliveris typing": the verb's leading space was trimmed and the bold
+  // name's box was measured in the regular face. The gap is the sheet's now.
+  const d = fresh();
+  const who = byId(d, "ms-marker").children[0];
+  const verb = byId(d, "ms-marker").children[1];
+  const gap = verb.calculatedX - (who.calculatedX + who.calculatedWidth);
+  ok("there is a gap between the name and the verb", gap >= 3 && gap <= 8, gap.toFixed(2));
+  const dl = JSON.parse(d.displayListJson());
+  const run = (dl.cmds || []).find((c) => c.text === "Oliver");
+  ok("and the bold name fits its own box", run && run.w <= who.calculatedWidth + 0.5,
+    run && `${run.w} in ${who.calculatedWidth}`);
+  ok("the verb has no leading space to be trimmed", verb.textContent === "is typing", JSON.stringify(verb.textContent));
+  const dots = byId(d, "ms-mdots");
+  ok("followed by three dots", dots && dots.children.length === 3, dots && dots.children.length);
+  const before = dots.children.map((k) => k.opacity);
+  d.tick(250); d.displayListJson();
+  const after = byId(d, "ms-mdots").children.map((k) => k.opacity);
+  ok("that pulse on the clock", JSON.stringify(before) !== JSON.stringify(after),
+    `${JSON.stringify(before)} -> ${JSON.stringify(after)}`);
+}
+
+console.log("writing a message");
+{
+  const d = fresh();
+  d.settle();
+  ok("the opening reply lands and the marker goes quiet",
+    d.messageCount() === 1 && !byId(d, "ms-marker").children.length, `${d.messageCount()}`);
+  ok("nothing to send: Send says it is disabled",
+    node(d, "ms-send").disabled === true || JSON.stringify(node(d, "ms-send")).includes("disabled"),
+    JSON.stringify(node(d, "ms-send")));
+  d.press("ms-input");
+  d.applyEdit("ms-input", "Shipping it anyway.", 19, 19);
+  ok("Enter sends", d.keyWith("Enter", false, false) === true, "");
+  d.displayListJson();
+  ok("the field is empty again", JSON.parse(d.fieldStateJson("ms-input")).value === "", d.fieldStateJson("ms-input"));
+  const mine = byId(d, "ms-n2-b");
+  ok("the message is an outgoing bubble", mine && mine.className.includes("ms-bubble") && !mine.className.includes("muted"),
+    mine && mine.className);
+  ok("on my side", mine && mine.calculatedX > byId(d, "ms-b2").calculatedX, "");
+  ok("in the log, where a reader is told", nodes(d).some((n) => n.role === "text" && n.name === "Shipping it anyway."), "");
+  ok("and the transcript is pinned to the bottom",
+    Math.abs(d.scrollTopNow() - d.maxScrollNow()) < 1 && d.maxScrollNow() > 0,
+    `${d.scrollTopNow()} of ${d.maxScrollNow()}`);
+  ok("the other side is not typing yet", !d.isTyping(), "");
+  for (let t = 0; t < 800; t += 16) { d.tick(16); d.displayListJson(); }
+  ok("after a pause it is", d.isTyping(), "");
+  const bubble = byId(d, "ms-typing");
+  ok("a bubble of three dots", bubble && bubble.children.length === 3, bubble && bubble.children.length);
+  ok("hidden from a reader, because the marker says it",
+    !nodes(d).some((n) => n.id === "ms-typing"), "");
+  ok("and the marker says so", node(d, "ms-marker").name === "Oliver is typing", node(d, "ms-marker").name);
+  ok("still at the bottom with the typing bubble in view",
+    Math.abs(d.scrollTopNow() - d.maxScrollNow()) < 1, `${d.scrollTopNow()} of ${d.maxScrollNow()}`);
+  d.settle();
+  ok("then a reply arrives", d.messageCount() === 3 && !d.isTyping(), `${d.messageCount()}`);
+  ok("from the other side", byId(d, "ms-n3-b").className.includes("muted"), byId(d, "ms-n3-b").className);
+  ok("and the transcript followed it",
+    Math.abs(d.scrollTopNow() - d.maxScrollNow()) < 1, `${d.scrollTopNow()} of ${d.maxScrollNow()}`);
+  ok("the tree still lints clean", d.a11yProblems().length === 0, d.a11yProblems().join("; "));
+}
+
+console.log("a long message wraps inside its bubble");
+{
+  const d = fresh();
+  d.press("ms-input");
+  const long = "This one is long enough that it cannot possibly fit on a single line of a bubble.";
+  d.applyEdit("ms-input", long, long.length, long.length);
+  d.keyWith("Enter", false, false);
+  d.displayListJson();
+  const b = byId(d, "ms-n1-b");
+  ok("the bubble is taller than one line", b.calculatedHeight > 60, `${b.calculatedHeight}`);
+  const dl = JSON.parse(d.displayListJson());
+  const lines = (dl.cmds || []).filter((c) => c.text && long.includes(c.text) && c.text.length > 3);
+  const bottom = Math.max(...lines.map((c) => c.y + c.h));
+  ok("and every line of it is inside", lines.length >= 2 && bottom <= b.calculatedY + b.calculatedHeight,
+    `${lines.length} lines, bottom ${bottom} vs ${b.calculatedY + b.calculatedHeight}`);
+}
+
+console.log("reading back through the transcript");
+{
+  const d = fresh();
+  d.settle();
+  for (const m of ["one", "two", "three"]) {
+    d.press("ms-input"); d.applyEdit("ms-input", m, m.length, m.length); d.keyWith("Enter", false, false);
+    d.displayListJson();
+  }
+  d.settle();
+  ok("the wheel scrolls it", d.scrollBy(-200) === true, "");
+  d.displayListJson();
+  const top = d.scrollTopNow();
+  d.press("ms-input"); d.applyEdit("ms-input", "four", 4, 4); d.keyWith("Enter", false, false);
+  d.displayListJson();
+  ok("sending brings them back to the bottom", Math.abs(d.scrollTopNow() - d.maxScrollNow()) < 1, "");
+  ok("and back up again", d.scrollBy(-200) === true, "");
+  d.displayListJson();
+  const up = d.scrollTopNow();
+  d.settle();
+  ok("a reply does not move a reader who scrolled away", Math.abs(d.scrollTopNow() - up) < 1,
+    `${up} -> ${d.scrollTopNow()}`);
+  const jump = node(d, "ms-scroller-tobottom");
+  ok("but offers to jump to it", jump && jump.role === "button" && jump.name === "Jump to newest message", JSON.stringify(jump));
+  d.press("ms-scroller-tobottom");
+  d.displayListJson();
+  ok("which goes to the bottom", Math.abs(d.scrollTopNow() - d.maxScrollNow()) < 1, `${d.scrollTopNow()} of ${d.maxScrollNow()}`);
+  ok("and goes away", !node(d, "ms-scroller-tobottom"), "");
+  ok("at the top the wheel hands the gesture back",
+    (() => { d.scrollBy(-100000); d.displayListJson(); return d.scrollBy(-10) === false; })(), "");
+  void top;
 }
 
 console.log("");

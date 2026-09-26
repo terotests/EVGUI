@@ -21,6 +21,7 @@
   "ui:form:check": "npm run ui:demo:build --silent && node gallery/evgui/demo/form-check.mjs",
   "ui:input:bench": "npm run ui:demo:build --silent && node gallery/evgui/demo/build.mjs && node gallery/evgui/demo/input-bench.mjs",
   "ui:input:bench:record": "npm run ui:demo:build --silent && node gallery/evgui/demo/build.mjs && node gallery/evgui/demo/input-bench.mjs --record",
+  "ui:ios:verify": "RANGER_LIB=./compiler/Lang.rgr:./lib/stdops.rgr node --max-old-space-size=8192 dist/rgrc.js -es6 gallery/evgui/ios/ranger/check_ios.rgr -nodecli -d=gallery/evgui/bin -o=check_ios.js && node gallery/evgui/bin/check_ios.js",
   "ui:layout:check": "npm run ui:demo:build --silent && node gallery/evgui/demo/layout-check.mjs",
   "ui:layout:record": "npm run ui:demo:build --silent && node gallery/evgui/demo/layout-check.mjs --record",
   "ui:menubar": "node dist/rgrc.js -es6 ./gallery/evgui/demo/MenubarDemo.rgr -d=./gallery/evgui/bin -o=MenubarDemo.js -nodecli && node ./gallery/evgui/bin/MenubarDemo.js",
