@@ -98,6 +98,10 @@ class CalendarDemo {
 
         field.tid = "cd-box"
         field.name = "Date"
+        ; A four-digit year: it stops at 9999 and a digit typed into a full
+        ; year starts it over. The native rule (up to 275760) let a digit
+        ; carried out of the day land in the year as "0005".
+        field.yearDigits = 4
         field.todayYear = 2026
         this.fieldFromModel()
 
@@ -127,8 +131,53 @@ class CalendarDemo {
     ; The field changed: a complete date is the calendar's selection and the
     ; grid turns to its month; an incomplete one is no date, as the native
     ; control's `value` is "" until all three segments hold something possible.
+    ; --- what the field may hold ------------------------------------------------
+    ;
+    ; The segments already clamp month to 1..12 and day to 1..31 as they are
+    ; typed. Two ranges are this page's: the day must exist in its month —
+    ; 31 with April is CLAMPED to 30 — and the year must be one the calendar
+    ; can show. A year outside 2016..2036, or one with fewer than four digits
+    ; (the "5" carried out of a day typed as "45"), is NOT committed: the
+    ; calendar keeps its month and the field says what is wrong, shadcn-style.
+
+    fn yearInRange:boolean () {
+        return ((field.year >= model.startYear) && (field.year <= model.endYear))
+    }
+
+    ; The message under the box, or "". Shown once the keyboard has left the
+    ; year, so "2" on the way to "2026" is not an error.
+    fn fieldError:string () {
+        if (field.year == 0) {
+            return ""
+        }
+        if ((this.yearInRange()) == false) {
+            if (focused == (field.segTid(2))) {
+                return ""
+            }
+            if (field.year < 1000) {
+                return ("Enter a four-digit year, " + (to_string model.startYear) + " to " + (to_string model.endYear) + ".")
+            }
+            return ("Pick a year from " + (to_string model.startYear) + " to " + (to_string model.endYear) + ".")
+        }
+        return ""
+    }
+
+    fn clampDay:void () {
+        if ((field.month == 0) || (field.day == 0)) {
+            return
+        }
+        if ((this.yearInRange()) == false) {
+            return
+        }
+        def dim:int (UiDate.daysInMonth(field.year field.month))
+        if (field.day > dim) {
+            field.day = dim
+        }
+    }
+
     fn modelFromField:void () {
-        if (field.isComplete()) {
+        this.clampDay()
+        if ((field.isComplete()) && (this.yearInRange())) {
             model.setSelected(field.year field.month field.day)
             model.setMonth(field.year field.month)
             model.focusDay = model.selectedDay
@@ -157,6 +206,10 @@ class CalendarDemo {
         box.role = "group"
         box.a11yLabel = "Date"
         box.a11yRoleDescription = "Date field"
+        def err:string (this.fieldError())
+        if ((strlen err) > 0) {
+            UiTree.addClass(box "cd-box-bad")
+        }
         def i:int 0
         while (i < 3) {
             def seg:EVGElement (itemAt field.segEls i)
@@ -165,6 +218,12 @@ class CalendarDemo {
             seg.a11yRoleDescription = "spinbutton"
             seg.a11yFocusable = true
             seg.a11yValue = (field.shown(i))
+            if ((strlen err) > 0) {
+                if (i == 2) {
+                    seg.a11yInvalid = "true"
+                    seg.a11yDescribedBy = "cd-box-error"
+                }
+            }
             i = (i + 1)
         }
         def k:int 0
@@ -209,6 +268,13 @@ class CalendarDemo {
 
         def fieldWrap (tree Cal (Field (FieldLbl "Date")))
         fieldWrap.addChild((this.fieldBox()))
+        def err:string (this.fieldError())
+        if ((strlen err) > 0) {
+            ; The message the year's aria-describedby points at.
+            def msg:EVGElement (UiTree.label("cd-box-error" "cd-error" err))
+            msg.role = "text"
+            fieldWrap.addChild(msg)
+        }
         page.addChild(fieldWrap)
 
         page.addChild((CalView.card(model yearScroll)))
