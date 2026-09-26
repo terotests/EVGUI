@@ -333,3 +333,15 @@
   width: 262px;
   height: 20px;
 }
+
+/* Single-line text sits in the middle of its box: the line box is the box.
+   Without it a 22px box holding a 16px line puts the line at the top, which
+   with a face whose normal line is 18px drew every label 2px high. */
+.dg-sheet-head { line-height: 24px; }
+.dg-sheet-cell { line-height: 20px; }
+.ui-dialog-title { line-height: 26px; }
+.ui-window-title { line-height: 20px; }
+.dg-label { line-height: 20px; }
+.dg-input-text { line-height: 20px; }
+.dg-button-text { line-height: 20px; }
+.dg-mini-cell { line-height: 20px; }

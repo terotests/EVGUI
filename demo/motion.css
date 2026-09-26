@@ -234,3 +234,31 @@
    a control that simply ignores the pointer reads as broken. */
 .mo-card-off { background-color: #151b2e; color: #5b6784; }
 .mo-card-off:disabled { background-color: #151b2e; color: #5b6784; }
+
+/* --- a phone ------------------------------------------------------------------
+   Laid out at the preview's width (main.js `fitDemo`). Shorter tracks (and
+   the distance the dots travel along them), two pivots per row, cards that
+   wrap. */
+@media (max-width: 600px) {
+  .mo-page { width: 100%; height: auto; padding: 12px; gap: 12px; }
+  .mo-panel { width: 100%; padding: 14px 12px; }
+  .mo-sub { height: auto; }
+  .mo-row { gap: 8px; }
+  .mo-name { width: 96px; height: auto; font-size: 11px; }
+  .mo-curve { width: 32px; height: 32px; }
+  .mo-track { width: 124px; }
+  .theme-go .mo-dot { transform: translate(98px, 0); }
+  .theme-go .mo-bar { transform: translate(90px, 0); }
+  .mo-grid { width: 100%; gap: 8px; }
+  .mo-cell { width: 128px; height: 150px; }
+  .mo-cards { flex-wrap: wrap; height: auto; gap: 10px; }
+  .mo-card { width: 124px; }
+}
+
+/* Single-line text sits in the middle of its box: the line box is the box.
+   Without it a 22px box holding a 16px line puts the line at the top, which
+   with a face whose normal line is 18px drew every label 2px high. */
+.mo-head { line-height: 20px; }
+.mo-sub { line-height: 18px; }
+.mo-name { line-height: 16px; }
+.mo-cap { line-height: 16px; }

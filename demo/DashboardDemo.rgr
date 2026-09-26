@@ -1774,6 +1774,9 @@ class DashboardDemo {
         ; host to get right. A no-op costing one array length when nothing is
         ; being held, which is every frame nobody is inspecting anything.
         EVGInspect.applyForced(r)
+        ; The page size is the viewport the `@media` blocks ask about: main.js
+        ; lays a phone out at the preview's width (`fitDemo`).
+        s.setViewport(pageW pageH false)
         s.applyTree(r theme)
         def lay (new EVGLayout())
         lay.setPageSize(pageW pageH)

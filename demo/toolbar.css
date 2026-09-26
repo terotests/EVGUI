@@ -11,8 +11,8 @@
   justify-content: center;
   background-color: #6d5ce7;
   padding: 60px;
-  width: 1240px;
-  height: 320px;
+  width: 100%;
+  height: 100%;
 }
 
 .tb-root {
@@ -23,7 +23,7 @@
   background-color: #ffffff;
   border-radius: 8px;
   padding: 10px;
-  width: 1120px;
+  width: 100%;
   height: 60px;
 }
 
@@ -57,6 +57,22 @@
  * are not reproducible here yet. Left out rather than written as CSS that
  * silently does nothing. */
 .tb-button-bold { font-weight: bold; }
+
+/* The alignment toggles draw Lucide's align-left / -center / -right: three
+ * "≡" characters told the three apart by position alone. */
+.tb-icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.tb-glyph {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: #4c2889;
+  stroke-width: 2;
+}
 
 .tb-separator {
   background-color: #e6e0fb;
@@ -99,3 +115,21 @@
 }
 .tb-share:hover  { background-color: #5b4bd6; }
 .tb-share:active { transform: scale(0.97); }
+
+/* --- a phone ------------------------------------------------------------------
+   The page is laid out at the preview's width (main.js `fitDemo`), so this is
+   the toolbar at 320–600px rather than a 1240px picture shrunk to a third.
+   The bar wraps: the two groups on the first line, the status line and Share
+   on the second. */
+@media (max-width: 600px) {
+  .tb-page { padding: 16px; }
+  .tb-root {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 8px;
+    row-gap: 6px;
+  }
+  .tb-left { flex-wrap: wrap; width: 100%; }
+  .tb-status { width: fit-content; padding: 9px 4px; }
+  .tb-share { width: 100%; }
+}

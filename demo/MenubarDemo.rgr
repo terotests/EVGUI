@@ -75,7 +75,7 @@ treefactory Menubar {
     ; under the trigger and painted above the page.
     tag Content    EVGElement (props (className "mb-content") (isOverlay true) (overlaySide "bottom") (overlayAlign "start") (role "menu"))
     ; A submenu opens to the side of the row that owns it.
-    tag SubContent EVGElement (props (className "mb-content") (isOverlay true) (overlaySide "right") (overlayAlign "start") (role "menu"))
+    tag SubContent EVGElement (props (className "mb-content mb-subcontent") (isOverlay true) (overlaySide "right") (overlayAlign "start") (role "menu"))
     tag Row        EVGElement (props (className "mb-item") (role "menuitem") (a11yFocusable true))
     ; A row that opens a submenu is itself an anchor.
     tag SubRow     EVGElement (props (className "mb-item mb-item-sub") (isOverlayAnchor true) (role "menuitem") (a11yFocusable true))
@@ -139,7 +139,7 @@ class MenubarDemo {
                 ; more this way" to the eye; `aria-expanded` on the row already
                 ; says it to a reader, and without `aria-hidden` here the row
                 ; announces as "Share greater-than".
-                (Shortcut (props (a11yHidden true)) ">")))
+                (Shortcut (props (className "mb-shortcut mb-chevron") (a11yHidden true)) "›")))
     }
 
     ; The indicator is always present and always the same width, so the labels

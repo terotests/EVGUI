@@ -41,8 +41,8 @@
   flex-wrap: nowrap;
 }
 
-.pf-title { color: #09090b; font-size: 18px; font-weight: 600; height: 26px; }
-.pf-sub { color: #71717a; font-size: 13px; height: 20px; }
+.pf-title { color: #09090b; font-size: 18px; font-weight: 600; height: 26px; line-height: 26px; }
+.pf-sub { color: #71717a; font-size: 13px; height: 20px; line-height: 20px; }
 
 /* A spacer that eats the slack. `justify-content: space-between` on the parent
  * would also push the FIRST child away from the leading edge on the rows that
@@ -59,7 +59,7 @@
   padding: 5px 10px 5px 10px;
 }
 
-.pf-badge-text { color: #92400e; font-size: 12px; font-weight: 500; height: 18px; }
+.pf-badge-text { color: #92400e; font-size: 12px; font-weight: 500; height: 18px; line-height: 18px; }
 
 .pf-body {
   display: flex;
@@ -92,8 +92,8 @@
   width: 220px;
 }
 
-.pf-label-text { color: #18181b; font-size: 14px; font-weight: 500; height: 20px; }
-.pf-help { color: #a1a1aa; font-size: 12px; height: 18px; }
+.pf-label-text { color: #18181b; font-size: 14px; font-weight: 500; height: 20px; line-height: 20px; }
+.pf-help { color: #a1a1aa; font-size: 12px; height: 18px; line-height: 18px; }
 
 .pf-ctl {
   display: flex;
@@ -127,9 +127,9 @@
 .pf-trigger:focus { border-color: #18181b; }
 .pf-knob-focus    { border: 2px solid #52525b; }
 
-.pf-text { color: #18181b; font-family: Arial; font-size: 13px; height: 18px; }
-.pf-ghost { color: #a1a1aa; font-family: Arial; font-size: 13px; height: 18px; }
-.pf-icon { color: #a1a1aa; font-family: Arial; font-size: 13px; height: 18px; }
+.pf-text { color: #18181b; font-family: Arial; font-size: 13px; height: 18px; line-height: 18px; }
+.pf-ghost { color: #a1a1aa; font-family: Arial; font-size: 13px; height: 18px; line-height: 18px; }
+.pf-icon { color: #a1a1aa; font-family: Arial; font-size: 13px; height: 18px; line-height: 18px; }
 
 .pf-caret {
   position: absolute;
@@ -175,8 +175,8 @@
   padding: 8px 12px 8px 12px;
 }
 
-.pf-btn-text { color: #18181b; font-size: 13px; font-weight: 500; height: 18px; }
-.pf-btn-icon { color: #52525b; font-family: Arial; font-size: 12px; height: 18px; }
+.pf-btn-text { color: #18181b; font-size: 13px; font-weight: 500; height: 18px; line-height: 18px; }
+.pf-btn-icon { color: #52525b; font-family: Arial; font-size: 12px; height: 18px; line-height: 18px; }
 
 /* The select's closed trigger. Shaped like a box because it IS one to a
  * pointer; the chevron is what says it opens, and `aria-haspopup` is what says
@@ -193,7 +193,7 @@
   height: 38px;
 }
 
-.pf-chevron { color: #71717a; font-family: Arial; font-size: 13px; height: 18px; }
+.pf-chevron { color: #71717a; font-family: Arial; font-size: 13px; height: 18px; line-height: 18px; }
 
 /* The switch: a track with a knob pushed to one end. The state is a POSITION,
  * which is why `justify-content` carries it and there is no second glyph to
@@ -221,7 +221,7 @@
   height: 18px;
 }
 
-.pf-switch-label { color: #18181b; font-size: 14px; height: 20px; }
+.pf-switch-label { color: #18181b; font-size: 14px; height: 20px; line-height: 20px; }
 
 .pf-foot {
   display: flex;
@@ -232,7 +232,7 @@
   padding: 16px 24px 16px 24px;
 }
 
-.pf-foot-text { color: #71717a; font-size: 13px; height: 20px; }
+.pf-foot-text { color: #71717a; font-size: 13px; height: 20px; line-height: 20px; }
 
 .pf-foot-btns {
   display: flex;
@@ -287,8 +287,8 @@
  * this says where the cursor is. */
 .pf-option-active { background-color: #f4f4f5; }
 
-.pf-opttxt { color: #0a0a0a; font-family: Arial; font-size: 13px; height: 18px; }
-.pf-optmark { color: #0a0a0a; font-family: Arial; font-size: 13px; height: 18px; width: 12px; }
+.pf-opttxt { color: #0a0a0a; font-family: Arial; font-size: 13px; height: 18px; line-height: 18px; }
+.pf-optmark { color: #0a0a0a; font-family: Arial; font-size: 13px; height: 18px; line-height: 18px; width: 12px; }
 
 /* --- the date picker --------------------------------------------------------
  *
@@ -385,7 +385,7 @@
   color: #52525b;
   font-size: 14px;
   width: 26px;
-  height: 20px;
+  height: 20px; line-height: 20px;
   text-align: center;
 }
 
@@ -421,7 +421,7 @@
   color: #a1a1aa;
   font-size: 12px;
   width: 34px;
-  height: 18px;
+  height: 18px; line-height: 18px;
   text-align: center;
 }
 
@@ -458,7 +458,7 @@
   color: #18181b;
   font-size: 13px;
   width: 32px;
-  height: 18px;
+  height: 18px; line-height: 18px;
   text-align: center;
 }
 
@@ -522,9 +522,8 @@
   color: #18181b;
   font-size: 14px;
   font-weight: bold;
-  height: 20px;
-  text-align: right;
-  width: 96px;
+  height: 20px; line-height: 20px;
+  width: fit-content;
 }
 
 .cd-yearbtn {
@@ -535,19 +534,20 @@
   width: 56px;
   height: 22px;
   border-radius: 6px;
-  background-color: #f4f4f5;
+  border: 1px solid #e4e4e7;
+  background-color: #ffffff;
   cursor: pointer;
   transition: background-color 120ms ease-out;
 }
 
-.cd-yearbtn:hover { background-color: #e4e4e7; }
+.cd-yearbtn:hover { background-color: #f4f4f5; }
 .cd-yearbtn:active { background-color: #d4d4d8; }
 
 .cd-yeartxt {
   color: #18181b;
   font-size: 14px;
   font-weight: bold;
-  height: 20px;
+  height: 20px; line-height: 20px;
   width: 44px;
   text-align: center;
 }
@@ -592,7 +592,7 @@
 .cd-yearopttx {
   color: #3f3f46;
   font-size: 13px;
-  height: 18px;
+  height: 18px; line-height: 18px;
   width: 60px;
   text-align: center;
 }
@@ -601,3 +601,18 @@
 
 /* The year the keyboard is on, in the picker's year list. */
 .cd-yearopt:focus { border: 2px solid #52525b; }
+
+/* --- a phone ------------------------------------------------------------------
+   Laid out at the preview's width (main.js `fitDemo`). Each row stacks its
+   label over its control, and the card takes the page. */
+@media (max-width: 600px) {
+  .pf-page { width: 100%; padding: 12px; }
+  .pf-card { width: 100%; }
+  .pf-head { padding: 16px; }
+  .pf-body { padding: 4px 16px 4px 16px; }
+  .pf-row { flex-direction: column; align-items: stretch; gap: 6px; padding: 8px 0 8px 0; }
+  .pf-label { width: 100%; }
+  .pf-ctl { width: 100%; }
+  .pf-foot { padding: 12px 16px; flex-wrap: wrap; row-gap: 10px; }
+  .pf-note { width: 100%; height: auto; }
+}

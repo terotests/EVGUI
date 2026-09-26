@@ -43,7 +43,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
-const BIN = path.join(ROOT, "gallery", "ui", "bin");
+const BIN = path.join(ROOT, "gallery", "evgui", "bin");
 const BASELINE = path.join(HERE, "layout-baseline.json");
 
 // TWO SHAPES, because the demos have two. Most are an instance you `init` with
@@ -152,8 +152,17 @@ for (const [demo, css] of DEMOS) {
       root = STATIC_ARGS[demo](M);
       const sheet = new M.EVGStyleSheet();
       sheet.parse(cssFor(css));
+      // The size it is laid out at is also the viewport its `@media` blocks
+      // ask about — the page does the same. Unset, the viewport is 0 wide and
+      // every sheet's phone rules would apply to this 1200px layout.
+      sheet.setViewport(1200, 800, false);
       sheet.applyTree(root);
-      new M.EVGLayout().layout(root, 1200, 800);
+      // `layout` takes the root alone; the page size is set on its own. Left
+      // unset it is US Letter (612 x 792), which a page written at a fixed
+      // 1240px never noticed and one written at `width: 100%` does.
+      const lay = new M.EVGLayout();
+      lay.setPageSize(1200, 800);
+      lay.layout(root);
     } else {
       const d = new M[demo]();
       d.init(cssFor(css));

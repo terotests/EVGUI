@@ -33,8 +33,8 @@
   padding: 0 0 18px 0;
 }
 
-.fm-title { color: #09090b; font-size: 17px; font-weight: 600; height: 24px; }
-.fm-sub { color: #71717a; font-size: 12px; height: 18px; }
+.fm-title { color: #09090b; font-size: 17px; font-weight: 600; height: 24px; line-height: 24px; }
+.fm-sub { color: #71717a; font-size: 12px; height: 18px; line-height: 18px; }
 
 .fm-form {
   display: flex;
@@ -70,8 +70,8 @@
   height: 18px;
 }
 
-.fm-label-text { color: #3f3f46; font-size: 12px; font-weight: 500; height: 18px; }
-.fm-star { color: #dc2626; font-size: 12px; height: 18px; }
+.fm-label-text { color: #3f3f46; font-size: 12px; font-weight: 500; height: 18px; line-height: 18px; }
+.fm-star { color: #dc2626; font-size: 12px; height: 18px; line-height: 18px; }
 
 /* The box. `position: relative` is what makes the caret's and the band's
  * `left` mean "from the left of the box" rather than from the page — they are
@@ -105,9 +105,9 @@
 .fm-box:focus { border-color: #18181b; }
 .fm-box-bad:focus { border-color: #991b1b; }
 
-.fm-prefix { color: #a1a1aa; font-family: Arial; font-size: 13px; height: 18px; }
-.fm-text { color: #18181b; font-family: Arial; font-size: 13px; height: 18px; }
-.fm-ghost { color: #a1a1aa; font-family: Arial; font-size: 13px; height: 18px; }
+.fm-prefix { color: #a1a1aa; font-family: Arial; font-size: 13px; height: 18px; line-height: 18px; }
+.fm-text { color: #18181b; font-family: Arial; font-size: 13px; height: 18px; line-height: 18px; }
+.fm-ghost { color: #a1a1aa; font-family: Arial; font-size: 13px; height: 18px; line-height: 18px; }
 
 /* Two pixels wide, the height of a line, and positioned by measurement. */
 .fm-caret {
@@ -129,11 +129,13 @@
   color: #71717a;
   font-family: Arial;
   font-size: 13px;
-  height: 18px;
+  height: 18px; line-height: 18px;
   width: 16px;
 }
 
-.fm-hint { color: #71717a; font-size: 11px; height: 16px; }
+/* Auto height: a hint that wraps (the combobox's, in a half-width column) grows
+   its field instead of running into the next label. */
+.fm-hint { color: #71717a; font-size: 11px; height: auto; line-height: 16px; }
 .fm-error { color: #dc2626; }
 
 .fm-check-row {
@@ -158,8 +160,8 @@
   height: 16px;
 }
 
-.fm-tick { color: #ffffff; font-family: Arial; font-size: 11px; height: 14px; }
-.fm-check-label { color: #3f3f46; font-size: 12px; height: 18px; }
+.fm-tick { color: #ffffff; font-family: Arial; font-size: 11px; height: 14px; line-height: 14px; }
+.fm-check-label { color: #3f3f46; font-size: 12px; height: 18px; line-height: 18px; }
 
 .fm-radios {
   display: flex;
@@ -199,7 +201,7 @@
   height: 10px;
 }
 
-.fm-radio-label { color: #3f3f46; font-size: 12px; height: 18px; }
+.fm-radio-label { color: #3f3f46; font-size: 12px; height: 18px; line-height: 18px; }
 
 .fm-foot {
   display: flex;
@@ -354,7 +356,7 @@
   overflow: hidden;
   background-color: transparent;
 }
-.ui-input-text { color: #18181b; font-family: Arial; font-size: 13px; height: 18px; }
+.ui-input-text { color: #18181b; font-family: Arial; font-size: 13px; height: 18px; line-height: 18px; }
 /* Colour alone, on top of the rule above: a placeholder is the same text in a
  * paler ink, and repeating the font here is a second place to change it. */
 .ui-input-placeholder { color: #a1a1aa; }
@@ -365,7 +367,7 @@
   color: #71717a; font-size: 14px; text-align: center;
 }
 .ui-combobox-clear:hover { background-color: #f4f4f5; }
-.ui-combobox-trigger { width: 20px; height: 20px; color: #71717a; font-size: 11px; text-align: center; }
+.ui-combobox-trigger { width: 20px; height: 20px; line-height: 20px; color: #71717a; font-size: 11px; text-align: center; }
 .ui-combobox-content {
   display: flex;
   flex-direction: column;
@@ -386,3 +388,15 @@
 /* #71717a and not a lighter grey: "No customers found." is the only thing on
  * the surface when it shows, and a sentence nobody can read is not a message. */
 .ui-combobox-empty { color: #71717a; font-size: 13px; height: 32px; padding: 7px 12px; }
+
+/* --- a phone ------------------------------------------------------------------
+   Laid out at the preview's width (main.js `fitDemo`): the card takes the
+   page. The paired rows keep their two halves — each is still a usable box
+   at ~130px — and the note under the card wraps. */
+@media (max-width: 600px) {
+  .fm-page { width: 100%; padding: 12px; }
+  .fm-card { width: 100%; padding: 16px; }
+  .fm-row { gap: 10px; }
+  .fm-note { width: 100%; height: auto; }
+
+}

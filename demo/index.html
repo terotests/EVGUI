@@ -216,9 +216,26 @@
       #caption { color: var(--dim); font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .card-foot .actions { display: flex; gap: 8px; flex: none; }
       #copylink.done { color: #16a34a; }
-      #err { color: var(--danger); white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px; }
-      #err:empty { display: none; }
-      #err:not(:empty) { margin-top: 12px; }
+      .err-banner {
+        display: flex; align-items: flex-start; gap: 10px;
+        border-top: 1px solid var(--line); padding: 10px 12px 10px 16px;
+        background: color-mix(in srgb, var(--danger) 8%, var(--panel)); color: var(--ink);
+        font-size: 13px; line-height: 20px;
+      }
+      .err-banner[hidden] { display: none; }
+      .err-banner > .i { color: var(--danger); flex: none; margin-top: 2px; }
+      .err-body { flex: 1; min-width: 0; }
+      .err-body p { margin: 0; }
+      .err-body summary { cursor: pointer; color: var(--dim); font-size: 12px; }
+      .err-body pre {
+        margin: 6px 0 0; max-height: 180px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+        font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--dim);
+      }
+      .budget-note {
+        margin: 0; border-top: 1px solid var(--line); padding: 8px 16px;
+        color: var(--dim); font-size: 12.5px; background: var(--panel);
+      }
+      .budget-note[hidden] { display: none; }
 
       /* --- controls ----------------------------------------------------------- */
       .panel { margin-top: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
@@ -388,6 +405,19 @@
           <div class="preview" id="preview">
             <div id="fit"><div id="stage"><canvas id="c"></canvas></div></div>
           </div>
+          <!-- A handler or the paint threw: one line here, inside the card it
+               concerns, with the stack folded away. main.js `reportError`. -->
+          <div id="err" class="err-banner" role="alert" hidden>
+            <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            <div class="err-body">
+              <p id="errmsg"></p>
+              <details><summary>Details</summary><pre id="errstack"></pre></details>
+            </div>
+            <button type="button" class="icon-btn" id="errdismiss" aria-label="Dismiss the error">
+              <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <p id="budgetnote" class="budget-note" role="status" hidden></p>
           <div class="card-foot">
             <span id="caption"></span>
             <div class="actions">
@@ -401,7 +431,6 @@
             </div>
           </div>
         </div>
-        <div id="err"></div>
 
         <!-- The demo's own controls: main.js finds every one of these by id,
              and shows only the sections whose data-for names the demo on
@@ -936,8 +965,8 @@
             five conformance specs measure against
             <code>@radix-ui/react-dropdown-menu</code>. What is here is a
             <code>treefactory</code>, a stylesheet, and which icon goes on which
-            row. Compare it with the <em>menubar</em> demo above, whose keyboard
-            is hand-written and matched against nothing.
+            row. Compare it with the <em>Menubar</em> demo, whose keyboard is
+            hand-written and matched against nothing.
           </p>
           <p class="note" data-for="dialog">
             <strong>Anything can go inside.</strong> <code>WindowCtl</code> owns a
@@ -965,6 +994,13 @@
             <code>ease-in</code> at the midpoint those differ by nearly a factor of
             two.
           </p>
+          <p class="note" data-for="toolbar">
+            <strong>The I and U are plain letters.</strong> Italic and underline
+            are toggles like bold and carry their pressed state, but EVG has no
+            <code>font-style</code> and no <code>text-decoration</code> yet, so
+            the buttons cannot draw the letter the way the reference does. The
+            three alignment buttons are drawn icons, and exactly one is pressed.
+          </p>
           <p class="note" data-for="menubar">
             <strong>Click it.</strong> The canvas answers the pointer through EVG&rsquo;s own
             hit testing: a press is resolved against the same laid-out tree that was
@@ -978,9 +1014,12 @@
             <p class="note">
               Every demo is a <code>treefactory</code> declaration naming its own
               tags over the same <code>EVGElement</code>, painted by EVG&rsquo;s WebGL
-              painter. Some rebuild their whole tree on every control; the motion
-              showcase, the table and the dropdown keep theirs, because a transition
-              remembers where a value was and a rebuilt element remembers nothing.
+              painter. The demos keep their trees between frames rather than
+              rebuilding from scratch on every change &mdash; a transition remembers
+              where a value was, and a freshly built element remembers nothing. On a narrow
+              screen a demo is laid out at the width there is, through the
+              <code>@media</code> rules in its own stylesheet, rather than drawn at
+              desktop width and shrunk.
             </p>
             <p class="note">
               <strong>And read it.</strong> A canvas hands a screen reader one empty
@@ -994,15 +1033,12 @@
               rectangle, so it takes the same path as the mouse.
             </p>
             <p class="note">
-              The dropdowns float under their triggers because EVG has overlay
-              surfaces: <code>Content</code> is still the <code>Menu</code>&rsquo;s child, and
-              layout takes it out of the parent&rsquo;s flow, finds the anchor among its own
-              siblings and moves it and its subtree there. A submenu is a
-              <code>Menu</code> like any other &mdash; there is no submenu case in the demo.
-              A surface near an edge flips to the other side of its anchor and slides
-              along the edge to stay on the page. The toolbar&rsquo;s italic and underlined
-              buttons are missing for an unrelated reason: EVG has no
-              <code>font-style</code> and no <code>text-decoration</code>.
+              Menus, popovers and listboxes float over the page because EVG has overlay
+              surfaces: a menu&rsquo;s content is still its parent&rsquo;s child in the tree,
+              and layout takes it out of the flow, finds the anchor among its own
+              siblings and moves it and its subtree there. A submenu is the same thing
+              one level down. A surface near an edge flips to the other side of its
+              anchor and slides along the edge to stay on the page.
             </p>
           </details>
         </div>

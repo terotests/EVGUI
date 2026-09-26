@@ -13,8 +13,8 @@
   flex-direction: column;
   background-color: #f1f5f9;
   padding: 40px;
-  width: 1240px;
-  height: 560px;
+  width: 100%;
+  height: 100%;
 }
 
 .sr-list {
@@ -96,13 +96,13 @@
   color: #0f172a;
   font-size: 15px;
   font-weight: bold;
-  height: 20px;
+  height: 20px; line-height: 20px;
 }
 
 .sr-subtitle {
   color: #64748b;
   font-size: 13px;
-  height: 18px;
+  height: 18px; line-height: 18px;
 }
 
 /* The right-hand pair. `fit-content` so the two sit together at the end
@@ -212,4 +212,22 @@
   background-color: #ffffff;
   transform: scale(1.02) rotate(-0.4deg);
   width: 720px;
+}
+
+/* --- a phone ------------------------------------------------------------------
+   Laid out at the preview's width (main.js `fitDemo`). The list takes the
+   page; a row keeps its handle, its title and its badge, and drops the file
+   size and the type icon (the badge already says the type). */
+@media (max-width: 600px) {
+  .sr-page { padding: 12px; }
+  .sr-list { width: 100%; gap: 12px; }
+  .sr-row { padding: 12px 12px; gap: 8px; }
+  .sr-left { gap: 8px; }
+  .sr-icon { display: none; }
+  .sr-size { display: none; }
+  .sr-body { width: 158px; }
+  .sr-title { font-size: 14px; }
+  .sr-subtitle { font-size: 12px; }
+  .sr-badge { padding: 4px 10px; font-size: 12px; }
+  .sr-row-preview { width: 100%; }
 }

@@ -1007,6 +1007,9 @@ class ProfileDemo {
         def r:EVGElement (unwrap root)
         def s:EVGStyleSheet (unwrap sheet)
         this.markStates(r)
+        ; The page size is the viewport the `@media` blocks ask about: main.js
+        ; lays a phone out at the preview's width (`fitDemo`).
+        s.setViewport(pageW pageH false)
         s.applyTree(r "")
         def lay (new EVGLayout())
         lay.setPageSize(pageW pageH)

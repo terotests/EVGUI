@@ -28,7 +28,7 @@
 .fd-title {
   font-size: 18px;
   color: #0a0a0a;
-  height: 24px;
+  height: 24px; line-height: 24px;
 }
 
 /* The chips sit on one line and wrap nowhere: the reference bar is a single
@@ -239,12 +239,12 @@
 
 .fd-mitem-danger:focus { background-color: #fef2f2; }
 
-.fd-mlabel { font-size: 13px; color: #0a0a0a; width: 150px; height: 18px; }
+.fd-mlabel { font-size: 13px; color: #0a0a0a; width: 150px; height: 18px; line-height: 18px; }
 .fd-mlabel-sub { width: 110px; }
 .fd-mlabel-danger { color: #dc2626; }
 .fd-mlabel-disabled { color: #a1a1aa; }
 
-.fd-mhint { font-size: 12px; color: #71717a; width: 16px; height: 18px; text-align: center; }
+.fd-mhint { font-size: 12px; color: #71717a; width: 16px; height: 18px; line-height: 18px; text-align: center; }
 
 .fd-msep {
   background-color: #f4f4f5;
@@ -260,7 +260,7 @@
 .fd-count {
   font-size: 13px;
   color: #71717a;
-  height: 18px;
+  height: 18px; line-height: 18px;
 }
 
 .fd-results {
@@ -288,5 +288,15 @@
 .fd-note {
   font-size: 12px;
   color: #a1a1aa;
-  height: 16px;
+  height: 16px; line-height: 16px;
+}
+
+/* --- a phone ------------------------------------------------------------------
+   Laid out at the preview's width (main.js `fitDemo`). */
+@media (max-width: 600px) {
+  .fd-page { width: 100%; padding: 12px; }
+  .fd-part { padding-left: 6px; padding-right: 6px; }
+  .fd-bar { flex-wrap: wrap; height: auto; row-gap: 8px; }
+  .fd-results { width: 100%; }
+  .fd-note { width: 100%; height: auto; }
 }

@@ -45,7 +45,7 @@
   font-size: 12px;
   font-weight: bold;
   width: 380px;
-  height: 18px;
+  height: 18px; line-height: 18px;
 }
 
 .tv-tree {
@@ -89,7 +89,7 @@
   color: #52525b;
   font-size: 11px;
   width: 12px;
-  height: 18px;
+  height: 18px; line-height: 18px;
   text-align: center;
 }
 
@@ -101,11 +101,19 @@
  * cheap and inventing them under pressure is not.
  */
 
+.tv-expander {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: #52525b;
+  stroke-width: 2;
+}
+.tv-chevron { width: 14px; }
 .tv-label {
   color: #18181b;
   font-size: 14px;
   width: 340px;
-  height: 20px;
+  height: 20px; line-height: 20px;
 }
 
 /* #71717a and not the lighter #a1a1aa the reference uses for hints: on white
@@ -208,6 +216,18 @@
   color: #ffffff;
   font-size: 10px;
   width: 12px;
-  height: 12px;
+  height: 12px; line-height: 12px;
   text-align: center;
+}
+
+/* --- a phone ------------------------------------------------------------------
+   Laid out at the preview's width (main.js `fitDemo`): the card takes the
+   page instead of a fixed 420px. */
+@media (max-width: 600px) {
+  .tv-page { width: 100%; padding: 12px; }
+  .tv-card { width: 100%; }
+  .tv-head-text { width: 100%; }
+  .tv-tree { width: 100%; }
+  .tv-label { width: 200px; }
+  .tv-note { width: 100%; height: auto; }
 }

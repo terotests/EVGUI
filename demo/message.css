@@ -193,3 +193,26 @@
   width: 200px;
   height: 22px;
 }
+
+/* --- a phone ------------------------------------------------------------------
+   Laid out at the preview's width (main.js `fitDemo`, which never goes below
+   360 for this demo: a bubble is up to 300px wide by the builder's rule, and
+   an avatar and a gap beside it need the rest). */
+@media (max-width: 600px) {
+  .ms-page { width: 100%; padding: 10px; }
+  .ms-thread { width: 100%; }
+  .ms-row { width: 100%; gap: 8px; }
+  .ms-avatar { width: 32px; height: 32px; border-radius: 16px; }
+  .ms-avatar-text { width: 30px; font-size: 12px; }
+  .ms-marker { width: 100%; }
+}
+
+/* Single-line text sits in the middle of its box: the line box is the box.
+   Without it a 22px box holding a 16px line puts the line at the top, which
+   with a face whose normal line is 18px drew every label 2px high. */
+.ms-avatar-text { line-height: 18px; }
+.ms-bubble-text { line-height: 22px; }
+.ms-react-text { line-height: 18px; }
+.ms-footer { line-height: 18px; }
+.ms-marker-who { line-height: 22px; }
+.ms-marker-text { line-height: 22px; }
