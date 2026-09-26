@@ -526,7 +526,19 @@ if (!fs.existsSync(path.join(HERE, "bundle.js"))) {
     });
     const walked = [];
     let out = null;
+    // A MODAL dialog keeps the Tab inside it on purpose (the APG pattern, and
+    // Radix's): that is not a trap as 2.1.2 means one, because Escape is the
+    // documented way out. So a walk that is still going after a lap of the
+    // modal presses Escape once — and from then on Tab has to leave as usual.
+    let escaped = false;
     for (let i = 0; i < 120 && !out; i++) {
+      if (!escaped && walked.length >= 20) {
+        const modal = await kb.evaluate(() => JSON.parse(window.__lastA11y).nodes.some((n) => n.modal));
+        if (modal) {
+          escaped = true;
+          await kb.keyboard.press("Escape");
+        }
+      }
       await kb.keyboard.press("Tab");
       const w = await where();
       if (w.inside) walked.push(w.id);
@@ -546,7 +558,7 @@ if (!fs.existsSync(path.join(HERE, "bundle.js"))) {
       : !left ? `Tab never left (trapped after ${walked.length} presses: …${walked.slice(-4).join(" ")})`
       : !reentered ? "Shift+Tab from after the canvas did not come back in"
       : kbErrors.length ? kbErrors.join("; ")
-      : `${walked.length} stop(s), out to #${out.id}, back in at ${back.id}`;
+      : `${walked.length} stop(s)${escaped ? " (a modal, left with Escape)" : ""}, out to #${out.id}, back in at ${back.id}`;
     console.log(`  ${ok ? "PASS" : "FAIL"} ${name} — ${said}`);
   }
   await kb.close();

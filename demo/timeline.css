@@ -126,7 +126,7 @@
   color: #18181b;
   font-size: 15px;
   font-weight: 600;
-  height: 22px;
+  height: 22px; line-height: 22px;
   width: 362px;
 }
 
@@ -144,4 +144,18 @@
   width: 362px;
   height: 18px;
   padding: 6px 0 0 0;
+}
+
+/* --- a phone ------------------------------------------------------------------
+   Laid out at the preview's width (main.js `fitDemo`). The card takes the
+   page and a description wraps to as many lines as it needs. */
+@media (max-width: 600px) {
+  .tl-page { width: 100%; padding: 12px; }
+  .tl-card { width: 100%; padding: 16px; }
+  .tl-list { width: 100%; }
+  .tl-item { width: 100%; }
+  .tl-body { width: 236px; }
+  .tl-title { width: 100%; height: auto; }
+  .tl-desc { width: 100%; height: auto; }
+  .tl-date { width: 100%; }
 }

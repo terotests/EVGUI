@@ -889,6 +889,15 @@ console.log("--- the window follows the pointer ---");
   // the release rebuilt it.
   await page.click('#demos input[value="dialog"]');
   await page.waitForTimeout(300);
+  // The modal opens over the window and its scrim takes every press, as a
+  // modal's should, so it is closed first. (The window used to draw OVER the
+  // modal, which is why this test could drag it with the modal open.)
+  {
+    const cancel = await page.getByRole("button", { name: "Cancel", exact: true }).boundingBox();
+    ok("the modal is open, and on top", !!cancel);
+    if (cancel) await page.mouse.click(cancel.x + cancel.width / 2, cancel.y + cancel.height / 2);
+    await page.waitForTimeout(200);
+  }
   const box = await (await page.$("#stage canvas")).boundingBox();
   const at = () => page.evaluate(() => {
     const l = JSON.parse(window.__lastList || "{}");
@@ -1184,6 +1193,11 @@ console.log("--- the surface ripples where it was touched ---");
   ok("and it is at rest until something touches it",
     at && at.drops.length === 0, JSON.stringify(at && at.drops));
 
+  // Back to the top first: the palette block above clicks radios in the
+  // controls panel, which since the page chrome was restyled sits below the
+  // card, and a real click scrolls it into view — leaving the canvas half
+  // above the viewport, where these clicks landed on nothing.
+  await page.evaluate(() => window.scrollTo(0, 0));
   const box = await (await page.$("#stage canvas")).boundingBox();
   // APP COORDINATES ARE NOT CSS PIXELS ANY MORE. The stage is scaled to fit
   // whatever room the viewport has, and the dashboard is 1336 wide in a stage
@@ -1288,8 +1302,11 @@ console.log("--- the surface ripples where it was touched ---");
   // So: wait for the frame rather than guess at when it will be. Failure is
   // still a real failure — a second of frames with no post-pass among them
   // means the renderer never took it.
+  // Six seconds of frames, not one: this container draws with SwiftShader and
+  // a rippling frame can take over two seconds (see above), so one second
+  // could hold no frame at all.
   let rippled = 0;
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 240; i++) {
     const st = await page.evaluate(() => window.__lastStats || null);
     if (st && st.rippled === 1) { rippled = 1; break; }
     await page.waitForTimeout(25);
@@ -1299,7 +1316,7 @@ console.log("--- the surface ripples where it was touched ---");
   // page that never reports from a page that reports zero, and both are the
   // same failure for a check whose whole subject is whether the post-pass ran.
   ok("the renderer took the post-pass", rippled === 1,
-    "no frame in a second of them reported rippled=1");
+    "no frame in six seconds of them reported rippled=1");
 }
 
 await browser.close();

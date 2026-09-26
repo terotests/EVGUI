@@ -94,6 +94,12 @@ class ResizeDemo {
     ; The group's own width in pixels, which is what a percentage means.
     def groupW:double 720.0
     def groupH:double 300.0
+    ; The laid-out groups, read back after each layout so the two numbers
+    ; above follow the page: on a phone the group is as wide as the preview,
+    ; not 720px, and a percentage of the wrong width puts the breadcrumb's
+    ; cut in the wrong place and makes a drag run ahead of the pointer.
+    def groupEl@(optional):EVGElement
+    def vgroupEl@(optional):EVGElement
 
     ; What the drag is holding, "" for nothing, and where it started.
     def dragSep:string ""
@@ -280,6 +286,7 @@ class ResizeDemo {
         def card (tree Rz (Card (props (id "card"))))
 
         def g (tree Rz (Group (props (id "rz"))))
+        groupEl = g
         def one:UiPanel (itemAt outer.panels 0)
         def two:UiPanel (itemAt outer.panels 1)
 
@@ -290,9 +297,12 @@ class ResizeDemo {
 
         g.addChild((this.sepFor(outer 0)))
 
-        def rightEl (tree Rz (Panel (props (id "rz-panel-two"))))
+        ; No padding on the panel that holds the vertical group, so its
+        ; divider runs edge to edge like the vertical one does.
+        def rightEl (tree Rz (Panel (props (id "rz-panel-two") (className "rz-panel rz-panel-host"))))
         rightEl.width = (EVGUnit.percent(two.size))
         def vg (tree Rz (VGroup (props (id "rz-panel-two-group"))))
+        vgroupEl = vg
         def top:UiPanel (itemAt inner.panels 0)
         def bot:UiPanel (itemAt inner.panels 1)
         def topEl:EVGElement (this.panelBody("Two" false))
@@ -325,6 +335,7 @@ class ResizeDemo {
     ; width, so one extra pass is always enough.
     fn settle:void () {
         def lay:EVGLayout (this.laidOutOnce())
+        this.readGroupSize()
         this.measureCrumbs(lay)
         trail.available = (this.panelWidth())
         def tail:int (trail.shownTail())
@@ -332,6 +343,21 @@ class ResizeDemo {
             lastTail = tail
             this.rebuild()
             this.laidOutOnce()
+        }
+    }
+
+    fn readGroupSize:void () {
+        if (!null? groupEl) {
+            def g:EVGElement (unwrap groupEl)
+            if (g.calculatedWidth > 0.0) {
+                groupW = g.calculatedWidth
+            }
+        }
+        if (!null? vgroupEl) {
+            def v:EVGElement (unwrap vgroupEl)
+            if (v.calculatedHeight > 0.0) {
+                groupH = v.calculatedHeight
+            }
         }
     }
 

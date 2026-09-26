@@ -51,6 +51,11 @@ treefactory Table {
     ; The chevron. Decoration: `aria-sort` on the header already says which way,
     ; and a reader announcing "Name down-arrow" is told the same thing twice.
     tag Arrow    EVGElement (props (className "tb-arrow") (elementType 1) (a11yHidden true))
+    ; The sort indicator is drawn, not typed: an up or down arrow for the two
+    ; sorted states and a faint up-down pair on a column that can be sorted
+    ; but is not, which is what says "this header is a button" before it is
+    ; pressed. Lucide's arrow-up / arrow-down / chevrons-up-down.
+    tag SortIcon EVGElement (props (className "tb-sort") (tagName "path") (elementType 3) (viewBox "0 0 24 24") (a11yHidden true))
     tag CellSel  EVGElement (props (className "tb-cell tb-cell-sel") (role "cell"))
     tag Cell     EVGElement (props (className "tb-cell") (role "cell"))
     tag CellText EVGElement (props (className "tb-cell-text") (elementType 1))
@@ -144,6 +149,17 @@ class TableDemo {
         return (colKey == "status")
     }
 
+    sfn sortIcon:EVGElement (st:int) {
+        def glyph:string (TableCtl.sortGlyph(st))
+        if (glyph == "▲") {
+            return (tree Table (SortIcon (props (className "tb-sort tb-sort-on") (svgPath "M12 19V5M5 12l7-7 7 7"))))
+        }
+        if (glyph == "▼") {
+            return (tree Table (SortIcon (props (className "tb-sort tb-sort-on") (svgPath "M12 5v14M19 12l-7 7-7-7"))))
+        }
+        return (tree Table (SortIcon (props (svgPath "M7 15l5 5 5-5M7 9l5-5 5 5"))))
+    }
+
     fn headRow:EVGElement () {
         def head (tree Table (HeadRow (props (id "tbl-headrow"))))
         def selState:int (model.selectAllState())
@@ -165,10 +181,10 @@ class TableDemo {
             if c.sortable {
                 col.a11ySorted = st
                 col.a11yFocusable = true
-                col.addChild((tree Table (ColText c.label)))
-                col.addChild((tree Table (Arrow (TableCtl.sortGlyph(st)))))
+                col.addChild((tree Table (ColText (props (className ("tb-col-text tb-col-text-" + c.key))) c.label)))
+                col.addChild((TableDemo.sortIcon(st)))
             } {
-                col.addChild((tree Table (ColText c.label)))
+                col.addChild((tree Table (ColText (props (className ("tb-col-text tb-col-text-" + c.key))) c.label)))
             }
             head.addChild(col)
             i = (i + 1)

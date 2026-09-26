@@ -65,7 +65,7 @@ treefactory Dd {
     tag Trigger   EVGElement (props (className "dd-trigger") (isOverlayAnchor true) (role "button") (a11yFocusable true))
     tag TrigAv    EVGElement (props (className "dd-trig-avatar") (elementType 1) (a11yHidden true))
     tag TrigName  EVGElement (props (className "dd-trig-name") (elementType 1))
-    tag TrigCaret EVGElement (props (className "dd-trig-caret") (elementType 1) (a11yHidden true))
+    tag TrigCaret EVGElement (props (className "dd-trig-caret") (tagName "path") (elementType 3) (viewBox "0 0 24 24") (a11yHidden true))
 
     ; The surface. Opens ABOVE the trigger, because the trigger sits at the
     ; bottom of the page — and EVG's overlay pass flips it back down if there
@@ -219,7 +219,7 @@ class DropdownDemo {
     fn head:EVGElement () {
         return (tree Dd
             (Head (props (id "dd-head"))
-                (HeadAv "◕")
+                (HeadAv "S")
                 (HeadCol
                     (HeadName "shadcn")
                     (HeadMail "ui@shadcn.com"))))
@@ -278,7 +278,7 @@ class DropdownDemo {
                 ; Decoration, and marked as such: `aria-expanded` on the row
                 ; already tells a reader there is more this way, and without
                 ; the flag the row announces as "Available greater-than".
-                (Chevron ">")))
+                (Chevron "›")))
         if isOpen {
             def surf:EVGElement (this.statusMenu(rowTid))
             ; Named outright: the sibling search the overlay pass does looks
@@ -341,9 +341,9 @@ class DropdownDemo {
     fn page:EVGElement () {
         def trig (tree Dd
             (Trigger (props (id (model.triggerTid())) (a11yLabel "Account menu"))
-                (TrigAv "◕")
+                (TrigAv "S")
                 (TrigName "shadcn")
-                (TrigCaret "⌃")))
+                (TrigCaret (props (svgPath "M7 15l5 5 5-5M7 9l5-5 5 5")))))
         def menu (tree Dd (Menu (props (id "dd"))))
         menu.addChild(trig)
         if model.open {
@@ -413,9 +413,24 @@ class DropdownDemo {
     }
 
     fn key:boolean (k:string) {
+        def wasOpen:boolean model.open
         def next:string (model.keyDown(focused k))
         if ((strlen next) > 0) {
             focused = next
+        }
+        ; Opened FROM THE KEYBOARD, focus goes on to the first item, not the
+        ; menu's surface: Radix's roving group takes its entry focus when the
+        ; open came from a key (`isUsingKeyboardRef`), and only a pointer open
+        ; leaves it on the content. The controller answers the pointer case;
+        ; the step onto the first row is the same ArrowDown a person would
+        ; press next, from the surface it landed on.
+        if ((wasOpen == false) && model.open) {
+            if (focused == (model.ownerOf(focused))) {
+                def first:string (model.keyDown(focused "ArrowDown"))
+                if ((strlen first) > 0) {
+                    focused = first
+                }
+            }
         }
         root = (this.page())
         return true

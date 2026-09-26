@@ -162,7 +162,15 @@ const mirrorAttrs = (tid) => page.evaluate((t) => {
     tag: el.tagName, role: a("role") || (el.tagName === "INPUT" ? "textbox" : null),
     label: a("aria-label"), value: el.tagName === "INPUT" ? el.value : null,
     required: a("aria-required"), invalid: a("aria-invalid"), readonly: a("aria-readonly"),
-    description: a("aria-description"), pressed: a("aria-pressed"),
+    // The description as a reader gets it: `aria-describedby` when it
+    // resolves (the mirror then drops `aria-description`, or the sentence
+    // would be read twice), the inline string otherwise.
+    description: (() => {
+      const ref = a("aria-describedby");
+      const to = ref ? document.getElementById(ref) : null;
+      return to ? (to.textContent || to.getAttribute("aria-label") || "") : a("aria-description");
+    })(),
+    pressed: a("aria-pressed"),
     focused: document.activeElement === el,
   };
 }, tid);

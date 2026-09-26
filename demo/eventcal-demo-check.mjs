@@ -257,6 +257,109 @@ console.log("a day view clips what runs past it, and hides what never reaches it
     d.model.events.every((e) => !d.model.isVisible(e.id) || e.clipStart >= shown));
 }
 
+console.log("every view can be left for every other one");
+{
+  // Month used to `return body` from page() instead of the page, so it drew
+  // without its header — no arrows, no caption, no view buttons — and once in
+  // Month there was nothing left to press.
+  const d = fresh();
+  const pressId = (id) => {
+    const b = byId(d, id);
+    if (!b) return false;
+    d.press(d.hitId(b.calculatedX + b.calculatedWidth / 2, b.calculatedY + b.calculatedHeight / 2));
+    d.displayListJson();
+    return true;
+  };
+  const on = (v) => (byId(d, "ec-view-" + v)?.className || "").includes("ec-viewbtn-on");
+  const caption = () => JSON.parse(d.a11yJson(5, "")).nodes.find((n) => n.role === "status")?.name || "";
+  for (const from of ["day", "week", "month"]) {
+    for (const to of ["day", "week", "month"]) {
+      if (from === to) continue;
+      pressId("ec-view-" + from);
+      ok(`${from}: all the view buttons and the arrows are drawn`,
+        ["ec-view-day", "ec-view-week", "ec-view-month", "ec-prev", "ec-next", "ec-today"].every((id) => byId(d, id)));
+      ok(`${from} -> ${to} by pointer`, pressId("ec-view-" + to) && on(to) && !on(from));
+    }
+  }
+  pressId("ec-view-month");
+  eq("month caption", caption(), "May 2026");
+  pressId("ec-next");
+  eq("next month", caption(), "June 2026");
+  pressId("ec-prev");
+  pressId("ec-prev");
+  eq("previous month", caption(), "April 2026");
+  pressId("ec-today");
+  eq("today, in the month", caption(), "May 2026");
+  ok("the month's arrows are named for months", /month/.test(byId(d, "ec-next").a11yLabel), byId(d, "ec-next").a11yLabel);
+  const more = flat(d).find((e) => (e.id || "").startsWith("ec-more-"));
+  ok("a crowded day says how many more it holds", !!more, "");
+  pressId(more.id);
+  ok("and opens that day", on("day") && /May 11th/.test(caption()), caption());
+  pressId("ec-next");
+  eq("next day", caption(), "Tuesday, May 12th, 2026");
+  pressId("ec-view-week");
+  ok("a week holds the day you were on, from its Monday", /^Monday, May 11th/.test(caption()), caption());
+  pressId("ec-view-day");
+  eq("and back to that same day", caption(), "Tuesday, May 12th, 2026");
+  d.key("ArrowRight");
+  d.displayListJson();
+  eq("the arrow keys step in the view's unit", caption(), "Wednesday, May 13th, 2026");
+  pressId("ec-today");
+  eq("today, in the day", caption(), "Monday, May 11th, 2026");
+  // Clipped to the day: the two-day "On call" band must not run off the page.
+  const oncall = box(d, "ec-j");
+  const col = box(d, "ec-col-0");
+  ok("a band that runs past the day stops at its edge", oncall && col && oncall.x + oncall.w <= col.x + col.w + 1,
+    `${JSON.stringify(oncall)} vs ${JSON.stringify(col)}`);
+}
+
+console.log("the keyboard reaches every control");
+{
+  // The mirror is one tab stop; the demo walks its own ring. Before it, no
+  // node was focusable and prev/next, the views and the events were
+  // pointer-only.
+  const d = fresh();
+  const seen = [];
+  for (let i = 0; i < 40; i++) {
+    if (!d.keyWith("Tab", false, false)) break;
+    d.displayListJson();
+    seen.push(d.focused);
+  }
+  ok("Tab visits the arrows, Today and the three views first",
+    seen.slice(0, 6).join(",") === "ec-prev,ec-next,ec-today,ec-view-day,ec-view-week,ec-view-month", seen.slice(0, 6).join(","));
+  ok("and then the events", seen.includes("ec-a") && seen.includes("ec-j"), seen.join(","));
+  ok("and lets go at the end, so focus can leave", seen.length < 40, String(seen.length));
+  ok("Shift+Tab walks back", d.keyWith("Tab", true, false) && d.focused === seen[seen.length - 2], d.focused);
+  const nodes = JSON.parse(d.a11yJson(4, d.focused)).nodes;
+  ok("every button is focusable in the mirror",
+    nodes.filter((n) => n.role === "button").every((n) => n.focusable), "");
+  const d2 = fresh();
+  while (d2.focused !== "ec-view-month") d2.keyWith("Tab", false, false);
+  d2.keyWith("Enter", false, false);
+  d2.displayListJson();
+  ok("Enter on Month opens the month", d2.model.view === "month");
+  ok("and the focus stays on its button, which is still drawn", !!byId(d2, d2.focused) && d2.focused === "ec-view-month");
+  d2.keyWith("Tab", true, false);
+  d2.keyWith("Tab", true, false);
+  d2.keyWith(" ", false, false);
+  d2.displayListJson();
+  ok("Space on Day, reached backwards from Month, leaves it", d2.model.view === "day");
+  const d3 = fresh();
+  while (d3.focused !== "ec-f") d3.keyWith("Tab", false, false);
+  d3.keyWith("ArrowRight", false, false);
+  d3.displayListJson();
+  ok("an arrow that steps the focused event off screen hands the focus to the arrow button",
+    d3.focused === "ec-next" && !!byId(d3, "ec-next"), d3.focused);
+}
+
+console.log("titles too long for their box end in an ellipsis");
+{
+  const d = fresh();
+  const txt = (id) => byId(d, id)?.children[0]?.textContent || "";
+  ok("the narrow overlapped box is cut with an ellipsis, not mid-word", /…$/.test(txt("ec-g")), txt("ec-g"));
+  ok("a box with room keeps its whole title", txt("ec-a") === "Standup", txt("ec-a"));
+}
+
 console.log(`\npassed=${passed} failed=${failed}`);
 if (failed > 0) process.exit(1);
 console.log("ALL PASS");

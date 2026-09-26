@@ -94,7 +94,7 @@ jobs:
         run: node ranger/gallery/evgui/scripts/run.mjs --no-overlay ui:pages:smoke
 
       - name: Demo suites
-        run: bash ranger/gallery/evgui/scripts/gate.sh
+        run: bash ranger/gallery/evgui/scripts/gate.sh --prebuilt
 
       - name: Collect the site
         run: cp -r ranger/gallery/evgui/web/dist _site

@@ -32,6 +32,9 @@
   border-radius: 10px;
   background-color: #ffffff;
   width: 840px;
+  /* The header band is square; clipped to the card it follows the card's
+     rounded corners instead of painting over them. */
+  overflow: hidden;
 }
 
 .tb-grid {
@@ -97,8 +100,9 @@
   color: #71717a;
   font-size: 12px;
   font-weight: bold;
-  height: 18px;
-  width: 96px;
+  height: 18px; line-height: 18px;
+  /* As wide as the label, so the sort indicator sits right after it. */
+  width: fit-content;
 }
 
 /* A sortable header answers the pointer, because a header that sorts and one
@@ -125,13 +129,26 @@
 .tb-cell-text {
   color: #18181b;
   font-size: 14px;
-  height: 20px;
+  height: 20px; line-height: 20px;
   width: 200px;
 }
 
 /* Per-column ink, as a class the builder puts on the text. */
 .tb-text-email { color: #52525b; }
-.tb-text-spend { color: #18181b; }
+.tb-text-spend { color: #18181b; width: 100px; text-align: right; }
+
+/* Numbers line up on their last digit: the Spend column is right-aligned,
+   header included (its label and indicator pushed to the cell's end). */
+.tb-col-spend { justify-content: flex-end; }
+
+.tb-sort {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: #a1a1aa;
+  stroke-width: 2;
+}
+.tb-sort-on { stroke: #18181b; }
 
 /* --- the checkbox --------------------------------------------------------------
    16px, the reference's size, and the tick is the element's own text rather
@@ -165,7 +182,7 @@
   color: #ffffff;
   font-size: 11px;
   width: 14px;
-  height: 14px;
+  height: 14px; line-height: 14px;
   text-align: center;
 }
 
@@ -206,7 +223,7 @@
   color: #71717a;
   font-size: 13px;
   width: 170px;
-  height: 20px;
+  height: 20px; line-height: 20px;
 }
 
 /* The one child carrying slack rather than content: it is what pushes the
@@ -237,7 +254,7 @@
   color: #18181b;
   font-size: 13px;
   width: 88px;
-  height: 18px;
+  height: 18px; line-height: 18px;
   text-align: center;
 }
 

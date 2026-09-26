@@ -32,7 +32,7 @@
 .cx-title {
   font-size: 18px;
   color: #0a0a0a;
-  height: 24px;
+  height: 24px; line-height: 24px;
 }
 
 /* --- the stepper strip -------------------------------------------------- */
@@ -104,6 +104,51 @@
   cursor: default;
 }
 
+/* StepperCtl's own state words — active / completed / inactive — which are
+ * what `stateOf` returns. The rules above used an older vocabulary
+ * (current / complete / upcoming) that no step ever carried, so the step you
+ * were on drew as a pale circle like every other. */
+.cx-dot-active {
+  background-color: #0a0a0a;
+  border-color: #0a0a0a;
+}
+
+.cx-dot-completed {
+  background-color: #16a34a;
+  border-color: #16a34a;
+}
+
+.cx-dot-inactive {
+  background-color: #fafafa;
+  cursor: default;
+}
+
+/* The icon: a Lucide outline, stroked in the circle's state colour. */
+.cx-icon {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: #71717a;
+  stroke-width: 2;
+}
+
+.cx-icon-active {
+  stroke: #ffffff;
+}
+
+.cx-icon-completed {
+  stroke: #ffffff;
+  stroke-width: 2.5;
+}
+
+.cx-icon-inactive {
+  stroke: #a1a1aa;
+}
+
+.cx-icon-disabled {
+  stroke: #d4d4d8;
+}
+
 .cx-dottxt {
   font-size: 12px;
   color: #71717a;
@@ -161,6 +206,7 @@
 
 .cx-badge {
   display: flex;
+  flex-direction: row;
   align-items: center;
   height: 17px;
   padding-left: 6px;
@@ -210,8 +256,13 @@
   background-color: #e4e4e7;
 }
 
+/* A row, so `align-items: center` centres the line VERTICALLY and the text
+ * starts at the left padding. As a column it did the opposite: the text sat
+ * at the top, centred horizontally. */
 .cx-panelbox {
   display: flex;
+  flex-direction: row;
+  justify-content: flex-start;
   align-items: center;
   border-width: 1px;
   border-color: #e4e4e7;
@@ -251,7 +302,7 @@
 .cx-slidelbl {
   font-size: 13px;
   color: #0a0a0a;
-  height: 18px;
+  height: 18px; line-height: 18px;
 }
 
 .cx-track {
@@ -295,13 +346,17 @@
 
 /* The ruler. Every tick has a cell; a MINOR one is a shorter mark with an
  * empty label, which is how ReUI hides the number without losing the space. */
+/* Each tick is placed at its value's fraction by ControlsDemo.rgr (inline
+ * `left`), centred in a 20px cell — the same x the thumb's centre takes. */
 .cx-ticks {
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
+  position: relative;
+  height: 22px;
 }
 
 .cx-tick {
+  position: absolute;
+  top: 0px;
+  width: 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -324,7 +379,7 @@
 .cx-ticktxt {
   font-size: 11px;
   color: #71717a;
-  height: 14px;
+  height: 14px; line-height: 14px;
 }
 
 /* The bubble over the thumb. */
@@ -352,7 +407,7 @@
 .cx-bandtxt {
   font-size: 12px;
   color: #52525b;
-  height: 16px;
+  height: 16px; line-height: 16px;
 }
 
 /* --- the progress bar ---------------------------------------------------- */
@@ -375,7 +430,7 @@
 .cx-bartxt {
   font-size: 12px;
   color: #71717a;
-  height: 16px;
+  height: 16px; line-height: 16px;
 }
 
 /* --- the number field ---------------------------------------------------- */
@@ -394,7 +449,7 @@
 .cx-panellbl {
   font-size: 13px;
   color: #0a0a0a;
-  height: 18px;
+  height: 18px; line-height: 18px;
 }
 
 .cx-numrow {
@@ -450,15 +505,31 @@
   border-color: #0a0a0a;
 }
 
+/* Keyboard focus, drawn by EVG — the mirror's own outline is suppressed. */
+.cx-numbtn:focus {
+  border-color: #0a0a0a;
+}
+
+.cx-thumb:focus {
+  border-color: #0a0a0a;
+  border-width: 2px;
+}
+
+.cx-btn:focus {
+  border-color: #71717a;
+}
+
 .cx-numtxt {
   font-size: 14px;
   color: #0a0a0a;
 }
 
+/* No fixed height: the hint wraps to two lines at this width, and a 15px box
+ * pushed the second line onto the panel's border. */
 .cx-numhint {
   font-size: 11px;
-  color: #a1a1aa;
-  height: 15px;
+  color: #71717a;
+  line-height: 15px;
 }
 
 /* --- back and next -------------------------------------------------------- */
@@ -520,5 +591,19 @@
 .cx-note {
   font-size: 12px;
   color: #a1a1aa;
-  height: 16px;
+  height: 16px; line-height: 16px;
+}
+
+/* --- a phone ------------------------------------------------------------------
+   Laid out at the preview's width (main.js `fitDemo`): the boxes that were
+   852px take the page. The slider tracks are 300px in the builder and fit. */
+@media (max-width: 600px) {
+  .cx-page { width: 100%; padding: 12px; }
+  .cx-panelbox { width: 100%; }
+  .cx-bar { width: 100%; }
+  .cx-panel { width: 100%; }
+  /* Four steps with their captions are ~420px; on a phone the strip is the
+     dots and rails, and the panel under it names the current step. */
+  .cx-stepcol { display: none; }
+  .cx-note { height: auto; }
 }

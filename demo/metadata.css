@@ -31,8 +31,8 @@
   background-color: #ffffff;
 }
 
-.md-title { color: #0f1f5c; font-size: 20px; font-weight: 700; height: 28px; }
-.md-sub { color: #6b7385; font-size: 13px; height: 20px; }
+.md-title { color: #0f1f5c; font-size: 20px; font-weight: 700; height: 28px; line-height: 28px; }
+.md-sub { color: #6b7385; font-size: 13px; height: 20px; line-height: 20px; }
 
 .md-actions {
   display: flex;
@@ -60,6 +60,8 @@
 .md-status-bad { color: #c0392b; }
 
 .md-sep { height: 1px; background-color: #e3e7ef; }
+/* Created / Last modified: off the rule above them, not touching it. */
+.md-meta { display: flex; flex-direction: column; gap: 0px; padding: 10px 0 0 0; }
 
 .md-form { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; }
 
@@ -82,10 +84,15 @@
   width: 150px;
   min-width: 150px;
 }
-.md-label-text { color: #6b7385; font-size: 13px; height: 18px; text-align: right; }
-.md-star { color: #c0392b; font-size: 13px; height: 18px; }
+/* A row with a hint or an error under its control: top-aligned, and the label
+ * as tall as the 40px control so it centres on the box. Centred on box + hint
+ * it sat eight pixels low (Customer). */
+.md-row-top { align-items: flex-start; }
+.md-label-top { height: 40px; }
+.md-label-text { color: #6b7385; font-size: 13px; height: 18px; line-height: 18px; text-align: right; }
+.md-star { color: #c0392b; font-size: 13px; height: 18px; line-height: 18px; }
 .md-cell { display: flex; flex-direction: column; gap: 3px; flex-grow: 1; min-width: 0; }
-.md-hint { color: #8a92a6; font-size: 11px; height: 15px; }
+.md-hint { color: #8a92a6; font-size: 11px; height: 15px; line-height: 15px; }
 .md-error { color: #c0392b; }
 .md-auto { color: #7b849a; font-size: 13px; height: 18px; padding: 0 9px; }
 
@@ -108,7 +115,7 @@
 }
 .ui-input:focus { border-color: #1d6fd8; }
 .ui-input-invalid { border-color: #c0392b; }
-.ui-input-text { color: #1f2a44; font-size: 13px; height: 18px; }
+.ui-input-text { color: #1f2a44; font-size: 13px; height: 18px; line-height: 18px; }
 .ui-input-placeholder { color: #a9b0c0; }
 .ui-input-caret { position: absolute; top: 10px; width: 2px; height: 18px; background-color: #1d6fd8; }
 .md-band { position: absolute; top: 10px; height: 18px; background-color: #d6e4ff; }
@@ -157,23 +164,26 @@
   background-color: #e7eefc;
 }
 .ui-combobox-chip-focused { background-color: #1d6fd8; }
-.ui-combobox-chip-text { color: #1f3f7a; font-size: 13px; height: 18px; }
+.ui-combobox-chip-text { color: #1f3f7a; font-size: 13px; height: 18px; line-height: 18px; }
 .ui-combobox-chip-text-focused { color: #ffffff; }
 .ui-combobox-chip-remove { width: 18px; height: 18px; border-radius: 9px; color: #4f6390; font-size: 13px; text-align: center; }
 .ui-combobox-chip-remove:hover { background-color: #c9d8f5; }
 .ui-combobox-clear { width: 22px; height: 22px; color: #6b7385; font-size: 15px; text-align: center; border-radius: 11px; }
 .ui-combobox-clear:hover { background-color: #eef3ff; }
-.ui-combobox-trigger { width: 22px; height: 22px; color: #6b7385; font-size: 12px; text-align: center; }
+.ui-combobox-trigger { width: 22px; height: 22px; line-height: 22px; color: #6b7385; font-size: 12px; text-align: center; }
+/* As wide as its trigger, with rows stretched across it so the highlight is a
+ * full-width band rather than one as wide as the text. */
 .ui-combobox-content {
   display: flex;
   flex-direction: column;
-  width: 320px;
+  align-items: stretch;
+  width: 100%;
   padding: 4px 0;
   border: 1px solid #c5cddd;
   border-radius: 6px;
   background-color: #ffffff;
 }
-.ui-combobox-item { color: #1f2a44; font-size: 13px; height: 32px; padding: 7px 12px; }
+.ui-combobox-item { color: #1f2a44; font-size: 13px; height: 32px; padding: 7px 12px; width: 100%; }
 .ui-combobox-item:hover { background-color: #eef3ff; }
 .ui-combobox-item-state-selected { background-color: #e7eefc; }
 .ui-combobox-item-active { background-color: #1d6fd8; color: #ffffff; }
@@ -214,4 +224,20 @@
 .ui-togglegroup-item:focus { border-color: #1d6fd8; }
 .ui-togglegroup-item-state-on { color: #ffffff; background-color: #1d6fd8; border-color: #1d6fd8; }
 
-.md-note { color: #6b7385; font-size: 12px; height: 17px; }
+.md-note { color: #6b7385; font-size: 12px; height: 17px; line-height: 17px; }
+
+/* --- a phone ------------------------------------------------------------------
+   Laid out at the preview's width (main.js `fitDemo`). The label column
+   stacks over its field, the way M-Files' own narrow pane does it; the card
+   takes the page. */
+@media (max-width: 600px) {
+  .md-page { padding: 12px; }
+  .md-card { width: 100%; padding: 16px; }
+  .md-row { flex-direction: column; align-items: stretch; gap: 4px; }
+  .md-label { width: 100%; min-width: 0; justify-content: flex-start; }
+  .md-label-text { text-align: left; }
+  .ui-combobox-input-single { width: 120px; }
+  .md-hint { height: auto; }
+  .md-title { height: auto; font-size: 18px; }
+  .md-label-top { height: auto; }
+}

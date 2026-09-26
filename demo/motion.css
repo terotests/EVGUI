@@ -28,7 +28,53 @@
   background-color: #0b1020;
   padding: 26px;
   width: 1180px;
-  height: 1580px;
+  /* No height: the demo measures where the last panel ends and sizes the
+     page to it. A fixed 1580px here cut the pointer-state cards off. */
+}
+
+/* The replay bar: one button and what it does. */
+.mo-bar-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 14px;
+  width: 1128px;
+  height: 42px;
+}
+
+.mo-replay {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  width: 112px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid #5b4fd6;
+  background-color: #6d5ef0;
+  transition: background-color 120ms ease-out, transform 120ms ease-out;
+}
+
+.mo-replay:hover  { background-color: #7c6ff5; }
+.mo-replay:active { background-color: #5646d8; transform: scale(0.97); }
+.mo-replay:focus  { border-color: #e6ebf5; }
+
+.mo-replay-text {
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: bold;
+  width: 90px;
+  height: 18px;
+  text-align: center;
+}
+
+.mo-bar-note {
+  color: #93a0bd;
+  font-size: 13px;
+  width: 900px;
+  height: 18px;
 }
 
 .mo-panel {
@@ -100,6 +146,13 @@
   border-radius: 999px;
   width: 18px;
   height: 18px;
+  /* THE WAY BACK. Written out, not left to the initial value: when the theme
+     turns back over, the only rule that set `transform` stops matching, and
+     EVGStyleSheet does not return a property to its initial value when a
+     theme-scoped rule lets go of it (it does for `:hover` and friends). So
+     without this line the dots arrived once and stayed there — the journey
+     played a single time and the page flipped the theme to no effect. */
+  transform: none;
 }
 
 /* Each dot differs only in HOW it is timed. The distance, the duration and
@@ -125,6 +178,8 @@
   border-radius: 6px;
   width: 26px;
   height: 18px;
+  /* The way back — see `.mo-dot`. */
+  transform: none;
 }
 
 .mo-bar-a { transition: transform 600ms ease-out 0ms; }
@@ -167,6 +222,8 @@
   width: 84px;
   height: 40px;
   transition: transform 700ms ease-in-out;
+  /* The way back — see `.mo-dot`. */
+  transform: none;
 }
 
 .mo-cap {
@@ -234,3 +291,31 @@
    a control that simply ignores the pointer reads as broken. */
 .mo-card-off { background-color: #151b2e; color: #5b6784; }
 .mo-card-off:disabled { background-color: #151b2e; color: #5b6784; }
+
+/* --- a phone ------------------------------------------------------------------
+   Laid out at the preview's width (main.js `fitDemo`). Shorter tracks (and
+   the distance the dots travel along them), two pivots per row, cards that
+   wrap. */
+@media (max-width: 600px) {
+  .mo-page { width: 100%; height: auto; padding: 12px; gap: 12px; }
+  .mo-panel { width: 100%; padding: 14px 12px; }
+  .mo-sub { height: auto; }
+  .mo-row { gap: 8px; }
+  .mo-name { width: 96px; height: auto; font-size: 11px; }
+  .mo-curve { width: 32px; height: 32px; }
+  .mo-track { width: 124px; }
+  .theme-go .mo-dot { transform: translate(98px, 0); }
+  .theme-go .mo-bar { transform: translate(90px, 0); }
+  .mo-grid { width: 100%; gap: 8px; }
+  .mo-cell { width: 128px; height: 150px; }
+  .mo-cards { flex-wrap: wrap; height: auto; gap: 10px; }
+  .mo-card { width: 124px; }
+}
+
+/* Single-line text sits in the middle of its box: the line box is the box.
+   Without it a 22px box holding a 16px line puts the line at the top, which
+   with a face whose normal line is 18px drew every label 2px high. */
+.mo-head { line-height: 20px; }
+.mo-sub { line-height: 18px; }
+.mo-name { line-height: 16px; }
+.mo-cap { line-height: 16px; }

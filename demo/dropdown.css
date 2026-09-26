@@ -51,16 +51,23 @@
 .dd-trigger:hover { background-color: #fafafa; border-color: #d4d4d8; }
 .dd-trigger:focus { border-color: #a1a1aa; }
 
+/* An initial in a disc, like shadcn's avatar fallback. It was "◕" — a font
+   glyph that the fallback face drew as a clipped half-disc. */
 .dd-trig-avatar {
-  color: #7c3aed;
-  font-size: 20px;
+  color: #6d28d9;
+  background-color: #ede9fe;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: bold;
   width: 24px;
-  height: 24px;
+  height: 24px; line-height: 24px;
   text-align: center;
 }
 
-.dd-trig-name { color: #18181b; font-size: 14px; width: 150px; height: 20px; }
-.dd-trig-caret { color: #71717a; font-size: 11px; width: 12px; height: 16px; text-align: center; }
+.dd-trig-name { color: #18181b; font-size: 14px; width: 150px; height: 20px; line-height: 20px; }
+/* Lucide's chevrons-up-down, drawn: the "⌃" character was small and sat
+   above the middle of the row. */
+.dd-trig-caret { width: 16px; height: 16px; fill: none; stroke: #71717a; stroke-width: 2; }
 
 /* --- the surface ---------------------------------------------------------------
    256px, the reference's width. The padding is 4px so a row's own hover tint
@@ -89,16 +96,19 @@
 }
 
 .dd-head-avatar {
-  color: #7c3aed;
-  font-size: 30px;
+  color: #6d28d9;
+  background-color: #ede9fe;
+  border-radius: 18px;
+  font-size: 15px;
+  font-weight: bold;
   width: 36px;
-  height: 36px;
+  height: 36px; line-height: 36px;
   text-align: center;
 }
 
 .dd-head-col { display: flex; flex-direction: column; width: 190px; }
-.dd-head-name { color: #18181b; font-size: 14px; font-weight: bold; height: 20px; }
-.dd-head-mail { color: #71717a; font-size: 13px; height: 18px; }
+.dd-head-name { color: #18181b; font-size: 14px; font-weight: bold; height: 20px; line-height: 20px; }
+.dd-head-mail { color: #71717a; font-size: 13px; height: 18px; line-height: 18px; }
 
 /* --- the segmented theme picker ------------------------------------------------
    One track, three buttons, and the chosen one lifted out of it on a white
@@ -139,7 +149,7 @@
  * have chosen should not stop looking chosen because the pointer is on it. */
 .dd-seg-btn-on { background-color: #ffffff; }
 
-.dd-seg-glyph { color: #3f3f46; font-size: 14px; width: 20px; height: 20px; text-align: center; }
+.dd-seg-glyph { color: #3f3f46; font-size: 14px; width: 20px; height: 20px; line-height: 20px; text-align: center; }
 
 /* --- rows ------------------------------------------------------------------------
    36px, and the icon column is a fixed 20px on every row so that a row without
@@ -172,10 +182,10 @@
 
 .dd-item-danger:focus { background-color: #fef2f2; }
 
-.dd-icon { color: #52525b; font-size: 15px; width: 20px; height: 20px; text-align: center; }
+.dd-icon { color: #52525b; font-size: 15px; width: 20px; height: 20px; line-height: 20px; text-align: center; }
 .dd-icon-danger { color: #dc2626; }
 
-.dd-dot { font-size: 13px; width: 20px; height: 20px; text-align: center; }
+.dd-dot { font-size: 13px; width: 20px; height: 20px; line-height: 20px; text-align: center; }
 .dd-dot-available { color: #22c55e; }
 .dd-dot-away      { color: #f59e0b; }
 .dd-dot-busy      { color: #ef4444; }
@@ -184,7 +194,7 @@
 /* Wide enough to take the longest row and narrow enough that the count on the
  * right never meets it: 20 + 10 + 150 + 10 + 32 is 222, inside the 238 a row
  * has after its own padding. */
-.dd-label { color: #18181b; font-size: 14px; width: 150px; height: 20px; }
+.dd-label { color: #18181b; font-size: 14px; width: 150px; height: 20px; line-height: 20px; }
 
 /* The submenu is 200px, not 264, and the same arithmetic gives a different
  * answer: 190 inside the card, 174 inside a row, less a 20px dot, a 16px tick
@@ -206,12 +216,19 @@
   text-align: center;
 }
 
-.dd-chevron { color: #71717a; font-size: 11px; width: 14px; height: 18px; text-align: center; }
-.dd-tick { color: #18181b; font-size: 12px; width: 16px; height: 18px; text-align: center; }
+.dd-chevron { color: #71717a; font-size: 16px; width: 14px; height: 18px; line-height: 18px; text-align: center; }
+.dd-tick { color: #18181b; font-size: 12px; width: 16px; height: 18px; line-height: 18px; text-align: center; }
 
 .dd-separator {
   background-color: #f4f4f5;
   width: 254px;
   height: 1px;
   margin: 4px 0;
+}
+
+/* --- a phone ------------------------------------------------------------------
+   Laid out at the preview's width (main.js `fitDemo`). The menu is already
+   phone-sized; only the page round it changes. */
+@media (max-width: 600px) {
+  .dd-page { width: 100%; padding: 12px; }
 }

@@ -120,7 +120,8 @@ const state = {
  * `key` is what decides which of the two happened: a string of everything the
  * builder is handed except the stylesheet.
  */
-function keptTree(mod, css, label, size) {
+function keptTree(mod, css, label, initialSize) {
+  let size = initialSize.slice();
   const sheet = new mod.EVGStyleSheet();
   sheet.parse(css);
   const transitions = new mod.EVGTransition();
@@ -201,6 +202,18 @@ function keptTree(mod, css, label, size) {
     },
     /** How the last rebuild went, for a page that wants to prove it works. */
     reconcileStats: () => reconciler.stats,
+    /**
+     * The page size the tree is laid out at, and a way to change it. The
+     * stylesheet's `@media` blocks read the same numbers, so a phone-width
+     * page is a narrow LAYOUT, not a shrunken picture of a wide one — see
+     * `fitDemo`. A new size drops the kept layout: its page box is stale.
+     */
+    size: () => size,
+    resize(w, h) {
+      if (w === size[0] && h === size[1]) return;
+      size = [w, h];
+      lay = null;
+    },
     setHover(id) {
       if (id === hovered) return false;
       hovered = id;
@@ -362,7 +375,7 @@ let lastEventcalHover = "";
 // never in this file at all — so it passed every check while being absent from
 // the only place a person looks. That is the same shape of hole as a
 // controller with no surface, one level up.
-const message = new MessageDemo();
+let message = new MessageDemo();
 message.init(MESSAGE_CSS);
 let lastMessageHover = "";
 
@@ -777,6 +790,8 @@ const DEMOS = {
     hover: () => false,
     key: () => false,
     animated: true,
+    // Its clock never stops (the sky drifts), so the frame budget applies.
+    continuous: true,
     // The same three hooks the dashboard's application-driven ripple uses —
     // except that nothing here knows what a ripple is: the driver hit-tests
     // the boxes the display list carries and the sheet said which of them
@@ -943,6 +958,10 @@ const DEMOS = {
       return true;
     },
     key: (k) => eventcal.key(k),
+    // Tab walks the calendar's own ring (arrows, Today, views, events); Enter
+    // and Space press the focused one. The mirror alone is one tab stop.
+    keyWith: (k, shift, ctrl) => eventcal.keyWith(k, shift, ctrl),
+    ownsTab: true,
     host: () => ({
       tick: (dt) => eventcal.tick(dt),
       busy: () => eventcal.busyNow(),
@@ -957,19 +976,40 @@ const DEMOS = {
     }),
   },
 
+  // The transcript, now written to. The composer is an `InputCtl` behind the
+  // same platform text session the form uses; Enter or Send appends a bubble,
+  // `ScrollerCtl` keeps the newest in view, and the other side answers on the
+  // demo's own clock — so `animated`, and a `host` whose `busy` is true while
+  // a reply is owed.
   message: {
     height: () => message.heightPx(),
     list: () => message.displayListJson(),
     hit: (x, y) => message.hitId(x, y),
     a11y: (gen, focus) => message.a11yJson(gen, focus),
-    press: (id) => message.press(id),
+    cursorAt: (x, y) => message.cursorAt(x, y),
+    textSession: {
+      focused: () => message.focusedField(),
+      state: (tid) => JSON.parse(message.fieldStateJson(tid)),
+      apply: (tid, v, a, b) => message.applyEdit(tid, v, a, b),
+    },
+    press: (id, x, y, ev) => message.beginSelection(id, x, !!(ev && ev.shiftKey)),
+    drag: (id, ev) => message.extendSelection(ev.offsetX),
+    drop: () => message.endSelection(),
+    dblclick: (id, x) => message.selectWordAt(id, x),
+    // The wheel moves the transcript, and false at an end hands it back.
+    scroll: (dy) => message.scrollBy(dy),
     hover: (id) => {
       if (id === lastMessageHover) return false;
       lastMessageHover = id;
       message.setHover(id);
       return true;
     },
+    keyWith: (k, shift, ctrl) => message.keyWith(k, shift, ctrl),
+    // The demo owns its own tab ring: the field, Send, and the jump button
+    // while it is showing.
+    ownsTab: true,
     key: (k) => message.key(k),
+    ownsKey: (k) => message.ownsKey(k),
     host: () => ({
       tick: (dt) => message.tick(dt),
       busy: () => message.busyNow(),
@@ -982,6 +1022,7 @@ const DEMOS = {
       setPressed: (id) => message.setPressed(id),
       root: () => null,
     }),
+    animated: true,
   },
 
   controls: {
@@ -1100,6 +1141,10 @@ const DEMOS = {
       return true;
     },
     key: (k) => dialog.key(k),
+    // Tab is the demo's: the modal traps it (Close, the two fields, Cancel,
+    // Save) and without it the roving mirror sent Tab from Close to <body>.
+    keyWith: (k, shift, ctrl) => dialog.keyWith(k, shift, ctrl),
+    ownsTab: true,
     host: () => ({
       tick: (dt) => dialog.tick(dt),
       busy: () => dialog.busyNow(),
@@ -1122,7 +1167,9 @@ const DEMOS = {
     list: () => motion.displayListJson(),
     hit: (x, y) => motion.hitId(x, y),
     a11y: (gen, focus) => motion.a11yJson(gen, focus),
-    press: () => false,
+    // The one control on the page: Replay. Everything else here is answered
+    // by the stylesheet.
+    press: (id) => (id === "mo-replay" ? replayMotion() : false),
     hover: (id) => {
       if (id === lastHover) return false;
       lastHover = id;
@@ -1347,6 +1394,68 @@ const stage = document.getElementById("stage");
 const fit = document.getElementById("fit");
 const errEl = document.getElementById("err");
 
+// --- errors -------------------------------------------------------------------
+//
+// Only `paint` used to be guarded, and it wrote a raw stack under the card. A
+// throw in a pointer, key or text handler went to the console alone and left
+// the picture as it was — a page that looks fine and has stopped answering.
+// Now every handler goes through `guard`, the window's own `error` and
+// `unhandledrejection` land here too, and what the reader sees is one line
+// inside the preview card saying what broke, with the stack folded into a
+// <details> for whoever wants it.
+const errMsg = document.getElementById("errmsg");
+const errStack = document.getElementById("errstack");
+let errSource = "";
+function reportError(e, where) {
+  console.error(`[${where}]`, e);
+  errSource = where;
+  const message = (e && e.message) || String(e);
+  if (errMsg) errMsg.textContent = `Something went wrong while handling ${where}: ${message}. The picture may be out of date.`;
+  if (errStack) errStack.textContent = String((e && e.stack) || e);
+  errEl.hidden = false;
+  window.__lastError = { where, message };
+}
+function clearError(where) {
+  if (where && errSource !== where) return;
+  errSource = "";
+  errEl.hidden = true;
+  if (errMsg) errMsg.textContent = "";
+  if (errStack) errStack.textContent = "";
+}
+/**
+ * A handler that reports instead of throwing. After a throw the page repaints
+ * once, so what is on screen is what the state now is rather than the frame
+ * from before the handler ran halfway.
+ */
+function guard(fn, where) {
+  return function guarded(...args) {
+    try {
+      return fn.apply(this, args);
+    } catch (e) {
+      reportError(e, where);
+      try { paint(); } catch (_) { /* paint reports its own */ }
+      return undefined;
+    }
+  };
+}
+/** addEventListener, through `guard`. */
+function listen(target, type, where, fn, opts) {
+  target.addEventListener(type, guard(fn, where), opts);
+}
+window.addEventListener("error", (ev) => {
+  // The browser's own benign notice, not a fault of the page.
+  if (/ResizeObserver loop/.test(String(ev.message || ""))) return;
+  // A resource that failed to load (an <img>, a font) fires here too, with
+  // no error object; it is not a script that stopped half way.
+  if (!ev.error && !ev.message) return;
+  reportError(ev.error || ev.message, "a page script");
+});
+window.addEventListener("unhandledrejection", (ev) => reportError(ev.reason, "an async task"));
+{
+  const dismiss = document.getElementById("errdismiss");
+  if (dismiss) dismiss.addEventListener("click", () => clearError());
+}
+
 /**
  * The object behind each tab.
  *
@@ -1425,37 +1534,184 @@ function adoptFocus(node) {
 }
 
 /**
- * How much of the demo's own width the viewport has room for.
+ * How wide the room for the demo is: the preview's inner width.
+ *
+ * `clientWidth` includes the padding, and the preview has 12–24px of it on
+ * each side: sizing against that number leaves the picture wider than the
+ * room it was sized to fit, which is a horizontal scrollbar.
+ */
+function roomWidth() {
+  const box = fit.parentElement || document.body;
+  const cs = getComputedStyle(box);
+  const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  return box.clientWidth - (Number.isFinite(pad) ? pad : 0);
+}
+
+/**
+ * Fitting a demo to the room it has.
  *
  * A demo lays out at a width it chose — 900 for most of them, 1336 for the
- * dashboard — and a phone has 390. The page used to write that number straight
- * onto the canvas and let the rest hang off the right-hand edge, where nothing
- * could reach it: the stage is the ONLY way into these demos, so a stage the
- * viewport cannot show is a demo that does not work at all on a phone.
+ * dashboard — and a phone has about 330px of preview. The page used to SCALE
+ * the desktop layout down to fit, which on a phone made 14px text render at
+ * five to eight pixels: a demo you can see but not read or hit.
  *
- * So the picture is scaled to fit instead. The transform is on `#stage`, which
- * holds the canvas AND the accessibility mirror, so the mirrored elements move
- * with the pixels they name and a tap still lands on what it looks like it
- * lands on; `#fit` around it carries the laid-out size, because a transform
- * does not change a layout box. `offsetX`/`offsetY` are measured in the
- * canvas's own untransformed box, so every hit test on this page goes on
- * taking the numbers the display list was built with and nothing downstream
- * has to know the scale.
+ * So a demo that can reflow is LAID OUT at the room's width instead. Its page
+ * size is the stylesheet's viewport too, so the `@media (max-width: …)`
+ * blocks in its css get their say, and what comes out is the demo's narrow
+ * layout at 1:1. `NARROW` lists those demos and the narrowest width each one
+ * still makes sense at; below that it is scaled, never under `MIN_SCALE`.
  *
- * Never above 1: a demo drawn larger than it was laid out for is blurry for no
- * reason. The floor is there because past a point shrinking stops being
- * legible and the page is better off letting the stage scroll.
+ * A demo that cannot reflow — a seven-column calendar, a window you drag
+ * about — keeps its own width and is scaled down to `MIN_SCALE` at most; past
+ * that the preview card scrolls sideways INSIDE ITSELF, and the page does not.
+ *
+ * The transform is on `#stage`, which holds the canvas AND the accessibility
+ * mirror, so the mirrored elements move with the pixels they name and a tap
+ * still lands on what it looks like it lands on; `#fit` around it carries the
+ * laid-out size, because a transform does not change a layout box.
+ * `offsetX`/`offsetY` are measured in the canvas's own untransformed box, so
+ * hit tests go on taking the numbers the display list was built with.
+ *
+ * Never above 1: a demo drawn larger than it was laid out for is blurry for
+ * no reason.
  */
-const MIN_SCALE = 0.34;
-function stageScale(w) {
-  const box = fit.parentElement || document.body;
-  // `clientWidth` includes the padding, and the stage has 16–20px of it on
-  // each side: scaling against that number leaves the picture wider than the
-  // room it was scaled to fit, which is a horizontal scrollbar on a page whose
-  // content was supposed to fit.
-  const pad = parseFloat(getComputedStyle(box).paddingLeft) +
-    parseFloat(getComputedStyle(box).paddingRight);
-  const room = box.clientWidth - (Number.isFinite(pad) ? pad : 0);
+const MIN_SCALE = 0.75;
+// min: the narrowest page width the demo's own layout (with its @media rules)
+// handles. h: the page height to use when narrower than authored — a number,
+// or "auto" to measure the laid-out content (see `contentHeight`).
+const NARROW = {
+  menubar: { min: 320, h: "auto", keep: true, grow: true },
+  toolbar: { min: 320, h: "auto", grow: true },
+  sortable: { min: 320, h: "auto", grow: true },
+  tree: { min: 320, h: "auto" },
+  timeline: { min: 320, h: "auto" },
+  resizable: { min: 320, h: "auto" },
+  form: { min: 320, h: "auto", keep: true },
+  calendar: { min: 320, h: "auto", keep: true },
+  filters: { min: 320, h: "auto", keep: true },
+  message: { min: 440, h: "auto" },
+  controls: { min: 320, h: "own" },
+  otp: { min: 320, h: "auto" },
+  metadata: { min: 320, h: "auto", keep: true },
+  profile: { min: 320, h: "own" },
+  dropdown: { min: 320, h: "auto", keep: true },
+  motion: { min: 320, h: "auto" },
+  effects: { min: 320, h: "auto" },
+};
+const NARROW_AT = 600;
+const naturalSize = {};
+const fittedHeight = new Map();
+const resized = new Set();
+
+/** Read and write a demo's page size, or null when it has none to change. */
+function pageSizer(d, inst) {
+  const host = d.host ? d.host() : null;
+  if (host && typeof host.size === "function") {
+    return { get: () => host.size().slice(), set: (w, h) => host.resize(w, h) };
+  }
+  if (inst && typeof inst.pageW === "number" && typeof inst.pageH === "number") {
+    return {
+      get: () => [inst.pageW, inst.pageH],
+      set(w, h) {
+        if (w === inst.pageW && h === inst.pageH) return;
+        inst.pageW = w;
+        inst.pageH = h;
+        // The kept layout carries the old page box; the next pass makes one.
+        inst.layout = undefined;
+      },
+    };
+  }
+  return null;
+}
+
+/**
+ * How tall the demo's content is at this width: laid out on a tall page and
+ * measured off the display list. The page's own background and anything as
+ * tall as the probe page (a clip, a full-height column) are not content. The
+ * margin above the content is kept below it too, capped, so a demo that
+ * centres its card still has it centred.
+ */
+const PROBE_H = 4000;
+function contentHeight(d, sizer, w) {
+  sizer.set(w, PROBE_H);
+  const list = JSON.parse(d.list());
+  let top = Infinity;
+  let bottom = 0;
+  for (let i = 1; i < list.cmds.length; i++) {
+    const c = list.cmds[i];
+    if (c.k !== 0 && c.k !== 1 && c.k !== 3) continue;
+    if (!(c.h > 0) || c.h >= PROBE_H - 1) continue;
+    top = Math.min(top, c.y);
+    bottom = Math.max(bottom, c.y + c.h);
+  }
+  if (!Number.isFinite(top)) return 0;
+  const margin = Math.min(Math.max(top, 12), 32);
+  return Math.ceil(bottom - top + margin * 2);
+}
+
+/**
+ * Size the demo for the room and say how: `{ w, h, s }`, the page it is laid
+ * out at and the scale it is shown at.
+ */
+function fitDemo(d, inst) {
+  const name = state.which;
+  const sizer = pageSizer(d, inst);
+  const authoredH = typeof d.height === "function" ? d.height() : d.height;
+  const room = roomWidth();
+  if (!sizer) {
+    const w = typeof d.width === "function" ? d.width() : (inst && inst.pageW) || W;
+    return { w, h: authoredH, s: scaleFor(room, w) };
+  }
+  if (!naturalSize[name]) naturalSize[name] = sizer.get();
+  const [natW, natH] = naturalSize[name];
+  const cfg = NARROW[name];
+  // Reflowed only where the narrow rules apply: every demo's sheet writes
+  // them under `@media (max-width: 600px)`, and above that its desktop layout
+  // is fixed-width and is scaled instead.
+  if (!cfg || !room || (!cfg.grow && (room >= natW || room > NARROW_AT))) {
+    // Put back only what `fitDemo` itself changed. A demo may grow its own
+    // page (controls, profile, a validation error pushing rows down), and
+    // writing the authored height over that every paint would undo it and
+    // relayout every frame. The height is read after the layout, in `paint`.
+    if (resized.has(name)) {
+      resized.delete(name);
+      sizer.set(natW, natH);
+    }
+    return { w: sizer.get()[0], h: natH, s: scaleFor(room, natW), own: true };
+  }
+  resized.add(name);
+  // `grow`: a demo whose authored width is only a canvas size (the three kept
+  // trees were 1240 wide whatever they drew) is laid out at the room instead
+  // of being scaled to it — on a desktop as well as a phone.
+  const w = Math.round(Math.max(cfg.min, Math.min(room, natW)));
+  let h = natH;
+  if (cfg.h === "auto") {
+    // Measured once per width, with the demo as it first shows: re-measuring
+    // on every change would make the page jump as menus open and close.
+    const key = `${name}:${w}`;
+    if (!fittedHeight.has(key)) {
+      const measured = contentHeight(d, sizer, w);
+      // `keep`: never shorter than authored, for a demo whose overlays
+      // (menus, popovers) are placed inside the page and need the room they
+      // had. The rest lose the empty space below their content.
+      const floor = cfg.keep ? natH : 0;
+      fittedHeight.set(key, w < natW && measured > 0 ? Math.max(floor, measured) : natH);
+    }
+    h = fittedHeight.get(key);
+  } else if (typeof cfg.h === "number" && w < natW) {
+    h = cfg.h;
+  } else if (cfg.h === "own") {
+    // The demo sizes its own page to what it laid out (controls, profile):
+    // only the width is ours, and the height is read back after the layout
+    // (`paint` asks `height()` again once the list is built).
+    sizer.set(w, sizer.get()[1]);
+    return { w, h: sizer.get()[1], s: scaleFor(room, w), own: true };
+  }
+  sizer.set(w, h);
+  return { w, h, s: scaleFor(room, w) };
+}
+
+function scaleFor(room, w) {
   if (!room || room >= w) return 1;
   return Math.max(MIN_SCALE, room / w);
 }
@@ -1754,22 +2010,20 @@ function press(x, y, ev) {
   syncTextSession();
 }
 
+let lastDoc = null;
 function paint() {
   try {
-    errEl.textContent = "";
     const d = demo();
     if (d.sync) d.sync();
-    const H = typeof d.height === "function" ? d.height() : d.height;
-    // The demo's OWN page width when it has one. The page used to give every
-    // demo a 1240-wide canvas whatever it laid out at, so a 900-wide dropdown
-    // was drawn onto 340px of empty surface — invisible on a desktop and, once
-    // the stage is scaled to fit a phone, a third of the width thrown away
-    // before the picture is shrunk to what is left.
+    // The demo's OWN page size, fitted to the room — see `fitDemo`. The page
+    // used to give every demo a 1240-wide canvas whatever it laid out at, so
+    // a 900-wide dropdown was drawn onto 340px of empty surface.
     const inst = instance();
-    const W2 = typeof d.width === "function"
-      ? d.width()
-      : (inst && inst.pageW) || W;
+    const fitted = fitDemo(d, inst);
+    const { w: W2, s } = fitted;
     const listJson = d.list();
+    // A demo that sizes its own page has only now, laid out, said how tall.
+    const H = fitted.own ? (typeof d.height === "function" ? d.height() : d.height) : fitted.h;
     // The last frame's display list, for anything driving this page from
     // outside: a browser check needs the COLOUR a control was painted, and
     // only the list knows that. The playground exposes its host for the same
@@ -1803,8 +2057,7 @@ function paint() {
     // scaled to 0.43 on a phone with a 3x screen still wants 1.3 device pixels
     // per app pixel, not 3, and asking for 3 is three times the fill rate for a
     // picture nobody can see the difference in.
-    const s = stageScale(W2);
-    const dpr = Math.min(2, (window.devicePixelRatio || 1) * s);
+    const dpr = Math.min(2, (window.devicePixelRatio || 1) * s) * (d.continuous ? budget.quality : 1);
     canvas.style.width = W2 + "px";
     canvas.style.height = H + "px";
     canvas.width = Math.round(W2 * dpr);
@@ -1829,13 +2082,17 @@ function paint() {
       preserveDrawingBuffer: true,
     });
     if (!gl) throw new Error("WebGL 2 is not available in this browser");
-    document.fonts.ready.then(() =>
-      Promise.all(
-        doc.list.cmds
-          .filter((c) => c.text)
-          .map((c) => document.fonts.load(`${c.size}px "${c.font}"`)),
-      ).then(() => renderDisplayList(gl, doc, { dpr })),
-    );
+    // Drawn again once a face that was still loading has arrived. Only then:
+    // repainting every frame twice doubled the cost of every animation, which
+    // on software GL is the difference between slow and unusable.
+    const faces = [...new Set(doc.list.cmds.filter((c) => c.text).map((c) => `${c.size}px "${c.font}"`))];
+    if (faces.some((f) => !document.fonts.check(f))) {
+      document.fonts.ready.then(() =>
+        Promise.all(faces.map((f) => document.fonts.load(f)))
+          .then(() => { if (lastDoc === doc) renderDisplayList(gl, doc, { dpr }); }),
+      );
+    }
+    lastDoc = doc;
     // What the renderer did with this frame, published beside the list for the
     // same reason: something outside the page needs to be able to ask, and a
     // check that only reads the display list cannot tell whether the picture
@@ -1860,8 +2117,9 @@ function paint() {
     kbAfterPaint(tree);
     syncControls();
     inspectorTick();
+    clearError("the paint");
   } catch (e) {
-    errEl.textContent = String((e && e.stack) || e);
+    reportError(e, "the paint");
   }
 }
 
@@ -1949,7 +2207,7 @@ function watchCss() {
       if (inspector) inspector.refresh();
       console.log(`css reloaded: ${msg.file} (${text.length} bytes)`);
     } catch (e) {
-      errEl.textContent = "css reload failed: " + e.message;
+      reportError(e, "a stylesheet reload");
     }
   };
   // A dropped stream is not an error worth shouting about — EventSource
@@ -2461,7 +2719,7 @@ let grabCursor = "";
 canvas.tabIndex = -1;
 canvas.style.outline = "none";
 
-canvas.addEventListener("pointerdown", (ev) => {
+listen(canvas, "pointerdown", "a press", (ev) => {
   // The thing you clicked gets the focus. Without this the sidebar radio that
   // chose the demo keeps it, and on a page whose keys go to `window` that is
   // indistinguishable from a demo that ignores the keyboard.
@@ -2487,7 +2745,7 @@ canvas.addEventListener("pointerdown", (ev) => {
   }
   press(ev.offsetX, ev.offsetY, ev);
 });
-canvas.addEventListener("pointermove", (ev) => {
+listen(canvas, "pointermove", "a pointer move", (ev) => {
   const d = demo();
   const id = hitAt(ev.offsetX, ev.offsetY);
   setCursor(id, ev.offsetX, ev.offsetY);
@@ -2527,13 +2785,13 @@ canvas.addEventListener("pointermove", (ev) => {
 // `click` and `dblclick` carry 1 and 2. (And `preventDefault()` on the
 // pointerdown does NOT suppress them, which was the reason given for reading
 // the count instead; that reason was wrong.)
-canvas.addEventListener("dblclick", (ev) => {
+listen(canvas, "dblclick", "a double-click", (ev) => {
   const d = demo();
   if (!d.dblclick) return;
   if (d.dblclick(hitAt(ev.offsetX, ev.offsetY), ev.offsetX, ev.offsetY)) paint();
   syncTextSession();
 });
-canvas.addEventListener("pointerup", () => {
+listen(canvas, "pointerup", "a release", () => {
   const d = demo();
   if (d.rippleEnd) d.rippleEnd();
   const h = d.host && d.host();
@@ -2547,7 +2805,7 @@ canvas.addEventListener("pointerup", () => {
   if (d.drop()) paint();
   syncTextSession();
 });
-canvas.addEventListener("pointerleave", () => {
+listen(canvas, "pointerleave", "the pointer leaving", () => {
   const d = demo();
   setCursor("");
   let changed = d.hover("");
@@ -2563,7 +2821,7 @@ canvas.addEventListener("pointerleave", () => {
 // from scrolling underneath it — and `scroll` returning false (already at an
 // end) lets the window have the gesture back, which is what a nested scroll
 // area is supposed to do.
-canvas.addEventListener("wheel", (ev) => {
+listen(canvas, "wheel", "a scroll", (ev) => {
   const d = demo();
   if (!d.scroll) return;
   if (!d.scroll(ev.deltaY)) return;
@@ -2603,7 +2861,7 @@ const consumesText = (el) => {
     el.isContentEditable;
 };
 
-window.addEventListener("keydown", (ev) => {
+listen(window, "keydown", "a key", (ev) => {
   if (consumesText(ev.target)) return;
   const d0 = demo();
   // Keys reach the demo only while the keyboard is IN it, and Tab is the
@@ -2646,7 +2904,7 @@ window.addEventListener("keydown", (ev) => {
 const textInput = createTextInputBridge({
   host: stage,
   canvas,
-  onEdit: ({ value, selStart, selEnd }) => {
+  onEdit: guard(({ value, selStart, selEnd }) => {
     const d = demo();
     const s = d.textSession;
     if (!s) return;
@@ -2661,12 +2919,12 @@ const textInput = createTextInputBridge({
     // which is one of the things this bridge exists to inherit.
     const after = s.state(tid);
     if (after && after.value !== value) textInput.sync(after);
-  },
+  }, "typing"),
   // Keys the APPLICATION owns rather than the field. Everything else — every
   // arrow, Home, End, Ctrl+Arrow, Backspace over an emoji — stays with the
   // proxy on purpose: those are precisely the platform rules this exists to
   // borrow, and intercepting them here would be reimplementing them again.
-  onKey: (k) => {
+  onKey: guard((k) => {
     const d = demo();
     // Three keys are the application's on every page, and a demo may claim
     // more for the field that has the focus: the combobox wants its arrows,
@@ -2678,9 +2936,14 @@ const textInput = createTextInputBridge({
     const took = d.keyWith ? d.keyWith(k.key, k.shiftKey, k.ctrlKey || k.metaKey, k.altKey) : false;
     // Focus may have moved to another field, or off the fields entirely.
     syncTextSession();
-    if (took) paint();
+    if (took) {
+      paint();
+      // A key can start something that moves on its own — Enter in the
+      // message composer sends, and the reply comes on the demo's clock.
+      if (d.animated) animate();
+    }
     return took;
-  },
+  }, "a key in a text field"),
 });
 
 /**
@@ -2727,6 +2990,7 @@ window.__resetDemo = (name) => {
   else if (name === "controls") { controls = new ControlsDemo(); controls.init(CONTROLS_CSS); lastControlsHover = ""; }
   else if (name === "otp") { otp = new OtpDemo(); otp.init(OTP_CSS); lastOtpHover = ""; }
   else if (name === "metadata") { metadata = new MetadataDemo(); metadata.init(METADATA_CSS); lastMetadataHover = ""; }
+  else if (name === "message") { message = new MessageDemo(); message.init(MESSAGE_CSS); lastMessageHover = ""; }
   else if (name === "dialog") {
     dialog = new DialogDemo(); dialog.init(DIALOG_CSS); dialog.openWindow(); dialog.openModal();
     lastDialogHover = ""; dialogDragAt = null;
@@ -2760,9 +3024,10 @@ window.__resetDemo = (name) => {
 //     (a text field gets one however it was focused, as :focus-visible does).
 //
 // A demo with a Tab ring of its own (`ownsTab`: the form, the profile card,
-// the metadata card, the OTP boxes, the calendar) is asked first — its ring
-// knows things the tree does not, such as a date field's segments — and says
-// "not mine" at its ends, which is where this takes over and leaves.
+// the metadata card, the OTP boxes, the calendar, the event calendar, the
+// transcript, the dialog) gets the Tab instead — its ring knows things the
+// tree does not, such as a date field's segments or a modal's trap — and
+// says "not mine" at its ends, which is where this leaves the canvas.
 //
 // Every mirror element that is a stop gets tabindex=0 and every other one -1,
 // so a Tab from the page ENTERS at the first stop and a Shift+Tab from below
@@ -2869,9 +3134,9 @@ function kbStops(tree, focusId) {
 }
 
 /** Where a Tab goes from here, or null for "out of the canvas". */
-function kbTarget(back) {
+function kbTarget(back, from) {
   const tree = lastTree;
-  const focus = kbFocusId();
+  const focus = from === undefined ? kbFocusId() : from;
   const stops = kbStops(tree, focus);
   if (!stops.length) return null;
   const node = kbNode(focus);
@@ -2942,11 +3207,22 @@ function kbEscapePopups() {
 function kbTab(back) {
   const d = demo();
   kbEscapePopups();
-  if (d.ownsTab && kbDemoKey("Tab", back)) {
-    kbSettle();
-    return true;
+  // Where the Tab starts FROM. A demo whose ring lets go at its end also
+  // clears its focus as it does, and walking on from "nothing focused" would
+  // put the Tab straight back on the first stop.
+  const from = kbFocusId();
+  if (d.ownsTab) {
+    if (kbDemoKey("Tab", back)) {
+      kbSettle();
+      return true;
+    }
+    // A ring that lets go is at ITS end, and it knows its order better than
+    // the tree does (the dialog's window is built before the trigger drawn
+    // left of it), so the Tab leaves rather than walking the tree on.
+    kbLeave();
+    return false;
   }
-  const next = kbTarget(back);
+  const next = kbTarget(back, from);
   if (next) {
     kbSetFocus(next.id);
     kbSettle();
@@ -3267,31 +3543,140 @@ function clockOf() {
   return { tick: (dt) => motion.tick(dt), busy: () => motion.busyNow() };
 }
 
-function animate() {
+/**
+ * The frame budget.
+ *
+ * A demo whose clock never stops — the effects page, where a starfield
+ * drifts forever — asks for a frame every vsync. On a GPU that is nothing; on
+ * software GL (a headless browser, a VM, an old laptop) one frame of those
+ * shaders takes seconds, and a page that asks for the next one as soon as
+ * the last lands starves everything else on the main thread: timers fire
+ * fifteen seconds late, input queues, a screenshot never arrives.
+ *
+ * So the loop measures what each frame cost (vsync to vsync). Three frames over budget and a
+ * `continuous` demo is drawn at half resolution; three more and its ambient
+ * motion is paused on the frame it reached, with a note saying so. Input
+ * still animates — a press starts the loop for `INPUT_GRACE_MS` so a ripple
+ * travels — and then the page is still again. `prefers-reduced-motion`
+ * starts there: one static frame, and motion only in answer to input.
+ */
+const FRAME_BUDGET_MS = 60;
+const INPUT_GRACE_MS = 1500;
+const reducedMotion = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+const budget = { quality: 1, slow: 0, paused: reducedMotion, until: 0 };
+window.__frameBudget = budget;
+
+function noteBudget(cost) {
+  if (budget.paused) return;
+  budget.slow = cost > FRAME_BUDGET_MS ? budget.slow + 1 : Math.max(0, budget.slow - 1);
+  if (budget.slow < 3) return;
+  budget.slow = 0;
+  if (budget.quality > 0.5) {
+    budget.quality = 0.5;
+  } else {
+    budget.paused = true;
+    // The still frame is shown at full resolution: half resolution was a
+    // price for motion, and there is no motion now.
+    budget.quality = 1;
+    showBudgetNote();
+    requestAnimationFrame(() => paint());
+  }
+}
+
+function showBudgetNote() {
+  const el = document.getElementById("budgetnote");
+  if (!el) return;
+  el.hidden = !(budget.paused && demo() && demo().continuous);
+  el.textContent = reducedMotion
+    ? "Reduced motion: the background is still. Press a card to see its effect."
+    : "Paused: this device draws the effects too slowly to animate them. Press a card to see its effect.";
+}
+
+function animate(fromInput = true) {
+  const d = demo();
+  if (d && d.continuous && budget.paused) {
+    // Paused ambient motion: only an input runs the clock, and only briefly.
+    if (!fromInput) return;
+    budget.until = performance.now() + INPUT_GRACE_MS;
+  }
   if (animating) return;
-  const clock = clockOf();
   let last = performance.now();
   const step = () => {
     const now = performance.now();
     const dt = now - last;
     last = now;
+    // The clock of the demo showing NOW, asked every frame. Captured once,
+    // a loop started on the effects page (whose clock never stops) went on
+    // ticking the sky after the page had moved to the dashboard, and the
+    // dashboard's own clock — its ripple — was never advanced at all.
+    const clock = clockOf();
     clock.tick(dt);
     paint();
-    animating = clock.busy() ? requestAnimationFrame(step) : 0;
+    const dd = demo();
+    const continuous = !!(dd && dd.continuous);
+    // The interval between frames, not the time in `paint`: the GL work is
+    // queued there and paid when the frame is composited, so a paint that
+    // returns in 5ms can still be a frame that took two seconds.
+    if (continuous) noteBudget(Math.max(dt, performance.now() - now));
+    let more = clock.busy();
+    if (continuous && budget.paused && now > budget.until) more = false;
+    animating = more ? requestAnimationFrame(step) : 0;
   };
   animating = requestAnimationFrame(step);
 }
 
-function startFlipping() {
+// How many times the page turns the theme over before it stops and waits for
+// Replay: there, back, and there again, so the rows end at rest where they
+// arrived. Not forever: every frame of this page is a 1180x1640 repaint, and a
+// loop that never ends is a page that never goes idle — measured headless on
+// software GL, about one frame a second. Replay is how to see it again.
+const FLIPS = 3;
+let flipsLeft = 0;
+
+function startFlipping(n = FLIPS) {
   stopFlipping();
+  flipsLeft = n;
+  if (flipsLeft <= 0) return;
   // Long enough for the slowest row (900ms plus the 360ms delay) to arrive and
   // be looked at before it leaves again.
   flipTimer = setInterval(() => {
+    flipsLeft -= 1;
     motion.setFlipped(!motion.isFlipped());
     paint();
     animate();
+    if (flipsLeft <= 0) {
+      clearInterval(flipTimer);
+      flipTimer = 0;
+    }
   }, 1700);
 }
+
+/**
+ * Every journey back to its start, and off again.
+ *
+ * `motion.replay()` swaps in an unstyled tree, so this paint lands every dot
+ * where the unflipped sheet puts it without travelling; the flip on the NEXT
+ * frame is then a change the transitions see, and they all leave together.
+ * The 1.7 s cycle restarts from now, so the first return is a full cycle away
+ * rather than whatever was left of the old one, and it runs the same three
+ * flips a first visit does. Pressing it again mid-journey starts over.
+ */
+function replayMotion() {
+  if (state.which !== "motion") return false;
+  motion.replay();
+  paint();
+  // The first flip is the one on the next frame; the timer does the rest.
+  startFlipping(FLIPS - 1);
+  requestAnimationFrame(() => {
+    if (state.which !== "motion") return;
+    motion.setFlipped(true);
+    paint();
+    animate();
+  });
+  return true;
+}
+const motionReplayBtn = document.getElementById("motionreplay");
+if (motionReplayBtn) motionReplayBtn.addEventListener("click", () => replayMotion());
 
 function stopFlipping() {
   if (flipTimer) clearInterval(flipTimer);
@@ -3318,7 +3703,8 @@ function syncMotionClock() {
  */
 function startClock() {
   const d = DEMOS[state.which];
-  if (d && d.animated) animate();
+  showBudgetNote();
+  if (d && d.animated) animate(false);
 }
 
 // --- the live stylesheet ----------------------------------------------------

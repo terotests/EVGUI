@@ -20,6 +20,51 @@
   height: 560px;
 }
 
+/* --- the triggers -----------------------------------------------------------------
+   A row of their own above the sheet. Without a rule they were bare text under
+   the card. The WINDOW's root comes first in the tree, so that the modal —
+   reached later — paints over it; it is placed at the right of "Edit profile"
+   by hand so the row still reads "Edit profile, Filters". (`row-reverse` would
+   say that in one word; EVG lays these out in tree order regardless.) */
+.dg-actions {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  height: 36px;
+  margin-bottom: 14px;
+}
+
+.ui-dialog { display: flex; flex-direction: row; }
+
+.ui-window {
+  position: absolute;
+  left: 122px;
+  top: 0px;
+  display: flex;
+  flex-direction: row;
+}
+
+.ui-dialog-trigger, .ui-window-trigger {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background-color: #ffffff;
+  color: #18181b;
+  font-size: 14px;
+  text-align: center;
+  line-height: 34px;
+  width: 112px;
+  height: 36px;
+  cursor: pointer;
+  transition: background-color 120ms ease-out, border-color 120ms ease-out;
+}
+
+.ui-dialog-trigger:hover, .ui-window-trigger:hover { background-color: #f4f4f5; }
+.ui-dialog-trigger:focus, .ui-window-trigger:focus { border-color: #18181b; }
+
 /* --- the page underneath -------------------------------------------------------
    Something worth softening. A scrim over a blank page proves nothing about a
    blur, so there is a list of names under it with hard edges and colour. */
@@ -121,6 +166,7 @@
 }
 
 .ui-dialog-close:hover { background-color: #f4f4f5; }
+.ui-dialog-close:focus { background-color: #e4e4e7; }
 
 .ui-dialog-description {
   color: #71717a;
@@ -215,6 +261,7 @@
 }
 
 .ui-window-close:hover { background-color: #e4e4e7; }
+.ui-window-close:focus { background-color: #d4d4d8; }
 
 /* 14px each side, the same indent the handle gives the title — so the rows
  * below line up with the window's name instead of starting at its border.
@@ -237,8 +284,12 @@
 
 .dg-label { color: #09090b; font-size: 14px; font-weight: bold; height: 20px; }
 
+/* `flex-direction: row` is load-bearing: EVG's flex default is COLUMN (as in
+ * Yoga), not CSS's row, so without it `align-items: center` centred the value
+ * sideways and left it stuck to the top of the 40px box. */
 .dg-input {
   display: flex;
+  flex-direction: row;
   align-items: center;
   border: 1px solid #e4e4e7;
   border-radius: 8px;
@@ -250,7 +301,7 @@
 }
 
 .dg-input:hover { border-color: #d4d4d8; }
-.dg-input:focus { border-color: #a1a1aa; }
+.dg-input:focus { border-color: #18181b; }
 
 .dg-input-text { color: #18181b; font-size: 14px; width: 340px; height: 20px; }
 
@@ -282,6 +333,7 @@
 }
 
 .dg-button-ghost:hover { background-color: #f4f4f5; }
+.dg-button-ghost:focus { border-color: #18181b; }
 
 .dg-button-solid {
   background-color: #18181b;
@@ -289,6 +341,7 @@
 }
 
 .dg-button-solid:hover { background-color: #3f3f46; }
+.dg-button-solid:focus { background-color: #3f3f46; }
 
 .dg-button-text {
   color: #18181b;
@@ -333,3 +386,15 @@
   width: 262px;
   height: 20px;
 }
+
+/* Single-line text sits in the middle of its box: the line box is the box.
+   Without it a 22px box holding a 16px line puts the line at the top, which
+   with a face whose normal line is 18px drew every label 2px high. */
+.dg-sheet-head { line-height: 24px; }
+.dg-sheet-cell { line-height: 20px; }
+.ui-dialog-title { line-height: 26px; }
+.ui-window-title { line-height: 20px; }
+.dg-label { line-height: 20px; }
+.dg-input-text { line-height: 20px; }
+.dg-button-text { line-height: 20px; }
+.dg-mini-cell { line-height: 20px; }

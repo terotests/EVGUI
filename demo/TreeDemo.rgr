@@ -67,6 +67,10 @@ treefactory Tv {
     tag Item     EVGElement (props (className "tv-item") (role "treeitem"))
     tag Indent   EVGElement (props (className "tv-indent") (a11yHidden true))
     tag Chevron  EVGElement (props (className "tv-chevron") (elementType 1) (a11yHidden true))
+    ; The expander, drawn: a font's "−", "+", "▸" came out tiny and sitting
+    ; above the label's middle. Lucide's chevron-right / chevron-down / plus /
+    ; minus, at the label's size.
+    tag Expander EVGElement (props (className "tv-expander") (tagName "path") (elementType 3) (viewBox "0 0 24 24") (a11yHidden true))
     ; The box. It has an ID — that is the whole mechanism by which a click on
     ; it is not a click on the row: `EVGHitTest.idAt` answers with the
     ; DEEPEST element that has one, so there is nothing to stop propagating.
@@ -137,6 +141,22 @@ class TreeRow extends EVGComponent {
         return "▸"
     }
 
+    sfn chevronPath:string (folder:boolean open:boolean icon:int) {
+        if (folder == false) {
+            return ""
+        }
+        if (icon == 1) {
+            if open {
+                return "M5 12h14"
+            }
+            return "M5 12h14M12 5v14"
+        }
+        if open {
+            return "M6 9l6 6 6-6"
+        }
+        return "M9 18l6-6-6-6"
+    }
+
     fn rowClass:string () {
         def cls:string "tv-item"
         if isFolder {
@@ -193,8 +213,12 @@ class TreeRow extends EVGComponent {
             row.addChild(pad)
         }
 
-        def glyph:string (TreeRow.chevronGlyph(isFolder isOpen toggleIcon))
-        row.addChild((tree Tv (Chevron glyph)))
+        def glyph:string (TreeRow.chevronPath(isFolder isOpen toggleIcon))
+        if ((strlen glyph) > 0) {
+            row.addChild((tree Tv (Expander (props (svgPath glyph)))))
+        } {
+            row.addChild((tree Tv (Chevron "")))
+        }
         if checkable {
             ; `aria-checked` goes on the ROW, not on the box. WAI-ARIA's
             ; tree-with-checkboxes pattern has one widget per row and no

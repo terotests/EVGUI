@@ -172,3 +172,22 @@
   color: rgb(126, 134, 172);
   font-size: 12px;
 }
+
+/* --- a phone ------------------------------------------------------------------
+   Laid out at the preview's width (main.js `fitDemo`): the pane moves under
+   the headline and the two cards stack. */
+@media (max-width: 600px) {
+  .fx-page { width: 100%; height: auto; }
+  .fx-sky { width: 100%; height: 420px; }
+  .fx-headline { left: 16px; top: 20px; font-size: 22px; }
+  .fx-lead { left: 16px; right: 16px; top: 56px; width: auto; font-size: 13px; line-height: 20px; }
+  .fx-glass { left: 16px; right: 16px; top: 190px; width: auto; height: 200px; border-radius: 24px; }
+  .fx-glass-title { left: 20px; top: 22px; }
+  .fx-glass-sub { left: 20px; top: 60px; }
+  .fx-glass-sub2 { top: 82px; }
+  .fx-glass-sub3 { top: 104px; }
+  .fx-row { flex-direction: column; gap: 16px; padding: 16px 16px 0px 16px; }
+  .fx-pool { width: 100%; }
+  .fx-card { width: 100%; }
+  .fx-foot { padding: 16px 16px 16px 16px; }
+}

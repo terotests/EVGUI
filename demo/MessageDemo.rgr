@@ -37,20 +37,35 @@
 ; group's adjacent corners tighten (both bubbles look fully rounded), and any
 ; timestamp or delivery state other than the single word "Delivered".
 ;
-; --- WHY THERE IS NO MessageCtl ----------------------------------------------
+; --- WHAT IS LIVE, AND WHOSE IT IS -----------------------------------------
 ;
-; Because there is nothing to control. A transcript is a list of records; the
-; only interactive thing on the page is a reaction, and the reference's is a
-; `<span>`. `TreeCtl` exists because arrows and drop targets are hard; putting
-; a list of messages behind a controller would be ceremony.
+; The transcript can be written to. A composer at the bottom is an `InputCtl`
+; behind the page's platform text session — the same seam the invoice form and
+; the profile card use, so IME, paste, undo and the caret are the browser's —
+; and Enter or the Send button appends an outgoing bubble.
+;
+; Where the transcript is scrolled to is `ScrollerCtl`'s decision, not this
+; file's: pinned to the bottom while the reader is at the bottom, left alone
+; once they scroll up, and a "Jump to newest" button while something arrived
+; that they have not seen. This file only measures the viewport and hands the
+; numbers over.
+;
+; The other side answers on a clock: a short pause, then a typing bubble with
+; three pulsing dots and the "Oliver is typing" line, then a canned reply. The
+; clock is `tick`, so the page's own frame loop drives it and a headless check
+; can step it deterministically.
+;
+; Still no MessageCtl: the records are two arrays and the only rules — who
+; speaks next and when — are a few lines of timer.
 ; =============================================================================
 
+Import "../src/InputCtl.rgr"
+Import "../src/ScrollerCtl.rgr"
 Import "pkg:evg/EVGElement.rgr"
 Import "pkg:evg/EVGUnit.rgr"
 Import "pkg:evg/EVGLayout.rgr"
 Import "pkg:evg/EVGDisplayList.rgr"
 Import "pkg:evg/EVGStyleSheet.rgr"
-Import "pkg:evg/EVGTransition.rgr"
 Import "pkg:evg/EVGA11yTree.rgr"
 Import "pkg:evg/EVGA11yFromTree.rgr"
 Import "pkg:evg/EVGHitTest.rgr"
@@ -61,6 +76,11 @@ treefactory Msg {
     text  textContent
 
     tag Page      EVGElement (props (className "ms-page"))
+    ; The scroll container and the box around it. The frame is what the
+    ; "Jump to newest" button is positioned in, so it stays put while the
+    ; transcript moves under it.
+    tag Frame     EVGElement (props (className "ms-frame"))
+    tag Viewport  EVGElement (props (className "ms-viewport"))
     tag Thread    EVGElement (props (className "ms-thread") (role "log") (a11yLabel "Conversation"))
     tag Row       EVGElement (props (className "ms-row"))
     tag RowEnd    EVGElement (props (className "ms-row ms-row-end"))
@@ -88,18 +108,42 @@ treefactory Msg {
     tag BubbleM   EVGElement (props (className "ms-bubble ms-bubble-muted") (role "text"))
     tag BubbleTx  EVGElement (props (className "ms-bubble-text") (elementType 1))
     tag BubbleTxM EVGElement (props (className "ms-bubble-text ms-bubble-text-muted") (elementType 1))
+    ; The other side's typing bubble. Hidden from a reader: the marker line
+    ; under the transcript is the live region that SAYS they are typing, and
+    ; announcing three dots as well would say it twice.
+    tag Typing    EVGElement (props (className "ms-bubble ms-bubble-muted ms-typing") (a11yHidden true))
+    tag TDot      EVGElement (props (className "ms-tdot") (a11yHidden true))
     ; Carriers too, for the same reason as the bubble. "Delivered" is a claim
     ; about the message and the reaction is a fact about it; a transcript that
     ; announces neither has dropped both.
     tag React     EVGElement (props (className "ms-react") (role "text"))
     tag ReactTx   EVGElement (props (className "ms-react-text") (elementType 1) (a11yHidden true))
     tag Footer    EVGElement (props (className "ms-footer") (elementType 1) (role "text"))
-    ; `role="status"` is the reference's own, and it is the only behaviour in
-    ; the component: a polite live region, so "Oliver is typing…" is announced
-    ; without interrupting whatever is being read.
+    ; `role="status"` is the reference's own: a polite live region, so
+    ; "Oliver is typing" is announced without interrupting whatever is being
+    ; read. It stays in the tree when nobody is typing — a live region that
+    ; appears together with its first message is one a reader often misses.
     tag Marker    EVGElement (props (className "ms-marker") (role "status"))
-    tag MarkerTx  EVGElement (props (className "ms-marker-text") (elementType 1))
-    tag MarkerWho EVGElement (props (className "ms-marker-who") (elementType 1))
+    tag MarkerTx  EVGElement (props (className "ms-marker-text") (elementType 1) (a11yHidden true))
+    tag MarkerWho EVGElement (props (className "ms-marker-who") (elementType 1) (a11yHidden true))
+    tag MDots     EVGElement (props (className "ms-mdots") (a11yHidden true))
+    tag MDot      EVGElement (props (className "ms-mdot") (a11yHidden true))
+
+    ; The composer.
+    tag Composer  EVGElement (props (className "ms-composer"))
+    tag Box       EVGElement (props (className "ms-box") (role "textbox"))
+    ; The window the text run slides in: the box's content area and nothing
+    ; more, so a scrolled draft is cut at the padding and not at the border.
+    tag Clip      EVGElement (props (className "ms-clip") (a11yHidden true))
+    tag Run       EVGElement (props (className "ms-run") (elementType 1) (a11yHidden true))
+    tag Ghost     EVGElement (props (className "ms-run ms-ghost") (elementType 1) (a11yHidden true))
+    tag Caret     EVGElement (props (className "ms-caret") (a11yHidden true))
+    tag Band      EVGElement (props (className "ms-band") (a11yHidden true))
+    tag Send      EVGElement (props (className "ms-send") (role "button"))
+    tag SendOff   EVGElement (props (className "ms-send ms-send-off") (role "button"))
+    tag SendTx    EVGElement (props (className "ms-send-text") (elementType 1) (a11yHidden true))
+    tag ToBottom  EVGElement (props (className "ms-tobottom") (role "button"))
+    tag ToBottomTx EVGElement (props (className "ms-tobottom-text") (elementType 1) (a11yHidden true))
 }
 
 class MessageDemo {
@@ -108,13 +152,53 @@ class MessageDemo {
     def measurer:EVGLayout (new EVGLayout())
     def root@(optional):EVGElement
     def sheet@(optional):EVGStyleSheet
-    def transitions:EVGTransition (new EVGTransition())
     def layout@(optional):EVGLayout
     def hovered:string ""
     def pressed:string ""
     def focused:string ""
     def pageW:double 900.0
-    def pageH:double 420.0
+    def pageH:double 560.0
+
+    ; --- the live parts -------------------------------------------------------
+
+    ; The composer's field. The page's text session edits it; this file draws
+    ; it and decides what Enter means.
+    def input:InputCtl (new InputCtl())
+    ; Where the transcript is scrolled to, and whether it follows new messages.
+    def scroller:ScrollerCtl (new ScrollerCtl())
+    ; Messages added after the opening transcript. Two parallel arrays: the
+    ; text, and whether it is the local user's.
+    def addedText:[string]
+    def addedMine:[boolean]
+    ; The other side's clock. `waitMs` counts down to the typing bubble,
+    ; `typeMs` counts down to the reply; `owed` is how many replies are still
+    ; to come, so three quick sends are answered three times, one after another.
+    def waitMs:double 0.0
+    def typeMs:double 0.0
+    def typing:boolean false
+    def owed:int 0
+    def replyAt:int 0
+    ; Milliseconds since the dots started, for the pulse.
+    def phase:double 0.0
+    def dotEls:[EVGElement]
+    ; Whether the tree has the jump button in it, so a change of the scroller's
+    ; answer can be noticed and the tree rebuilt once.
+    def builtButton:boolean false
+    ; The tree was rebuilt since the last layout, so the next one is a full
+    ; layout and the scroller gets to look at the result.
+    def stale:boolean true
+
+    ; How long the other side pauses before typing, and how long it types.
+    def pauseMs:double 700.0
+    def typeForMs:double 1800.0
+
+    ; The composer's font, stated once and handed to the controller, because a
+    ; caret measured in one size and drawn in another is the mistake this
+    ; codebase has made twice. `message.css` says the same on `.ms-run`.
+    def boxFont:string "Arial"
+    def boxFontSize:double 15.0
+    ; The text run's visible width inside the box, after its padding.
+    def boxTextW:double 318.0
 
     Constructor () {
     }
@@ -123,13 +207,24 @@ class MessageDemo {
     ; measurer, because a bubble measured at one size and drawn at another is
     ; the mistake this codebase has now made twice — with the font family in
     ; the breadcrumb and with the size in the invoice form.
-    def bubbleFont:string "system-ui"
+    ;
+    ; It is the ENGINE'S DEFAULT face, because the sheet names no family for
+    ; bubble text and that is what the painter draws it in. This said
+    ; "system-ui" and the painter drew Noto Sans: close enough on one line,
+    ; and a wrapped reply measured as fitting was drawn as two lines in a
+    ; one-line bubble.
+    def bubbleFont:string "Noto Sans"
     def bubbleSize:double 16.0
-    ; 12px of padding either side, and the widest a bubble may get before its
+    ; 20px of padding either side, and the widest a bubble may get before its
     ; text has to wrap. Both are the stylesheet's numbers, repeated here for
     ; the arithmetic — which `messageWidths` in the check keeps honest.
     def bubblePadX:double 20.0
     def bubbleMaxW:double 300.0
+    ; One line of bubble text, and the bubble's height for one line.
+    ; Each further line adds the engine's line height, 1.15 of the size.
+    def lineH:double 18.4
+    def bubbleH1:double 48.0
+    def textH1:double 18.4
 
     fn engine:EVGTextEngine () {
         return (measurer.getTextEngine())
@@ -168,11 +263,63 @@ class MessageDemo {
         return m.width
     }
 
+    ; How many lines `text` takes at `width`, breaking at spaces the way the
+    ; painter does: greedily, a word at a time. A typed message can be longer
+    ; than a bubble is wide, and a one-line bubble with three lines of text in
+    ; it draws the last two over the next message.
+    fn lineCount:int (text:string width:double) {
+        def eng:EVGTextEngine (this.engine())
+        def lines:int 1
+        def line:string ""
+        def word:string ""
+        def i:int 0
+        def n:int (strlen text)
+        while (i <= n) {
+            def ch:string " "
+            if (i < n) {
+                ch = (substring text i (i + 1))
+            }
+            if (ch == " ") {
+                if ((strlen word) > 0) {
+                    def cand:string word
+                    if ((strlen line) > 0) {
+                        cand = ((line + " ") + word)
+                    }
+                    def m:EVGTextMetrics (eng.measureRun(cand bubbleFont bubbleSize))
+                    if ((m.width > width) && ((strlen line) > 0)) {
+                        lines = (lines + 1)
+                        line = word
+                    } {
+                        line = cand
+                    }
+                    word = ""
+                }
+            } {
+                word = (word + ch)
+            }
+            i = (i + 1)
+        }
+        return lines
+    }
+
     fn init:void (css:string) {
         def s (new EVGStyleSheet())
         s.parse(css)
         sheet = s
-        root = (this.page())
+        input.tid = "ms-input"
+        input.name = "Message"
+        input.placeholder = "Write a message…"
+        input.fontFamily = boxFont
+        input.fontSize = boxFontSize
+        input.boxWidth = boxTextW
+        input.maxLength = 200
+        scroller.tid = "ms-scroller"
+        ; The page opens the way the reference screenshot does: Oliver typing.
+        ; His answer arrives on the clock like any other.
+        typing = true
+        typeMs = 2600.0
+        owed = 1
+        this.rebuild()
     }
 
     ; --- the pieces -----------------------------------------------------------
@@ -183,20 +330,33 @@ class MessageDemo {
     fn bubble:EVGElement (id:string text:string mine:boolean) {
         def w:double (this.bubbleWidth(text))
         def inner:double (w - (bubblePadX * 2.0))
+        ; Taller than one line only when the text has to wrap. The five
+        ; opening bubbles are all one line, and the gate holds them to 48.
+        def lines:int 1
+        if (w >= bubbleMaxW) {
+            lines = (this.lineCount(text (inner - 1.0)))
+        }
+        def more:double (lineH * (to_double (lines - 1)))
+        def textH:double (textH1 + more)
+        def boxH:double (bubbleH1 + more)
         ; The text element is pulled into a name before its width is set:
         ; assigning to a field of a call result is not something this parser
         ; takes, and the error it gives is a bare "Parse error" with no line.
         if mine {
             def b (tree Msg (Bubble (props (id id)) (BubbleTx text)))
             b.width = (EVGUnit.px(w))
+            b.height = (EVGUnit.px(boxH))
             def t1:EVGElement (b.getChild(0))
             t1.width = (EVGUnit.px(inner))
+            t1.height = (EVGUnit.px(textH))
             return b
         }
         def b2 (tree Msg (BubbleM (props (id id)) (BubbleTxM text)))
         b2.width = (EVGUnit.px(w))
+        b2.height = (EVGUnit.px(boxH))
         def t2:EVGElement (b2.getChild(0))
         t2.width = (EVGUnit.px(inner))
+        t2.height = (EVGUnit.px(textH))
         return b2
     }
 
@@ -228,10 +388,9 @@ class MessageDemo {
         return (row.getChild(1))
     }
 
-    fn page:EVGElement () {
-        def page (tree Msg (Page))
-        def thread (tree Msg (Thread (props (id "ms-thread"))))
-
+    ; The opening transcript: the reference's five bubbles, its receipt and
+    ; its reaction.
+    fn opening:void (thread:EVGElement) {
         def m1 (this.message("ms-m1" "ME" true))
         def c1:EVGElement (this.contentOf(m1 true))
         c1.addChild((this.bubble("ms-b1" "Deploying to prod real quick." true)))
@@ -272,38 +431,596 @@ class MessageDemo {
         def c4:EVGElement (this.contentOf(m4 false))
         c4.addChild(g4)
         thread.addChild(m4)
+    }
 
-        page.addChild(thread)
+    ; The three dots, as a list the clock can reach without walking the tree.
+    fn dots:EVGElement (id:string outer:EVGElement inner:boolean) {
+        def i:int 0
+        while (i < 3) {
+            def d:EVGElement (tree Msg (TDot (props (id ((id + "-") + (to_string i))))))
+            if (inner == false) {
+                d = (tree Msg (MDot (props (id ((id + "-") + (to_string i))))))
+            }
+            d.opacity = (this.dotOpacity(i))
+            outer.addChild(d)
+            push dotEls d
+            i = (i + 1)
+        }
+        return outer
+    }
 
-        ; The marker. A live region, and the only behaviour in the component.
+    ; A pulse that walks left to right: each dot is bright for a moment, one
+    ; after the other, and dim the rest of the cycle.
+    fn dotOpacity:double (i:int) {
+        def cycle:double 1200.0
+        def t:double (phase - ((to_double i) * 180.0))
+        while (t < 0.0) {
+            t = (t + cycle)
+        }
+        while (t >= cycle) {
+            t = (t - cycle)
+        }
+        def d:double (t - 300.0)
+        if (d < 0.0) {
+            d = (0.0 - d)
+        }
+        def pulse:double (1.0 - (d / 300.0))
+        if (pulse < 0.0) {
+            pulse = 0.0
+        }
+        return (0.3 + (0.7 * pulse))
+    }
+
+    ; The composer: a text field and a Send button.
+    fn composer:EVGElement () {
+        def row (tree Msg (Composer (props (id "ms-composer"))))
+        def box (tree Msg (Box (props (id input.tid) (a11yLabel input.name))))
+        box.a11yValue = input.value
+        box.a11yFocusable = true
+        box.a11yDescription = "Enter sends"
+        def eng:EVGTextEngine (this.engine())
+        def hasFocus:boolean (focused == input.tid)
+        if hasFocus {
+            if (input.hasSelection()) {
+                def s:double (input.caretXAt(eng (input.selStart())))
+                def e:double (input.caretXAt(eng (input.selEnd())))
+                def band (tree Msg (Band (props (id (input.tid + "-band")))))
+                band.left = (EVGUnit.px((s - input.scrollX)))
+                band.width = (EVGUnit.px((e - s)))
+                box.addChild(band)
+            }
+        }
+        ; The run is ABSOLUTE and shifted by the controller's scroll, so a
+        ; message longer than the box slides left under the caret instead of
+        ; running out of the box. Its id is deliberately not `ms-input-text`:
+        ; `InputCtl.indexAtPageX` would then take the shifted run as the
+        ; origin and add the scroll a second time.
+        def clip (tree Msg (Clip (props (id (input.tid + "-clip")))))
+        clip.position = "absolute"
+        clip.left = (EVGUnit.px(0.0))
+        clip.width = (EVGUnit.px((boxTextW + 2.0)))
+        if ((strlen input.value) == 0) {
+            def g (tree Msg (Ghost (props (id (input.tid + "-ghost"))) input.placeholder))
+            g.position = "absolute"
+            g.left = (EVGUnit.px(0.0))
+            g.width = (EVGUnit.px(boxTextW))
+            clip.addChild(g)
+        } {
+            def run (tree Msg (Run (props (id (input.tid + "-run"))) (input.glyphText())))
+            run.position = "absolute"
+            run.left = (EVGUnit.px((0.0 - input.scrollX)))
+            run.width = (EVGUnit.px(((input.textWidth(eng)) + 4.0)))
+            clip.addChild(run)
+        }
+        box.addChild(clip)
+        if hasFocus {
+            def cx:double (input.caretXAt(eng input.caret))
+            def car (tree Msg (Caret (props (id (input.tid + "-caret")))))
+            car.left = (EVGUnit.px((cx - input.scrollX)))
+            box.addChild(car)
+        }
+        row.addChild(box)
+        ; Send is always a button a reader can reach, and says so when there
+        ; is nothing to send rather than disappearing from the tab order.
+        def empty:boolean ((this.trimmed(input.value)) == "")
+        def send (tree Msg (Send (props (id "ms-send") (a11yLabel "Send") (a11yFocusable true))))
+        if empty {
+            send = (tree Msg (SendOff (props (id "ms-send") (a11yLabel "Send") (a11yFocusable true) (a11yDisabled true))))
+        }
+        send.addChild((tree Msg (SendTx "Send")))
+        row.addChild(send)
+        return row
+    }
+
+    fn page:EVGElement () {
+        def empty:[EVGElement]
+        dotEls = empty
+        def page (tree Msg (Page))
+        def frame (tree Msg (Frame (props (id "ms-frame"))))
+        def vp (tree Msg (Viewport (props (id "ms-viewport"))))
+        vp.scrollTop = scroller.scrollTop
+        def thread (tree Msg (Thread (props (id "ms-thread"))))
+        this.opening(thread)
+
+        ; What was said since, one row per message.
+        def i:int 0
+        while (i < (array_length addedText)) {
+            def mine:boolean (itemAt addedMine i)
+            def rid:string ("ms-n" + (to_string (i + 1)))
+            def initials:string "R"
+            if mine {
+                initials = "ME"
+            }
+            def m (this.message(rid initials mine))
+            def c:EVGElement (this.contentOf(m mine))
+            c.addChild((this.bubble((rid + "-b") (itemAt addedText i) mine)))
+            thread.addChild(m)
+            i = (i + 1)
+        }
+
+        ; The other side, typing: a bubble of three dots where the reply will be.
+        if typing {
+            def tr (this.message("ms-typing-row" "R" false))
+            def tc:EVGElement (this.contentOf(tr false))
+            tc.addChild((this.dots("ms-tdot" (tree Msg (Typing (props (id "ms-typing")))) true)))
+            thread.addChild(tr)
+        }
+
+        vp.addChild(thread)
+        frame.addChild(vp)
+        builtButton = (scroller.buttonVisible())
+        if builtButton {
+            def jb (tree Msg (ToBottom (props (id (scroller.buttonTid())) (a11yLabel "Jump to newest message") (a11yFocusable true))))
+            jb.addChild((tree Msg (ToBottomTx "Jump to newest ↓")))
+            jb.position = "absolute"
+            frame.addChild(jb)
+        }
+        page.addChild(frame)
+
+        ; The marker. A live region; its words change and the element stays.
         def marker (tree Msg (Marker (props (id "ms-marker"))))
-        ; The name is MEASURED, like a bubble. A fixed width left a gap
-        ; between "Oliver" and "is typing" that the reference does not have —
-        ; a name is as wide as the name is, and this one is data.
-        def who:string "Oliver"
-        def whoEl (tree Msg (MarkerWho who))
-        whoEl.width = (EVGUnit.px((this.textWidthOf(who))))
-        marker.addChild(whoEl)
-        marker.addChild((tree Msg (MarkerTx " is typing...")))
+        if typing {
+            def who:string "Oliver"
+            def verb:string "is typing"
+            marker.a11yLabel = ((who + " ") + verb)
+            ; Both runs are MEASURED, like a bubble — a name is as wide as the
+            ; name is, and this one is data. The name in the BOLD face, which
+            ; is the one it is drawn in; the regular face is narrower, and a
+            ; box sized from it pushed the bold name into the verb.
+            ;
+            ; The gap between the two is the stylesheet's `gap`, not a
+            ; leading space in the verb: a space at the start of a text run is
+            ; trimmed, and that is how the line came out "Oliveris typing".
+            def eng:EVGTextEngine (this.engine())
+            def mw:EVGTextMetrics (eng.measureRun(who (bubbleFont + "-Bold") bubbleSize))
+            def whoEl (tree Msg (MarkerWho who))
+            whoEl.width = (EVGUnit.px((mw.width + 1.0)))
+            marker.addChild(whoEl)
+            def verbEl (tree Msg (MarkerTx verb))
+            verbEl.width = (EVGUnit.px(((this.textWidthOf(verb)) + 1.0)))
+            marker.addChild(verbEl)
+            marker.addChild((this.dots("ms-mdot" (tree Msg (MDots (props (id "ms-mdots")))) false)))
+        }
         page.addChild(marker)
+        page.addChild((this.composer()))
         return page
     }
 
+    fn rebuild:void () {
+        root = (this.page())
+        stale = true
+    }
+
+    fn trimmed:string (s:string) {
+        return (trim s)
+    }
+
+    ; --- the conversation -----------------------------------------------------
+
+    sfn replies:[string] () {
+        return ([] _:string (
+            "Found it. A missing comma in the migration."
+            "Famous last words."
+            "Rolling it back, just in case 🙃"
+            "Okay, it's green. Go home."
+            "Noted. I'm logging off."))
+    }
+
+    ; Send what is in the composer. Nothing happens for an empty or blank
+    ; message, which is also why the button says it is disabled then.
+    fn send:boolean () {
+        def text:string (this.trimmed(input.value))
+        if ((strlen text) == 0) {
+            return false
+        }
+        push addedText text
+        push addedMine true
+        input.setValue("")
+        input.placeCaret(0 false)
+        input.scrollX = 0.0
+        ; Sending is a deliberate return to the conversation: whatever the
+        ; reader had scrolled to, their own message is where they look next.
+        scroller.jumpToBottom()
+        owed = (owed + 1)
+        if ((typing == false) && (waitMs <= 0.0)) {
+            waitMs = pauseMs
+        }
+        this.rebuild()
+        return true
+    }
+
+    fn reply:void () {
+        def all:[string] (MessageDemo.replies())
+        def text:string (itemAt all replyAt)
+        replyAt = (replyAt + 1)
+        if (replyAt >= (array_length all)) {
+            replyAt = 1
+        }
+        push addedText text
+        push addedMine false
+    }
+
+    ; The clock. The page calls this every frame while `busyNow` says so.
+    fn tick:boolean (dtMs:double) {
+        phase = (phase + dtMs)
+        if (waitMs > 0.0) {
+            waitMs = (waitMs - dtMs)
+            if (waitMs <= 0.0) {
+                waitMs = 0.0
+                typing = true
+                typeMs = typeForMs
+                phase = 0.0
+                this.rebuild()
+            }
+        } {
+            if typing {
+                typeMs = (typeMs - dtMs)
+                if (typeMs <= 0.0) {
+                    typing = false
+                    typeMs = 0.0
+                    this.reply()
+                    owed = (owed - 1)
+                    if (owed > 0) {
+                        waitMs = pauseMs
+                    }
+                    this.rebuild()
+                }
+            }
+        }
+        ; The pulse, written straight onto the dots: nothing about the layout
+        ; changes, so nothing is rebuilt for it.
+        def n:int (array_length dotEls)
+        def i:int 0
+        while (i < n) {
+            def d:EVGElement (itemAt dotEls i)
+            d.opacity = (this.dotOpacity((i % 3)))
+            i = (i + 1)
+        }
+        return (this.busyNow())
+    }
+
+    fn busyNow:boolean () {
+        return (typing || (waitMs > 0.0))
+    }
+
+    ; For a check: run the clock until the other side has gone quiet.
+    fn settle:void () {
+        def guard:int 0
+        while ((this.busyNow()) && (guard < 2000)) {
+            this.tick(16.0)
+            this.laidOut()
+            guard = (guard + 1)
+        }
+    }
+
+    fn isTyping:boolean () {
+        return typing
+    }
+
+    fn messageCount:int () {
+        return (array_length addedText)
+    }
+
+    fn scrollTopNow:double () {
+        return scroller.scrollTop
+    }
+
+    fn maxScrollNow:double () {
+        return (scroller.maxScroll())
+    }
+
     ; --- events ---------------------------------------------------------------
-    ; Nothing here is interactive. A press is answered so the page's contract
-    ; is satisfied and refused so nothing pretends to happen.
+
+    fn ring:[string] () {
+        def a:[string]
+        if (scroller.buttonVisible()) {
+            push a (scroller.buttonTid())
+        }
+        push a input.tid
+        ; Send only while there is something to send: the page mirrors a
+        ; disabled button as a native disabled <button>, which the browser
+        ; will not focus, so a ring that stopped there stopped nowhere.
+        if ((this.trimmed(input.value)) != "") {
+            push a "ms-send"
+        }
+        return a
+    }
+
+    fn tab:boolean (back:boolean) {
+        def r:[string] (this.ring())
+        def n:int (array_length r)
+        def at:int (0 - 1)
+        def i:int 0
+        while (i < n) {
+            if ((itemAt r i) == focused) {
+                at = i
+            }
+            i = (i + 1)
+        }
+        def next:int (at + 1)
+        if back {
+            next = (at - 1)
+        }
+        ; NO WRAP: past either end the Tab is the page's, and the focus
+        ; leaves the transcript rather than cycling it forever.
+        if (at < 0) {
+            next = 0
+            if back {
+                next = (n - 1)
+            }
+        }
+        if ((next < 0) || (next >= n)) {
+            focused = ""
+            this.rebuild()
+            return false
+        }
+        focused = (itemAt r next)
+        this.rebuild()
+        return true
+    }
 
     fn press:boolean (target:string) {
+        if (target == "ms-send") {
+            focused = input.tid
+            this.send()
+            this.rebuild()
+            return true
+        }
+        if (target == (scroller.buttonTid())) {
+            scroller.jumpToBottom()
+            focused = input.tid
+            this.rebuild()
+            return true
+        }
+        if (target == input.tid) {
+            focused = target
+            this.rebuild()
+            return true
+        }
+        ; Anywhere else takes the focus off the composer, the way a click on
+        ; the page takes it out of a real text field.
+        if (focused != "") {
+            focused = ""
+            this.rebuild()
+            return true
+        }
         return false
     }
 
     fn key:boolean (k:string) {
+        return (this.keyWith(k false false))
+    }
+
+    ; Which keys the application wants back from the text session. Enter is
+    ; always the page's; nothing else is claimed.
+    fn ownsKey:boolean (k:string) {
         return false
+    }
+
+    fn keyWith:boolean (k:string shift:boolean ctrl:boolean) {
+        if (k == "Tab") {
+            return (this.tab(shift))
+        }
+        if (focused == input.tid) {
+            ; Enter sends. The composer is one line, so Shift+Enter has no
+            ; newline to insert and sends as well rather than doing nothing.
+            if (k == "Enter") {
+                this.send()
+                return true
+            }
+            if (k == "Escape") {
+                return false
+            }
+            input.keyDownWith(focused k shift ctrl)
+            input.ensureCaretVisible((this.engine()))
+            this.rebuild()
+            return true
+        }
+        if ((focused == "ms-send") && ((k == "Enter") || (k == " "))) {
+            this.send()
+            return true
+        }
+        if ((focused == (scroller.buttonTid())) && ((k == "Enter") || (k == " "))) {
+            scroller.jumpToBottom()
+            focused = input.tid
+            this.rebuild()
+            return true
+        }
+        return false
+    }
+
+    ; The wheel over the transcript. False at an end, so the page gets the
+    ; gesture back — a nested scroller that swallows it is a trap.
+    fn scrollBy:boolean (dy:double) {
+        def before:double scroller.scrollTop
+        scroller.userScrolledTo((before + dy))
+        if (scroller.scrollTop == before) {
+            return false
+        }
+        this.rebuild()
+        return true
     }
 
     fn setHover:void (id:string) { hovered = id }
     fn setPressed:void (id:string) { pressed = id }
     fn setFocus:void (id:string) { focused = id }
+
+    ; --- the pointer in the composer ------------------------------------------
+
+    def dragField:string ""
+
+    sfn byId:EVGElement (el:EVGElement id:string) {
+        if (el.id == id) {
+            return el
+        }
+        def i:int 0
+        while (i < (el.getChildCount())) {
+            def found:EVGElement (MessageDemo.byId((el.getChild(i)) id))
+            if (found.id == id) {
+                return found
+            }
+            i = (i + 1)
+        }
+        return el
+    }
+
+    ; A press on the run, the ghost or the caret is a press on the field.
+    fn fieldOwning:string (target:string) {
+        if (((((target == (input.tid + "-run")) || (target == (input.tid + "-ghost"))) || (target == (input.tid + "-caret"))) || (target == (input.tid + "-band"))) || (target == (input.tid + "-clip"))) {
+            return input.tid
+        }
+        if (target == "ms-send-text") {
+            return "ms-send"
+        }
+        return target
+    }
+
+    fn indexAt:int (px:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def box:EVGElement (MessageDemo.byId(r input.tid))
+        if (box.id != input.tid) {
+            return -1
+        }
+        return (InputCtl.indexAtPageX((this.engine()) input box px))
+    }
+
+    fn beginSelection:boolean (rawTarget:string px:double extend:boolean) {
+        def target:string (this.fieldOwning(rawTarget))
+        def took:boolean (this.press(target))
+        if (target != input.tid) {
+            dragField = ""
+            return took
+        }
+        def idx:int (this.indexAt(px))
+        if (idx < 0) {
+            dragField = ""
+            return true
+        }
+        input.placeCaret(idx extend)
+        dragField = target
+        this.rebuild()
+        return true
+    }
+
+    fn extendSelection:boolean (px:double) {
+        if (dragField == "") {
+            return false
+        }
+        def idx:int (this.indexAt(px))
+        if ((idx < 0) || (idx == input.caret)) {
+            return false
+        }
+        input.placeCaret(idx true)
+        input.ensureCaretVisible((this.engine()))
+        this.rebuild()
+        return true
+    }
+
+    fn endSelection:boolean () {
+        dragField = ""
+        return false
+    }
+
+    fn selectWordAt:boolean (rawTarget:string px:double) {
+        def target:string (this.fieldOwning(rawTarget))
+        if (target != input.tid) {
+            return false
+        }
+        def idx:int (this.indexAt(px))
+        if ((idx < 0) || ((strlen input.value) == 0)) {
+            return false
+        }
+        def at:int idx
+        if (at >= (strlen input.value)) {
+            at = ((strlen input.value) - 1)
+        }
+        input.selectWordAt(at)
+        this.rebuild()
+        return true
+    }
+
+    ; An I-beam over the field; everything else is the page's to decide.
+    fn cursorAt:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def box:EVGElement (MessageDemo.byId(r input.tid))
+        if (box.id == input.tid) {
+            def x0:double (box.calculatedX)
+            def y0:double (box.calculatedY)
+            if ((px >= x0) && (px <= (x0 + (box.calculatedWidth)))) {
+                if ((py >= y0) && (py <= (y0 + (box.calculatedHeight)))) {
+                    return "text"
+                }
+            }
+        }
+        return ""
+    }
+
+    ; --- the platform text-input session --------------------------------------
+
+    fn focusedField:string () {
+        if (focused == input.tid) {
+            return input.tid
+        }
+        return ""
+    }
+
+    fn fieldStateJson:string (tid:string) {
+        if (tid != input.tid) {
+            return "null"
+        }
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def box:EVGElement (MessageDemo.byId(r tid))
+        def out:string "{"
+        out = (out + "\"tid\":" + (EVGA11yTree.jsonString(input.tid)))
+        out = (out + ",\"value\":" + (EVGA11yTree.jsonString(input.value)))
+        out = (out + ",\"selStart\":" + (to_string (input.selStart())))
+        out = (out + ",\"selEnd\":" + (to_string (input.selEnd())))
+        out = (out + ",\"kind\":" + (EVGA11yTree.jsonString(input.kind)))
+        out = (out + ",\"maxLength\":" + (to_string input.maxLength))
+        out = (out + ",\"placeholder\":" + (EVGA11yTree.jsonString(input.placeholder)))
+        if (box.id == tid) {
+            out = (out + ",\"box\":{\"x\":" + (to_string (to_int (box.calculatedX))))
+            out = (out + ",\"y\":" + (to_string (to_int (box.calculatedY))))
+            out = (out + ",\"w\":" + (to_string (to_int (box.calculatedWidth))))
+            out = (out + ",\"h\":" + (to_string (to_int (box.calculatedHeight))) + "}")
+        }
+        return (out + "}")
+    }
+
+    fn applyEdit:boolean (tid:string v:string selStart:int selEnd:int) {
+        if (tid != input.tid) {
+            return false
+        }
+        input.applyEdit(v selStart selEnd)
+        input.ensureCaretVisible((this.engine()))
+        this.rebuild()
+        return true
+    }
+
+    ; --- layout ---------------------------------------------------------------
 
     fn markStates:void (el:EVGElement) {
         el.isHovered = false
@@ -327,25 +1044,57 @@ class MessageDemo {
         }
     }
 
+    ; Lay the page out, then let the scroller see what came of it.
+    ;
+    ; The order is forced: how tall the transcript is only exists after a
+    ; layout, and where it should be scrolled to depends on that. So the page
+    ; is laid out, the viewport's numbers go to `ScrollerCtl`, and if its
+    ; answer differs from what was laid out the scroll is applied and the
+    ; page laid out once more. A pinned transcript that has just grown is the
+    ; case that takes the second pass.
     fn laidOut:EVGLayout () {
         def r:EVGElement (unwrap root)
         def s:EVGStyleSheet (unwrap sheet)
         s.setViewport(pageW pageH false)
         this.markStates(r)
         s.applyTree(r "")
-        def t:EVGTransition transitions
-        t.reconcileTree(r)
-        if layout {
-            def lay:EVGLayout (unwrap layout)
-            if ((s.layoutClean()) == false) {
-                lay.layout(r)
+        if (stale == false) {
+            if layout {
+                def lay:EVGLayout (unwrap layout)
+                if ((s.layoutClean()) == false) {
+                    lay.layout(r)
+                }
+                return lay
             }
-            return lay
         }
+        stale = false
         def fresh (new EVGLayout())
         fresh.setPageSize(pageW pageH)
         layout = fresh
         fresh.layout(r)
+        def vp:EVGElement (MessageDemo.byId(r "ms-viewport"))
+        if (vp.id == "ms-viewport") {
+            scroller.clientHeight = (vp.clientHeight())
+            if (vp.scrollHeight != scroller.scrollHeight) {
+                scroller.contentGrew(vp.scrollHeight)
+            }
+            if (scroller.scrollTop > (scroller.maxScroll())) {
+                scroller.scrollTop = (scroller.maxScroll())
+            }
+            if (vp.scrollTop != scroller.scrollTop) {
+                vp.scrollTop = scroller.scrollTop
+                fresh.layout(r)
+            }
+            ; The jump button is in the tree only while it has something to
+            ; jump to; when that answer has just changed, build it once more.
+            if ((scroller.buttonVisible()) != builtButton) {
+                root = (this.page())
+                def r2:EVGElement (unwrap root)
+                this.markStates(r2)
+                s.applyTree(r2 "")
+                fresh.layout(r2)
+            }
+        }
         return fresh
     }
 
@@ -389,19 +1138,6 @@ class MessageDemo {
     fn styleErrorAt:string (i:int) {
         def s:EVGStyleSheet (unwrap sheet)
         return (s.getError(i))
-    }
-
-    fn tick:boolean (dtMs:double) {
-        def r:EVGElement (unwrap root)
-        def t:EVGTransition transitions
-        t.advanceTree(r dtMs)
-        return (t.busy(r))
-    }
-
-    fn busyNow:boolean () {
-        def r:EVGElement (unwrap root)
-        def t:EVGTransition transitions
-        return (t.busy(r))
     }
 
     fn heightPx:double () {
