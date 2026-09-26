@@ -1,7 +1,7 @@
 /**
  * The accessibility audit for the demo page.
  *
- *   node gallery/ui/demo/a11y.mjs
+ *   node gallery/evgui/demo/a11y.mjs
  *
  * Two checks, and neither one is enough on its own:
  *
@@ -27,26 +27,26 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { requireDom, findChromium } from "../conformance/dom-adapter.mjs";
+import { requireDom, findChromium } from "../../ui/conformance/dom-adapter.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
 const require = createRequire(import.meta.url);
 const domRequire = createRequire(path.join(ROOT, "gallery/ui/conformance/dom/package.json"));
 
-const { MenubarDemo } = require(path.join(ROOT, "gallery/ui/bin/MenubarDemo.cjs"));
-const { ToolbarDemo } = require(path.join(ROOT, "gallery/ui/bin/ToolbarDemo.cjs"));
-const { SortableDemo } = require(path.join(ROOT, "gallery/ui/bin/SortableDemo.cjs"));
-const { MotionDemo } = require(path.join(ROOT, "gallery/ui/bin/MotionDemo.cjs"));
-const { TableDemo } = require(path.join(ROOT, "gallery/ui/bin/TableDemo.cjs"));
-const { DropdownDemo } = require(path.join(ROOT, "gallery/ui/bin/DropdownDemo.cjs"));
-const { DialogDemo } = require(path.join(ROOT, "gallery/ui/bin/DialogDemo.cjs"));
-const { TreeDemo } = require(path.join(ROOT, "gallery/ui/bin/TreeDemo.cjs"));
-const { TimelineDemo } = require(path.join(ROOT, "gallery/ui/bin/TimelineDemo.cjs"));
-const { ResizeDemo } = require(path.join(ROOT, "gallery/ui/bin/ResizeDemo.cjs"));
-const { FormDemo } = require(path.join(ROOT, "gallery/ui/bin/FormDemo.cjs"));
-const { DashboardDemo } = require(path.join(ROOT, "gallery/ui/bin/DashboardDemo.cjs"));
-const { CalendarDemo } = require(path.join(ROOT, "gallery/ui/bin/CalendarDemo.cjs"));
+const { MenubarDemo } = require(path.join(ROOT, "gallery/evgui/bin/MenubarDemo.cjs"));
+const { ToolbarDemo } = require(path.join(ROOT, "gallery/evgui/bin/ToolbarDemo.cjs"));
+const { SortableDemo } = require(path.join(ROOT, "gallery/evgui/bin/SortableDemo.cjs"));
+const { MotionDemo } = require(path.join(ROOT, "gallery/evgui/bin/MotionDemo.cjs"));
+const { TableDemo } = require(path.join(ROOT, "gallery/evgui/bin/TableDemo.cjs"));
+const { DropdownDemo } = require(path.join(ROOT, "gallery/evgui/bin/DropdownDemo.cjs"));
+const { DialogDemo } = require(path.join(ROOT, "gallery/evgui/bin/DialogDemo.cjs"));
+const { TreeDemo } = require(path.join(ROOT, "gallery/evgui/bin/TreeDemo.cjs"));
+const { TimelineDemo } = require(path.join(ROOT, "gallery/evgui/bin/TimelineDemo.cjs"));
+const { ResizeDemo } = require(path.join(ROOT, "gallery/evgui/bin/ResizeDemo.cjs"));
+const { FormDemo } = require(path.join(ROOT, "gallery/evgui/bin/FormDemo.cjs"));
+const { DashboardDemo } = require(path.join(ROOT, "gallery/evgui/bin/DashboardDemo.cjs"));
+const { CalendarDemo } = require(path.join(ROOT, "gallery/evgui/bin/CalendarDemo.cjs"));
 const MENUBAR_CSS = fs.readFileSync(path.join(HERE, "menubar.css"), "utf8");
 const TOOLBAR_CSS = fs.readFileSync(path.join(HERE, "toolbar.css"), "utf8");
 const SORTABLE_CSS = fs.readFileSync(path.join(HERE, "sortable.css"), "utf8");
@@ -394,7 +394,7 @@ page.on("pageerror", (e) => console.error("PAGEERROR:", e.message));
 await page.goto(`http://127.0.0.1:${port}/`);
 await page.waitForFunction("window.__READY__ === true", null, { timeout: 20000 });
 
-console.log("gallery/ui/demo — accessibility audit (axe-core " +
+console.log("gallery/evgui/demo — accessibility audit (axe-core " +
   domRequire("axe-core/package.json").version + ")\n");
 
 let failures = 0;

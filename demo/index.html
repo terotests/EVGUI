@@ -601,13 +601,13 @@
           <em>rebuilt</em>, not moved: the page holds an order and hands it over, and the
           tree literal builds whatever it is given. Click a row and use Space, &uarr;
           &darr; and Escape for the same thing from the keyboard. The behaviour is the
-          one <code>gallery/ui/src/SortableCtl.rgr</code> is measured against, item for
+          one <code>gallery/evgui/src/SortableCtl.rgr</code> is measured against, item for
           item, with <code>@dnd-kit/sortable</code> as the reference.
         </p>
         <p class="note" data-for="table">
           <strong>The state is not this demo's.</strong> Sorting, page-scoped
           selection and the paging arithmetic all live in
-          <code>gallery/ui/src/TableCtl.rgr</code>, which the conformance
+          <code>gallery/evgui/src/TableCtl.rgr</code>, which the conformance
           harness measures against <code>@tanstack/react-table</code> — the
           library ReUI's table is built on. This file is the other half: a
           <code>treefactory</code> and a stylesheet, and nothing else. The
@@ -621,12 +621,12 @@
           <code>@headless-tree/core</code> renders and therefore what ReUI's
           tree renders. The indent is a spacer this demo adds; a reader never
           sees it and does not need to. Open/closed, focus and every key are
-          <code>gallery/ui/src/TreeCtl.rgr</code>&rsquo;s.
+          <code>gallery/evgui/src/TreeCtl.rgr</code>&rsquo;s.
         </p>
         <p class="note" data-for="dropdown">
           <strong>This demo owns no state at all.</strong> Open/closed, the
           roving focus, the submenu stack, the 100&nbsp;ms hover delay and
-          every key are <code>gallery/ui/src/MenuCtl.rgr</code>&rsquo;s, which
+          every key are <code>gallery/evgui/src/MenuCtl.rgr</code>&rsquo;s, which
           five conformance specs measure against
           <code>@radix-ui/react-dropdown-menu</code>. What is here is a
           <code>treefactory</code>, a stylesheet, and which icon goes on which

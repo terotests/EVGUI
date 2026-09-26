@@ -3,7 +3,7 @@
 //
 // The UI gallery, assembled for the site.
 //
-//   node gallery/ui/web/build-pages.mjs --out DIR
+//   node gallery/evgui/web/build-pages.mjs --out DIR
 //
 // Two pages, the same relative layout the local server uses:
 //
@@ -12,7 +12,7 @@
 //   DIR/        a redirect that lands on demo/ and keeps ?demo= and the hash
 //
 // The pages are already bundled — this copies them. A relative link that
-// works at gallery/ui/demo/index.html works here too, which is the whole
+// works at gallery/evgui/demo/index.html works here too, which is the whole
 // reason the directories keep those names. Rewriting the JavaScript to sit
 // at a prettier URL would make the published page a different page.
 
@@ -28,7 +28,7 @@ const argv = process.argv.slice(2);
 const outFlag = argv.indexOf("--out");
 const OUT = outFlag >= 0 ? path.resolve(argv[outFlag + 1]) : null;
 if (!OUT) {
-  console.error("usage: node gallery/ui/web/build-pages.mjs --out DIR");
+  console.error("usage: node gallery/evgui/web/build-pages.mjs --out DIR");
   process.exit(2);
 }
 
@@ -39,7 +39,7 @@ function need(file, how) {
   }
 }
 
-need(path.join(DEMO, "bundle.js"), "run `npm run ui:demo:build && node gallery/ui/demo/build.mjs` first");
+need(path.join(DEMO, "bundle.js"), "run `npm run ui:demo:build && node gallery/evgui/demo/build.mjs` first");
 need(path.join(DEMO, "index.html"), "the demo page is gone");
 need(path.join(HERE, "bundle.js"), "run `npm run ui:web:build` first");
 need(path.join(HERE, "index.html"), "the playground page is gone");

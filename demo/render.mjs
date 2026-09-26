@@ -1,16 +1,16 @@
 /**
  * Paint MenubarDemo with the real EVG WebGL painter and save a PNG.
  *
- *   node gallery/ui/demo/render.mjs [out.png]
+ *   node gallery/evgui/demo/render.mjs [out.png]
  *
  * The display list comes from Ranger; this only opens a browser to draw it,
- * the same painter gallery/ui/web uses.
+ * the same painter gallery/evgui/web uses.
  */
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { requireDom, findChromium } from "../conformance/dom-adapter.mjs";
+import { requireDom, findChromium } from "../../ui/conformance/dom-adapter.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
@@ -21,7 +21,7 @@ const require = createRequire(import.meta.url);
 const WHICH = process.env.DEMO || "menubar";
 const DEMOS = {
   menubar: {
-    module: "gallery/ui/bin/MenubarDemo.cjs",
+    module: "gallery/evgui/bin/MenubarDemo.cjs",
     css: "menubar.css",
     height: 560,
     list: (M, css) =>
@@ -29,7 +29,7 @@ const DEMOS = {
     errors: (M, css) => M.MenubarDemo.styleErrors(css),
   },
   sortable: {
-    module: "gallery/ui/bin/SortableDemo.cjs",
+    module: "gallery/evgui/bin/SortableDemo.cjs",
     css: "sortable.css",
     height: 560,
     list: (M, css) =>
@@ -37,7 +37,7 @@ const DEMOS = {
     errors: (M, css) => M.SortableDemo.styleErrors(css),
   },
   toolbar: {
-    module: "gallery/ui/bin/ToolbarDemo.cjs",
+    module: "gallery/evgui/bin/ToolbarDemo.cjs",
     css: "toolbar.css",
     height: 320,
     list: (M, css) =>
@@ -45,7 +45,7 @@ const DEMOS = {
     errors: (M, css) => M.ToolbarDemo.styleErrors(css),
   },
   dashboard: {
-    module: "gallery/ui/bin/DashboardDemo.cjs",
+    module: "gallery/evgui/bin/DashboardDemo.cjs",
     css: "dashboard.css",
     width: 1336,
     height: 900,
@@ -91,7 +91,7 @@ const DEMOS = {
   },
 
   metadata: {
-    module: "gallery/ui/bin/MetadataDemo.cjs",
+    module: "gallery/evgui/bin/MetadataDemo.cjs",
     css: "metadata.css",
     width: 760,
     height: 720,
@@ -118,7 +118,7 @@ const DEMOS = {
   // no demo page owns it yet, and a picture of four kinds in a viewport is
   // what the stack work was for.
   toasts: {
-    module: "gallery/ui/bin/ui_host.cjs",
+    module: "gallery/evgui/bin/ui_host.cjs",
     css: "../theme/base.css",
     width: 420,
     height: 1000,
@@ -185,7 +185,7 @@ const DEMOS = {
   },
 
   profile: {
-    module: "gallery/ui/bin/ProfileDemo.cjs",
+    module: "gallery/evgui/bin/ProfileDemo.cjs",
     css: "profile.css",
     height: 800,
     list: (M, css) => {
@@ -201,7 +201,7 @@ const DEMOS = {
   },
 
   message: {
-    module: "gallery/ui/bin/MessageDemo.cjs",
+    module: "gallery/evgui/bin/MessageDemo.cjs",
     css: "message.css",
     height: 620,
     list: (M, css) => { const d = new M.MessageDemo(); d.init(css); return d.displayListJson(); },
@@ -209,7 +209,7 @@ const DEMOS = {
   },
 
   calendar: {
-    module: "gallery/ui/bin/CalendarDemo.cjs",
+    module: "gallery/evgui/bin/CalendarDemo.cjs",
     css: "calendar.css",
     height: 520,
     list: (M, css) => {
@@ -229,7 +229,7 @@ const DEMOS = {
   },
 
   form: {
-    module: "gallery/ui/bin/FormDemo.cjs",
+    module: "gallery/evgui/bin/FormDemo.cjs",
     css: "form.css",
     height: 640,
     list: (M, css) => {
@@ -245,7 +245,7 @@ const DEMOS = {
   },
 
   resize: {
-    module: "gallery/ui/bin/ResizeDemo.cjs",
+    module: "gallery/evgui/bin/ResizeDemo.cjs",
     css: "resize.css",
     height: 520,
     // This one is a live controller rather than a pure function: the trail's

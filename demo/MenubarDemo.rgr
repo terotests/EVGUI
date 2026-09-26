@@ -9,7 +9,7 @@
 ; disabled items and right-hand shortcut slots.
 ;
 ; It is a structure, not a component library — there is no keyboard handling and
-; no focus here. Those belong to a MenubarCtl in gallery/ui/src, which does not
+; no focus here. Those belong to a MenubarCtl in gallery/evgui/src, which does not
 ; exist yet; this is what its `build()` would be able to look like.
 ;
 ; What the demo settled about the syntax:

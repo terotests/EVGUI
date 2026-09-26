@@ -18,7 +18,7 @@
 //   Tab walks the ring: one stop per control, three inside the date field;
 //   focus leaving a combobox settles its text, through the page's own blur.
 //
-//   node gallery/ui/demo/metadata-check.mjs
+//   node gallery/evgui/demo/metadata-check.mjs
 
 import fs from "node:fs";
 import path from "node:path";
@@ -29,7 +29,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
 const require = createRequire(import.meta.url);
 
-const M = require(path.join(ROOT, "gallery/ui/bin/MetadataDemo.cjs"));
+const M = require(path.join(ROOT, "gallery/evgui/bin/MetadataDemo.cjs"));
 const CSS = fs.readFileSync(path.join(HERE, "metadata.css"), "utf8");
 
 let passed = 0;

@@ -3,7 +3,7 @@
 //
 // The controls demo: three measured controllers, drawn, and AGREEING.
 //
-//   node gallery/ui/demo/controls-demo-check.mjs
+//   node gallery/evgui/demo/controls-demo-check.mjs
 //
 // `ui:stepper:check`, `ui:progress:check` and `ui:number:check` gate the three
 // controllers — 180 assertions between them — and all three run in Node with
@@ -31,7 +31,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
 const require = createRequire(import.meta.url);
 
-const M = require(path.join(ROOT, "gallery/ui/bin/ControlsDemo.cjs"));
+const M = require(path.join(ROOT, "gallery/evgui/bin/ControlsDemo.cjs"));
 const CSS = fs.readFileSync(path.join(HERE, "controls.css"), "utf8");
 
 let passed = 0;

@@ -3,7 +3,7 @@
 //
 // The event calendar demo: that the measured layout survives becoming pixels.
 //
-//   node gallery/ui/demo/eventcal-demo-check.mjs
+//   node gallery/evgui/demo/eventcal-demo-check.mjs
 //
 // `ui:eventcal:check` gates `EventCalCtl` against a rendered
 // @schedule-x/calendar — 84 assertions — in FRACTIONS, and draws nothing. The
@@ -24,7 +24,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
 const require = createRequire(import.meta.url);
 
-const M = require(path.join(ROOT, "gallery/ui/bin/EventCalDemo.cjs"));
+const M = require(path.join(ROOT, "gallery/evgui/bin/EventCalDemo.cjs"));
 const CSS = fs.readFileSync(path.join(HERE, "eventcal.css"), "utf8");
 
 let passed = 0;

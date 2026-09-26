@@ -16,7 +16,7 @@
 // inside a container; the flex basis had not, and the two disagreeing is what
 // let it happen.
 //
-//   node gallery/ui/demo/profile-check.mjs
+//   node gallery/evgui/demo/profile-check.mjs
 
 import fs from "node:fs";
 import path from "node:path";
@@ -27,7 +27,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
 const require = createRequire(import.meta.url);
 
-const M = require(path.join(ROOT, "gallery/ui/bin/ProfileDemo.cjs"));
+const M = require(path.join(ROOT, "gallery/evgui/bin/ProfileDemo.cjs"));
 const CSS = fs.readFileSync(path.join(HERE, "profile.css"), "utf8");
 
 let passed = 0;

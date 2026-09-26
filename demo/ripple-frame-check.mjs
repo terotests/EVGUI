@@ -3,7 +3,7 @@
 //
 // The surface effect must not eat the page it is drawn over.
 //
-//   node gallery/ui/demo/ripple-frame-check.mjs
+//   node gallery/evgui/demo/ripple-frame-check.mjs
 //
 // WHY THIS EXISTS. `evg-surface-effect: ripple` renders the whole frame into a
 // texture and puts it back on the screen through a shader. Making that texture
@@ -50,7 +50,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
-import { requireDom, findChromium } from "../conformance/dom-adapter.mjs";
+import { requireDom, findChromium } from "../../ui/conformance/dom-adapter.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
@@ -119,7 +119,7 @@ console.log("--- and it ripples where it was touched ---");
 const A_Y = 150, B_Y = 400, DROP_X = 640, PAGE_H = 900, PAGE_W = 1336;
 
 const require = createRequire(import.meta.url);
-const Demo = require(path.join(ROOT, "gallery/ui/bin/DashboardDemo.cjs"));
+const Demo = require(path.join(ROOT, "gallery/evgui/bin/DashboardDemo.cjs"));
 const css = fs.readFileSync(path.join(HERE, "dashboard.css"), "utf8");
 const listAt = (y) => {
   const d = new Demo.DashboardDemo();

@@ -3,7 +3,7 @@
 ```bash
 npm run ui:input:bench            # score the pages against input-bench-baseline.json
 npm run ui:input:bench:record     # rewrite the baseline after a change
-node gallery/ui/demo/input-bench.mjs --only=fm-amount,fm-invoice --scenario=caret,drag --verbose
+node gallery/evgui/demo/input-bench.mjs --only=fm-amount,fm-invoice --scenario=caret,drag --verbose
 ```
 
 The full run takes about twenty minutes: sixteen fields, twenty scenarios,

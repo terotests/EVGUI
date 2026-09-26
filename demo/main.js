@@ -1878,7 +1878,7 @@ function inspectorAdapter() {
   if (d.css && typeof app.inspectCss === "function") {
     adapter.css = () => ({
       name: d.css,
-      href: "/gallery/ui/demo/" + d.css,
+      href: "/gallery/evgui/demo/" + d.css,
       text: app.inspectCss(),
       errors: JSON.parse(app.inspectStyleErrors()),
     });
@@ -1888,7 +1888,7 @@ function inspectorAdapter() {
     // the page that wrote it does not need to re-apply its own text.
     adapter.saveCss = async (text) => {
       lastSentCss = text;
-      const r = await fetch("/gallery/ui/demo/" + d.css, { method: "PUT", body: text });
+      const r = await fetch("/gallery/evgui/demo/" + d.css, { method: "PUT", body: text });
       if (!r.ok) throw new Error("save failed: " + r.status + " " + (await r.text()));
     };
   }
@@ -1897,7 +1897,7 @@ function inspectorAdapter() {
 
 // --- live CSS from disk -------------------------------------------------------
 //
-// `serve.mjs` watches gallery/ui/demo/*.css and says which one changed. This
+// `serve.mjs` watches gallery/evgui/demo/*.css and says which one changed. This
 // end fetches it and hands it to the app, which re-parses and re-cascades the
 // way it did at `init` — the sheet is the app's INPUT, so there is nothing to
 // patch and nothing to hold over its head.

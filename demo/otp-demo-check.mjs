@@ -3,7 +3,7 @@
 //
 // The one-time code demo: OtpCtl drawn, and the page around it agreeing.
 //
-//   node gallery/ui/demo/otp-demo-check.mjs
+//   node gallery/evgui/demo/otp-demo-check.mjs
 //
 // `ui:otp:check` replays input-otp's recorded behaviour against the controller
 // with nothing drawn. What only a page can check: that the slots are boxes a
@@ -23,7 +23,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
 const require = createRequire(import.meta.url);
 
-const M = require(path.join(ROOT, "gallery/ui/bin/OtpDemo.cjs"));
+const M = require(path.join(ROOT, "gallery/evgui/bin/OtpDemo.cjs"));
 const CSS = fs.readFileSync(path.join(HERE, "otp.css"), "utf8");
 
 let passed = 0;

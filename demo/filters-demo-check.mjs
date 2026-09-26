@@ -4,7 +4,7 @@
 // The filter demo: that it lays out, that a pointer can reach every part of a
 // chip, and that clicking one CHANGES THE ANSWER on the screen.
 //
-//   node gallery/ui/demo/filters-demo-check.mjs
+//   node gallery/evgui/demo/filters-demo-check.mjs
 //
 // `ui:filters:check` gates the controller against @tanstack/table-core — 121
 // assertions — and draws nothing. This is the other half, and it exists
@@ -27,7 +27,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
 const require = createRequire(import.meta.url);
 
-const M = require(path.join(ROOT, "gallery/ui/bin/FilterDemo.cjs"));
+const M = require(path.join(ROOT, "gallery/evgui/bin/FilterDemo.cjs"));
 const CSS = fs.readFileSync(path.join(HERE, "filters.css"), "utf8");
 
 let passed = 0;
