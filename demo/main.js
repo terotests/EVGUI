@@ -943,6 +943,10 @@ const DEMOS = {
       return true;
     },
     key: (k) => eventcal.key(k),
+    // Tab walks the calendar's own ring (arrows, Today, views, events); Enter
+    // and Space press the focused one. The mirror alone is one tab stop.
+    keyWith: (k, shift, ctrl) => eventcal.keyWith(k, shift, ctrl),
+    ownsTab: true,
     host: () => ({
       tick: (dt) => eventcal.tick(dt),
       busy: () => eventcal.busyNow(),
@@ -1122,6 +1126,10 @@ const DEMOS = {
       return true;
     },
     key: (k) => dialog.key(k),
+    // Tab is the demo's: the modal traps it (Close, the two fields, Cancel,
+    // Save) and without it the roving mirror sent Tab from Close to <body>.
+    keyWith: (k, shift, ctrl) => dialog.keyWith(k, shift, ctrl),
+    ownsTab: true,
     host: () => ({
       tick: (dt) => dialog.tick(dt),
       busy: () => dialog.busyNow(),

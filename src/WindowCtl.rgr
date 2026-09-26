@@ -172,6 +172,10 @@ class WindowCtl extends UiCtl {
         def frame:EVGElement (unwrap frameEl)
         frame.role = "dialog"
         frame.a11yLabel = title
+        ; `aria-modal`, on the element path as well as in `rows()`: the page's
+        ; mirror hides everything outside a modal node from a reader, and
+        ; without the flag it had no modal node to keep.
+        frame.a11yModal = isModal
 
         def head2:EVGElement (unwrap headEl)
         head2.role = ""
@@ -219,6 +223,10 @@ class WindowCtl extends UiCtl {
         root.addChild(trig)
 
         if (open == false) {
+            ; Still marked: a closed window's trigger has to say it is
+            ; collapsed. Returning before `markAria` left it announcing
+            ; `aria-expanded="true"` after every close.
+            this.markAria()
             return
         }
 

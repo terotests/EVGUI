@@ -206,6 +206,7 @@
 
 .cx-badge {
   display: flex;
+  flex-direction: row;
   align-items: center;
   height: 17px;
   padding-left: 6px;
