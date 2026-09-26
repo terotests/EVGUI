@@ -118,6 +118,13 @@ async function load(demoName) {
     loaded = true;
   }
   await page.click(`#demos input[value="${demoName}"]`);
+  // Back to the top. Clicking the switcher scrolls the page to the radio
+  // whenever the last scenario left it scrolled, and every field's origin was
+  // measured at the top: the old page hid that by pulling the keyboard back
+  // into the canvas on every repaint, so keys pressed on <body> after a missed
+  // click still reached the field. The page no longer does that (a Tab out of
+  // the demo has to stay out), so the bench puts the page where it measured.
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(reset ? 80 : 200);
   if (PREP[demoName]) await PREP[demoName]();
 }
