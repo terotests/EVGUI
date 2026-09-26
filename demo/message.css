@@ -19,16 +19,35 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 18px;
+  gap: 12px;
   background-color: #ffffff;
-  padding: 28px;
+  padding: 24px;
   width: 900px;
-  height: 420px;
+  height: 560px;
+}
+
+/* The box the transcript scrolls in, and the frame the "Jump to newest"
+ * button is positioned against — so the button stays put while the messages
+ * move under it. */
+.ms-frame {
+  position: relative;
+  width: 440px;
+  height: 400px;
+}
+
+/* `overflow: hidden` with a definite height IS the scroller: the engine
+ * clamps `scrollTop` to what there is and `ScrollerCtl` decides the rest. */
+.ms-viewport {
+  display: flex;
+  flex-direction: column;
+  width: 440px;
+  height: 400px;
+  overflow: hidden;
+  padding: 8px 10px;
 }
 
 /* `role="log"` on the thread: new messages are announced as they arrive. The
- * reference puts it on MessageScrollerContent; a static transcript has the
- * same claim to make. */
+ * reference puts it on MessageScrollerContent, which is what this is now. */
 .ms-thread {
   display: flex;
   flex-direction: column;
@@ -72,7 +91,9 @@
   font-size: 13px;
   font-weight: bold;
   width: 38px;
-  height: 18px;
+  /* The run's own line height (1.15 of 13px), so centring the box centres
+     the letters; an 18px box put them at its top, a few pixels high. */
+  height: 15px;
   text-align: center;
 }
 
@@ -104,15 +125,16 @@
   align-items: flex-end;
 }
 
-/* A pill. The radius is half the height so the ends are semicircles at any
- * width; a fixed 24px would go square-ish the moment a bubble wrapped. */
+/* A pill: 24px is half a one-line bubble's height. No height here — the demo
+ * sets it from the number of lines the text wraps to, because a rule's value
+ * is written over whatever the demo put on the element, and a fixed 48px drew
+ * a wrapped reply's second line over the next message. */
 .ms-bubble {
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
   padding: 0 20px;
-  height: 48px;
   border-radius: 24px;
   background-color: #2b3ce8;
 }
@@ -124,7 +146,6 @@
 .ms-bubble-text {
   color: #ffffff;
   font-size: 16px;
-  height: 22px;
 }
 
 /* Its own token, because there are no descendant selectors: "the text inside
@@ -168,18 +189,20 @@
 }
 
 /* The marker. A live region and the only behaviour in the component, so it is
- * deliberately plain: no box, no icon, one line. */
+ * deliberately plain: no box, no icon, one line. The gap between the name and
+ * the verb is HERE, not a leading space in the verb's text run — a space at
+ * the start of a run is trimmed, which is how it read "Oliveris typing". */
 .ms-marker {
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
+  gap: 5px;
   width: 420px;
   height: 22px;
 }
 
-/* No width: the demo measures the name and sets it. A fixed one left a gap
- * between the name and the verb that the reference does not have. */
+/* No width: the demo measures the name, in bold, and sets it. */
 .ms-marker-who {
   color: #18181b;
   font-size: 16px;
@@ -187,9 +210,166 @@
   height: 22px;
 }
 
+/* No width either: measured by the demo, in the face it is drawn in. */
 .ms-marker-text {
   color: #a1a1aa;
   font-size: 16px;
-  width: 200px;
   height: 22px;
+}
+
+/* The three dots after "is typing", and the three in the typing bubble. Their
+ * opacity is the demo's clock, written each frame; nothing here animates. */
+.ms-mdots {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  width: 24px;
+  height: 22px;
+  padding: 6px 0 0 0;
+}
+
+.ms-mdot {
+  width: 5px;
+  height: 5px;
+  border-radius: 3px;
+  background-color: #71717a;
+}
+
+.ms-typing {
+  justify-content: center;
+  height: 48px;
+  gap: 6px;
+  width: 76px;
+  padding: 0;
+}
+
+.ms-tdot {
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  background-color: #71717a;
+}
+
+/* The composer: a pill-shaped field and a Send button, the width of the
+ * transcript above them. */
+.ms-composer {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  width: 440px;
+  height: 44px;
+}
+
+.ms-box {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  position: relative;
+  width: 350px;
+  height: 44px;
+  padding: 0 16px;
+  border: 1px solid #d4d4d8;
+  border-radius: 22px;
+  background-color: #ffffff;
+}
+
+.ms-box:focus { border-color: #2b3ce8; }
+
+/* The only clip in the composer. The box itself has none: nested inside it,
+ * this one was not honoured by the WebGL painter and a scrolled draft ran
+ * into the padding. */
+.ms-clip {
+  top: 12px;
+  height: 18px;
+  overflow: hidden;
+}
+
+/* Arial 15, the same the demo hands `InputCtl` to measure the caret with. */
+.ms-run {
+  color: #18181b;
+  font-family: Arial;
+  font-size: 15px;
+  top: 0;
+  height: 18px;
+}
+
+.ms-ghost { color: #a1a1aa; }
+
+.ms-caret {
+  position: absolute;
+  top: 12px;
+  width: 2px;
+  height: 18px;
+  background-color: #2b3ce8;
+}
+
+.ms-band {
+  position: absolute;
+  top: 12px;
+  height: 18px;
+  background-color: #dbeafe;
+}
+
+.ms-send {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  width: 82px;
+  height: 44px;
+  border-radius: 22px;
+  border: 2px solid #2b3ce8;
+  background-color: #2b3ce8;
+  transition: background-color 120ms ease-out;
+}
+
+.ms-send:hover  { background-color: #1f2cc0; }
+.ms-send:active { background-color: #18229a; }
+.ms-send:focus  { border-color: #0b1370; }
+
+/* Nothing to send: still a button a reader can reach, drawn as unavailable. */
+.ms-send-off { background-color: #a5acf3; border-color: #a5acf3; }
+.ms-send-off:hover  { background-color: #a5acf3; }
+.ms-send-off:active { background-color: #a5acf3; }
+.ms-send-off:focus  { border-color: #2b3ce8; }
+
+.ms-send-text {
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: bold;
+  width: 40px;
+  height: 20px;
+  text-align: center;
+}
+
+/* Only there while something arrived that the reader has scrolled away from. */
+.ms-tobottom {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  left: 150px;
+  top: 356px;
+  width: 140px;
+  height: 32px;
+  border-radius: 16px;
+  border: 2px solid #ffffff;
+  background-color: #18181b;
+}
+
+.ms-tobottom:focus { border-color: #2b3ce8; }
+
+.ms-tobottom-text {
+  color: #ffffff;
+  font-size: 13px;
+  width: 120px;
+  height: 18px;
+  text-align: center;
 }

@@ -64,6 +64,11 @@ treefactory Motion {
     tag Cap     EVGElement (props (className "mo-cap") (elementType 1))
     tag Cards   EVGElement (props (className "mo-cards"))
     tag Card    EVGElement (props (className "mo-card") (role "button") (a11yFocusable true))
+    ; Replay: puts every journey back at its start and sends it off again.
+    tag BarRow  EVGElement (props (className "mo-bar-row"))
+    tag Replay  EVGElement (props (className "mo-replay") (role "button") (a11yFocusable true))
+    tag ReplayTx EVGElement (props (className "mo-replay-text") (elementType 1) (a11yHidden true))
+    tag BarNote EVGElement (props (className "mo-bar-note") (elementType 1))
 }
 
 class MotionDemo {
@@ -78,7 +83,9 @@ class MotionDemo {
     def pressed:string ""
     def flipped:boolean false
     def pageW:double 1180.0
-    def pageH:double 1580.0
+    ; A starting guess only: `laidOut` replaces it with where the last panel
+    ; actually ends.
+    def pageH:double 1600.0
 
     Constructor () {
     }
@@ -238,9 +245,18 @@ class MotionDemo {
                                  (a11yLabel "Disabled card") (a11yDisabled true)) "disabled"))))
     }
 
+    sfn replayBar:EVGElement () {
+        return (tree Motion
+            (BarRow (props (id "mo-bar-row"))
+                (Replay (props (id "mo-replay") (a11yLabel "Replay the animations"))
+                    (ReplayTx "↻ Replay"))
+                (BarNote "Puts every dot, bar and tile back at its start and sends it off again. They travel there, back and there again, 1.7 seconds apart.")))
+    }
+
     sfn page:EVGElement () {
         return (tree Motion
             (Page (props (id "mo-page"))
+                (child (MotionDemo.replayBar()))
                 (child (MotionDemo.timingPanel()))
                 (child (MotionDemo.delayPanel()))
                 (child (MotionDemo.originPanel()))
@@ -248,6 +264,22 @@ class MotionDemo {
     }
 
     ; --- the host ------------------------------------------------------------------
+
+    ; Back to the start, at once and not by transition.
+    ;
+    ; A fresh tree and a fresh transition table: an element that has never
+    ; been styled has no "from", so it lands where the unflipped sheet puts
+    ; it without travelling, and nothing still in flight can finish the old
+    ; journey on top of the new one. The page then flips the theme on the next
+    ; frame and every row leaves together, from zero, as it did on first load.
+    ; Hover and press are kept: a pointer resting on a card is still there.
+    fn replay:void () {
+        flipped = false
+        transitions = (new EVGTransition())
+        ; The kept layout needs no telling: see `laidOut` — a tree nobody
+        ; has styled reports itself layout-dirty on its first pass.
+        root = (MotionDemo.page())
+    }
 
     fn setFlipped:void (v:boolean) {
         flipped = v
@@ -325,7 +357,39 @@ class MotionDemo {
         fresh.setPageSize(pageW pageH)
         layout = fresh
         fresh.layout(r)
+        ; THE PAGE IS AS TALL AS WHAT IS ON IT. `pageH` was a constant, and
+        ; the constant fell behind the panels: the pointer-state cards at the
+        ; bottom were cut off by the canvas edge. The first layout says where
+        ; the last panel ends; if that is not where the page ends, the page is
+        ; resized to it and laid out once more.
+        def need:double ((MotionDemo.contentBottom(r)) + r.box.paddingBottomPx)
+        if (need != pageH) {
+            pageH = need
+            ; The root is told its height as well: the first pass left the
+            ; old one on it, and a new page size alone does not replace it.
+            r.layoutClean = false
+            r.height = (EVGUnit.px(pageH))
+            def sized (new EVGLayout())
+            sized.setPageSize(pageW pageH)
+            layout = sized
+            sized.layout(r)
+            return sized
+        }
         return fresh
+    }
+
+    sfn contentBottom:double (el:EVGElement) {
+        def bottom:double 0.0
+        def i:int 0
+        while (i < (array_length el.children)) {
+            def kid:EVGElement (itemAt el.children i)
+            def b:double ((kid.calculatedY) + (kid.calculatedHeight))
+            if (b > bottom) {
+                bottom = b
+            }
+            i = (i + 1)
+        }
+        return bottom
     }
 
     fn tick:boolean (dtMs:double) {
@@ -383,7 +447,10 @@ class MotionDemo {
         return (s.getError(i))
     }
 
+    ; Laid out first: the page asks for its height before its display list,
+    ; and the height is only known once the panels have been placed.
     fn heightPx:double () {
+        this.laidOut()
         return pageH
     }
 

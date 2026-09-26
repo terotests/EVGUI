@@ -362,7 +362,7 @@ let lastEventcalHover = "";
 // never in this file at all — so it passed every check while being absent from
 // the only place a person looks. That is the same shape of hole as a
 // controller with no surface, one level up.
-const message = new MessageDemo();
+let message = new MessageDemo();
 message.init(MESSAGE_CSS);
 let lastMessageHover = "";
 
@@ -957,19 +957,40 @@ const DEMOS = {
     }),
   },
 
+  // The transcript, now written to. The composer is an `InputCtl` behind the
+  // same platform text session the form uses; Enter or Send appends a bubble,
+  // `ScrollerCtl` keeps the newest in view, and the other side answers on the
+  // demo's own clock — so `animated`, and a `host` whose `busy` is true while
+  // a reply is owed.
   message: {
     height: () => message.heightPx(),
     list: () => message.displayListJson(),
     hit: (x, y) => message.hitId(x, y),
     a11y: (gen, focus) => message.a11yJson(gen, focus),
-    press: (id) => message.press(id),
+    cursorAt: (x, y) => message.cursorAt(x, y),
+    textSession: {
+      focused: () => message.focusedField(),
+      state: (tid) => JSON.parse(message.fieldStateJson(tid)),
+      apply: (tid, v, a, b) => message.applyEdit(tid, v, a, b),
+    },
+    press: (id, x, y, ev) => message.beginSelection(id, x, !!(ev && ev.shiftKey)),
+    drag: (id, ev) => message.extendSelection(ev.offsetX),
+    drop: () => message.endSelection(),
+    dblclick: (id, x) => message.selectWordAt(id, x),
+    // The wheel moves the transcript, and false at an end hands it back.
+    scroll: (dy) => message.scrollBy(dy),
     hover: (id) => {
       if (id === lastMessageHover) return false;
       lastMessageHover = id;
       message.setHover(id);
       return true;
     },
+    keyWith: (k, shift, ctrl) => message.keyWith(k, shift, ctrl),
+    // The demo owns its own tab ring: the field, Send, and the jump button
+    // while it is showing.
+    ownsTab: true,
     key: (k) => message.key(k),
+    ownsKey: (k) => message.ownsKey(k),
     host: () => ({
       tick: (dt) => message.tick(dt),
       busy: () => message.busyNow(),
@@ -982,6 +1003,7 @@ const DEMOS = {
       setPressed: (id) => message.setPressed(id),
       root: () => null,
     }),
+    animated: true,
   },
 
   controls: {
@@ -1122,7 +1144,9 @@ const DEMOS = {
     list: () => motion.displayListJson(),
     hit: (x, y) => motion.hitId(x, y),
     a11y: (gen, focus) => motion.a11yJson(gen, focus),
-    press: () => false,
+    // The one control on the page: Replay. Everything else here is answered
+    // by the stylesheet.
+    press: (id) => (id === "mo-replay" ? replayMotion() : false),
     hover: (id) => {
       if (id === lastHover) return false;
       lastHover = id;
@@ -2666,7 +2690,12 @@ const textInput = createTextInputBridge({
     const took = d.keyWith ? d.keyWith(k.key, k.shiftKey, k.ctrlKey || k.metaKey, k.altKey) : false;
     // Focus may have moved to another field, or off the fields entirely.
     syncTextSession();
-    if (took) paint();
+    if (took) {
+      paint();
+      // A key can start something that moves on its own — Enter in the
+      // message composer sends, and the reply comes on the demo's clock.
+      if (d.animated) animate();
+    }
     return took;
   },
 });
@@ -2715,6 +2744,7 @@ window.__resetDemo = (name) => {
   else if (name === "controls") { controls = new ControlsDemo(); controls.init(CONTROLS_CSS); lastControlsHover = ""; }
   else if (name === "otp") { otp = new OtpDemo(); otp.init(OTP_CSS); lastOtpHover = ""; }
   else if (name === "metadata") { metadata = new MetadataDemo(); metadata.init(METADATA_CSS); lastMetadataHover = ""; }
+  else if (name === "message") { message = new MessageDemo(); message.init(MESSAGE_CSS); lastMessageHover = ""; }
   else if (name === "dialog") {
     dialog = new DialogDemo(); dialog.init(DIALOG_CSS); dialog.openWindow(); dialog.openModal();
     lastDialogHover = ""; dialogDragAt = null;
@@ -2780,16 +2810,58 @@ function animate() {
   animating = requestAnimationFrame(step);
 }
 
-function startFlipping() {
+// How many times the page turns the theme over before it stops and waits for
+// Replay: there, back, and there again, so the rows end at rest where they
+// arrived. Not forever: every frame of this page is a 1180x1640 repaint, and a
+// loop that never ends is a page that never goes idle — measured headless on
+// software GL, about one frame a second. Replay is how to see it again.
+const FLIPS = 3;
+let flipsLeft = 0;
+
+function startFlipping(n = FLIPS) {
   stopFlipping();
+  flipsLeft = n;
+  if (flipsLeft <= 0) return;
   // Long enough for the slowest row (900ms plus the 360ms delay) to arrive and
   // be looked at before it leaves again.
   flipTimer = setInterval(() => {
+    flipsLeft -= 1;
     motion.setFlipped(!motion.isFlipped());
     paint();
     animate();
+    if (flipsLeft <= 0) {
+      clearInterval(flipTimer);
+      flipTimer = 0;
+    }
   }, 1700);
 }
+
+/**
+ * Every journey back to its start, and off again.
+ *
+ * `motion.replay()` swaps in an unstyled tree, so this paint lands every dot
+ * where the unflipped sheet puts it without travelling; the flip on the NEXT
+ * frame is then a change the transitions see, and they all leave together.
+ * The 1.7 s cycle restarts from now, so the first return is a full cycle away
+ * rather than whatever was left of the old one, and it runs the same three
+ * flips a first visit does. Pressing it again mid-journey starts over.
+ */
+function replayMotion() {
+  if (state.which !== "motion") return false;
+  motion.replay();
+  paint();
+  // The first flip is the one on the next frame; the timer does the rest.
+  startFlipping(FLIPS - 1);
+  requestAnimationFrame(() => {
+    if (state.which !== "motion") return;
+    motion.setFlipped(true);
+    paint();
+    animate();
+  });
+  return true;
+}
+const motionReplayBtn = document.getElementById("motionreplay");
+if (motionReplayBtn) motionReplayBtn.addEventListener("click", () => replayMotion());
 
 function stopFlipping() {
   if (flipTimer) clearInterval(flipTimer);
