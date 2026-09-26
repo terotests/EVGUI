@@ -43,7 +43,7 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
-const BIN = path.join(ROOT, "gallery", "ui", "bin");
+const BIN = path.join(ROOT, "gallery", "evgui", "bin");
 const BASELINE = path.join(HERE, "layout-baseline.json");
 
 // TWO SHAPES, because the demos have two. Most are an instance you `init` with

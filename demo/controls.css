@@ -104,6 +104,51 @@
   cursor: default;
 }
 
+/* StepperCtl's own state words — active / completed / inactive — which are
+ * what `stateOf` returns. The rules above used an older vocabulary
+ * (current / complete / upcoming) that no step ever carried, so the step you
+ * were on drew as a pale circle like every other. */
+.cx-dot-active {
+  background-color: #0a0a0a;
+  border-color: #0a0a0a;
+}
+
+.cx-dot-completed {
+  background-color: #16a34a;
+  border-color: #16a34a;
+}
+
+.cx-dot-inactive {
+  background-color: #fafafa;
+  cursor: default;
+}
+
+/* The icon: a Lucide outline, stroked in the circle's state colour. */
+.cx-icon {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: #71717a;
+  stroke-width: 2;
+}
+
+.cx-icon-active {
+  stroke: #ffffff;
+}
+
+.cx-icon-completed {
+  stroke: #ffffff;
+  stroke-width: 2.5;
+}
+
+.cx-icon-inactive {
+  stroke: #a1a1aa;
+}
+
+.cx-icon-disabled {
+  stroke: #d4d4d8;
+}
+
 .cx-dottxt {
   font-size: 12px;
   color: #71717a;
@@ -210,8 +255,13 @@
   background-color: #e4e4e7;
 }
 
+/* A row, so `align-items: center` centres the line VERTICALLY and the text
+ * starts at the left padding. As a column it did the opposite: the text sat
+ * at the top, centred horizontally. */
 .cx-panelbox {
   display: flex;
+  flex-direction: row;
+  justify-content: flex-start;
   align-items: center;
   border-width: 1px;
   border-color: #e4e4e7;
@@ -295,13 +345,17 @@
 
 /* The ruler. Every tick has a cell; a MINOR one is a shorter mark with an
  * empty label, which is how ReUI hides the number without losing the space. */
+/* Each tick is placed at its value's fraction by ControlsDemo.rgr (inline
+ * `left`), centred in a 20px cell — the same x the thumb's centre takes. */
 .cx-ticks {
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
+  position: relative;
+  height: 22px;
 }
 
 .cx-tick {
+  position: absolute;
+  top: 0px;
+  width: 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -450,15 +504,30 @@
   border-color: #0a0a0a;
 }
 
+/* Keyboard focus, drawn by EVG — the mirror's own outline is suppressed. */
+.cx-numbtn:focus {
+  border-color: #0a0a0a;
+}
+
+.cx-thumb:focus {
+  border-color: #0a0a0a;
+  border-width: 2px;
+}
+
+.cx-btn:focus {
+  border-color: #71717a;
+}
+
 .cx-numtxt {
   font-size: 14px;
   color: #0a0a0a;
 }
 
+/* No fixed height: the hint wraps to two lines at this width, and a 15px box
+ * pushed the second line onto the panel's border. */
 .cx-numhint {
   font-size: 11px;
-  color: #a1a1aa;
-  height: 15px;
+  color: #71717a;
 }
 
 /* --- back and next -------------------------------------------------------- */

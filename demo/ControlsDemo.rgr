@@ -57,6 +57,10 @@ treefactory Ctl {
     tag Step      EVGElement (props (className "cx-step") (role "listitem"))
     tag Dot       EVGElement (props (className "cx-dot"))
     tag DotTxt    EVGElement (props (className "cx-dottxt") (elementType 1) (a11yHidden true))
+    ; The step's icon, as a Lucide outline (24x24, stroked). A font glyph
+    ; mixed a colour emoji lock with monochrome text symbols; one stroked
+    ; path per icon takes the circle's own colour whatever the platform font.
+    tag Icon      EVGElement (props (className "cx-icon") (tagName "path") (elementType 3) (viewBox "0 0 24 24") (a11yHidden true))
     tag StepLbl   EVGElement (props (className "cx-steplbl") (elementType 1) (a11yHidden true))
     tag Rail      EVGElement (props (className "cx-rail"))
 
@@ -66,14 +70,17 @@ treefactory Ctl {
     tag BarFill   EVGElement (props (className "cx-barfill"))
     tag BarTxt    EVGElement (props (className "cx-bartxt") (role "status") (elementType 1))
 
-    ; The number field. MEASURED as a TEXT input with a roledescription, not a
-    ; spinbutton — see NumberCtl's header.
+    ; The number field. Published as a SPINBUTTON with its range and value
+    ; (aria-valuenow/min/max). NumberCtl's header records that Base UI ships a
+    ; text input with a roledescription instead; on this page the box is drawn,
+    ; not typed into through a native <input>, so the WAI-ARIA spinbutton
+    ; pattern is what tells a reader the arrows step it and where it sits.
     tag Panel     EVGElement (props (className "cx-panel"))
     tag PanelLbl  EVGElement (props (className "cx-panellbl") (elementType 1))
     tag NumRow    EVGElement (props (className "cx-numrow"))
     tag NumBtn    EVGElement (props (className "cx-numbtn") (role "button"))
     tag NumBtnTxt EVGElement (props (className "cx-numbtntxt") (elementType 1) (a11yHidden true))
-    tag NumBox    EVGElement (props (className "cx-numbox") (role "textbox") (a11yRoleDescription "Number field"))
+    tag NumBox    EVGElement (props (className "cx-numbox") (role "spinbutton"))
     tag NumTxt    EVGElement (props (className "cx-numtxt") (elementType 1) (a11yHidden true))
     tag NumHint   EVGElement (props (className "cx-numhint") (elementType 1))
 
@@ -169,6 +176,7 @@ class ControlsDemo {
         stepper.stepAt(0).icon = "user"
         stepper.stepAt(1).icon = "card"
         stepper.stepAt(2).icon = "lock"
+        stepper.stepAt(3).icon = "review"
         stepper.stepAt(0).content = "Name, email and how to reach you."
         stepper.stepAt(1).content = "Card number, expiry and billing address."
         stepper.stepAt(2).content = "The six digits we just sent you."
@@ -314,13 +322,28 @@ class ControlsDemo {
 
     ; A glyph name to a character. The controller holds NAMES so a theme can
     ; decide what an icon looks like; this is that decision, in one place.
-    sfn glyphFor:string (name:string) {
-        if (name == "check") { return "✓" }
-        if (name == "spinner") { return "◌" }
-        if (name == "user") { return "☺" }
-        if (name == "card") { return "▤" }
-        if (name == "lock") { return "🔒" }
-        return "•"
+    ; Lucide's outlines, one `d` each (circles and rounded rectangles written
+    ; as arcs, because an element is one path).
+    sfn iconPath:string (name:string) {
+        if (name == "check") { return "M20 6 L9 17 L4 12" }
+        if (name == "spinner") { return "M21 12 A9 9 0 1 1 12 3" }
+        if (name == "user") { return "M19 21 V19 A4 4 0 0 0 15 15 H9 A4 4 0 0 0 5 19 V21 M16 7 A4 4 0 1 1 8 7 A4 4 0 1 1 16 7 Z" }
+        if (name == "card") { return "M4 5 H20 A2 2 0 0 1 22 7 V17 A2 2 0 0 1 20 19 H4 A2 2 0 0 1 2 17 V7 A2 2 0 0 1 4 5 Z M2 10 H22" }
+        if (name == "lock") { return "M5 11 H19 A2 2 0 0 1 21 13 V20 A2 2 0 0 1 19 22 H5 A2 2 0 0 1 3 20 V13 A2 2 0 0 1 5 11 Z M7 11 V7 A5 5 0 0 1 17 7 V11" }
+        if (name == "review") { return "M9 2 H15 A1 1 0 0 1 16 3 V5 A1 1 0 0 1 15 6 H9 A1 1 0 0 1 8 5 V3 A1 1 0 0 1 9 2 Z M16 4 H18 A2 2 0 0 1 20 6 V20 A2 2 0 0 1 18 22 H6 A2 2 0 0 1 4 20 V6 A2 2 0 0 1 6 4 H8 M9 14 L11 16 L15 12" }
+        ; A small dot for a step with no icon of its own.
+        return "M14 12 A2 2 0 1 1 10 12 A2 2 0 1 1 14 12 Z"
+    }
+
+    ; Which icon a step's circle carries, as a name — kept so a check can ask.
+    sfn iconName:string (name:string) {
+        if (name == "check") { return name }
+        if (name == "spinner") { return name }
+        if (name == "user") { return name }
+        if (name == "card") { return name }
+        if (name == "lock") { return name }
+        if (name == "review") { return name }
+        return "dot"
     }
 
     ; The track, the filled range and the thumb — the three the measured
@@ -341,6 +364,7 @@ class ControlsDemo {
         ; alone leaves a slider that announces its name and nothing about where
         ; it sits, which is the exact defect SliderCtl's header says forced the
         ; trace to grow, reappearing on the other path.
+        thumb.a11yFocusable = true
         thumb.a11yHasRange = true
         thumb.a11yHasValue = true
         thumb.a11yValueMin = s.minValue
@@ -392,6 +416,11 @@ class ControlsDemo {
         while (i < (s.tickCount())) {
             def major:boolean (s.tickIsMajor(i))
             def cell (tree Ctl (Tick))
+            ; Each tick sits at ITS value's fraction of the track, centred
+            ; there — the same x the thumb's centre takes at that value. With
+            ; `space-between` the cells were spaced by their label widths, so
+            ; a thumb at 5 sat between the marks for 4 and 6's neighbours.
+            UiTree.inline(cell "left" (ControlsDemo.px((((s.fractionOf((s.tickValue(i)))) * trackW) - 10.0))))
             def markCls:string "cx-tickmark cx-tickmark-minor"
             if major {
                 markCls = "cx-tickmark cx-tickmark-major"
@@ -464,13 +493,13 @@ class ControlsDemo {
                 item.a11yCurrent = "step"
             }
             ; The indicator ReUI's `indicators` map decides: a tick once done,
-            ; a spinner while working, the step's own icon otherwise. One glyph
-            ; alone in a centred box — the measurer falls back to half an em
-            ; outside 32..126, which spaces a RUN wrongly and does not apply.
-            def mark:string (ControlsDemo.glyphFor((stepper.indicatorAt(i))))
+            ; a spinner while working, the step's own icon otherwise — drawn
+            ; as a stroked outline in the circle's state colour.
+            def ind:string (ControlsDemo.iconName((stepper.indicatorAt(i))))
             item.addChild((tree Ctl
                 (Dot (props (className (this.dotClass(i))))
-                    (DotTxt (props (className (this.dotTextClass(i)))) mark))))
+                    (Icon (props (className ("cx-icon cx-icon-" + state + " cx-icon-is-" + ind))
+                                 (svgPath (ControlsDemo.iconPath(ind))))))))
             ; ReUI's block under the circle: eyebrow, title, state badge.
             def col (tree Ctl (StepCol))
             col.addChild((tree Ctl (Eyebrow (stepper.eyebrowAt(i)))))
@@ -535,6 +564,7 @@ class ControlsDemo {
         def decBtn (tree Ctl
             (NumBtn (props (id "cx-num-dec") (a11yLabel "Decrease"))
                 (NumBtnTxt "−")))
+        decBtn.a11yFocusable = true
         if ((num.canDecrement()) == false) {
             decBtn.a11yDisabled = true
             decBtn.className = "cx-numbtn cx-numbtn-off"
@@ -552,10 +582,19 @@ class ControlsDemo {
         ; element path's name for it — the same property FormDemo puts a text
         ; field's contents in.
         box.a11yValue = num.text
+        ; The spinbutton's range and position. No valuenow while the box is
+        ; empty — EMPTY IS NOT ZERO, NumberCtl's rule.
+        box.a11yHasRange = true
+        box.a11yValueMin = (to_int num.minValue)
+        box.a11yValueMax = (to_int num.maxValue)
+        box.a11yHasValue = num.hasValue
+        box.a11yValueNow = (to_int num.value)
+        box.a11yFocusable = true
         row.addChild(box)
         def incBtn (tree Ctl
             (NumBtn (props (id "cx-num-inc") (a11yLabel "Increase"))
                 (NumBtnTxt "+")))
+        incBtn.a11yFocusable = true
         if ((num.canIncrement()) == false) {
             incBtn.a11yDisabled = true
             incBtn.className = "cx-numbtn cx-numbtn-off"
@@ -577,9 +616,12 @@ class ControlsDemo {
         def actions (tree Ctl (Actions))
         actions.addChild((tree Ctl
             (Btn (props (id "cx-back") (a11yLabel "Back")) (BtnTxt "Back"))))
+        def backBtn:EVGElement (actions.getChild(0))
+        backBtn.a11yFocusable = true
         def nextBtn (tree Ctl
             (Btn (props (id "cx-next") (className (this.nextClass())) (a11yLabel "Next"))
                 (BtnTxt (props (className (this.nextTextClass()))) "Next")))
+        nextBtn.a11yFocusable = true
         if ((stepper.canAdvance()) == false) {
             nextBtn.a11yDisabled = true
         }
@@ -814,6 +856,23 @@ class ControlsDemo {
                 this.rebuild()
                 return true
             }
+            ; Typing. The page's key hook hands over the key NAME, so a
+            ; printable character arrives here as a one-character string —
+            ; without this the digits fell through to the mirror's <input> and
+            ; the canvas went on showing "—". Each accepted character settles
+            ; at once (typeChar blurs), which is where the 0–99 clamp applies.
+            if ((strlen k) == 1) {
+                return (this.typeChar((charAt k 0)))
+            }
+            if ((k == "Backspace") || (k == "Delete")) {
+                num.focus()
+                num.backspace()
+                num.blur()
+                this.syncFromField()
+                this.saveField()
+                this.rebuild()
+                return true
+            }
             return false
         }
         if (stepper.onKey(k)) {
@@ -988,7 +1047,48 @@ class ControlsDemo {
         return (t.busy(r))
     }
 
+    ; The page is as tall as what is laid out in it. `pageH` used to be a
+    ; constant 460 while the content came to ~650, so the slider bank, Back and
+    ; Next were drawn below the canvas. The root box is sized by the viewport
+    ; (min-height), so the content bottom is read off its last in-flow child
+    ; and the root's own bottom padding added back; when that is taller than
+    ; the viewport the viewport grows and the tree is laid out again.
+    fn contentBottom:double () {
+        def r:EVGElement (unwrap root)
+        def bottom:double 0.0
+        def i:int 0
+        while (i < (r.getChildCount())) {
+            def c:EVGElement (r.getChild(i))
+            def b:double (c.calculatedY + c.calculatedHeight)
+            if (b > bottom) {
+                bottom = b
+            }
+            i = (i + 1)
+        }
+        def pad:double 0.0
+        if (!null? r.box) {
+            def bx:EVGBox r.box
+            def pb:EVGUnit bx.paddingBottom
+            if (!null? pb) {
+                if pb.isSet {
+                    pad = pb.pixels
+                }
+            }
+        }
+        return (bottom + pad)
+    }
+
     fn heightPx:double () {
+        this.laidOut()
+        def want:double (to_double (to_int ((this.contentBottom()) + 0.999)))
+        if (want > pageH) {
+            pageH = want
+            layout = (new EVGLayout())
+            def lay:EVGLayout (unwrap layout)
+            lay.setPageSize(pageW pageH)
+            this.laidOut()
+            lay.layout((unwrap root))
+        }
         return pageH
     }
 }

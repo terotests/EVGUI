@@ -94,7 +94,11 @@ treefactory Fm {
     ; noise, and a reader that hears "Full name star" has been told nothing.
     tag Star    EVGElement (props (className "fm-star") (elementType 1) (a11yHidden true))
     tag Hint    EVGElement (props (className "fm-hint") (elementType 1) (a11yHidden true))
-    tag Error   EVGElement (props (className "fm-hint fm-error") (elementType 1) (a11yHidden true))
+    ; The error is NOT hidden: it is the node the field's aria-describedby
+    ; points at (shadcn's FormMessage), so a reader can hear it from the field
+    ; and also walk to it. The hint stays hidden and reaches the field as its
+    ; resolved description.
+    tag Error   EVGElement (props (className "fm-hint fm-error") (elementType 1) (role "text"))
     ; THE BOX IS THE TEXTBOX. It carries the role, the name and the
     ; description, because it is the thing a reader lands on — the run of text
     ; inside it is a glyph run and the caret beside it is a rectangle, and
@@ -160,6 +164,12 @@ class FormDemo {
     ; `aria-pressed` beside a field whose kind flips, which is expressible with
     ; what is already here.
     def secretShown:boolean false
+    ; shadcn-style validation: a field's error shows once it has been TOUCHED
+    ; (focused and then left) or once the form has been submitted, and from
+    ; then on it follows every keystroke.
+    def touched:[string]
+    def submitted:boolean false
+    def lastFocus:string ""
 
     def pageW:double 620.0
     def pageH:double 660.0
@@ -327,6 +337,10 @@ class FormDemo {
         ; would be more ordinary and would draw half as much of what this demo
         ; is here to show.
         focused = "fm-amount"
+        lastFocus = focused
+        ; The email has been visited and left — so its error is showing when
+        ; the page opens, the one state a form with nothing wrong never draws.
+        this.touch("fm-email")
         this.rebuild()
     }
 
@@ -495,6 +509,7 @@ class FormDemo {
         }
         if (f.isBad()) {
             box.a11yInvalid = "true"
+            box.a11yDescribedBy = (c.tid + "-error")
         }
         if (c.readOnly) {
             box.a11yReadOnly = "true"
@@ -620,7 +635,7 @@ class FormDemo {
         def body:EVGElement (unwrap c.rootEl)
         fe.addChild(body)
         if (f.isBad()) {
-            fe.addChild((tree Fm (Error f.error)))
+            fe.addChild((tree Fm (Error (props (id (f.tid + "-error"))) f.error)))
         } {
             if ((strlen f.hint) > 0) {
                 fe.addChild((tree Fm (Hint f.hint)))
@@ -643,7 +658,7 @@ class FormDemo {
         ; the control's description, and a second copy in the tree would be
         ; announced twice.
         if (f.isBad()) {
-            fe.addChild((tree Fm (Error f.error)))
+            fe.addChild((tree Fm (Error (props (id (f.tid + "-error"))) f.error)))
         } {
             if ((strlen f.hint) > 0) {
                 fe.addChild((tree Fm (Hint f.hint)))
@@ -661,6 +676,8 @@ class FormDemo {
             box.addChild((tree Fm (Tick "✓")))
         } {
             box.a11yChecked = (EVGA11yTri.no())
+            ; An empty box, not a blue one with the tick taken out.
+            UiTree.addClass(box "fm-check-off")
         }
         row.addChild(box)
         row.addChild((tree Fm (CheckLb terms.name)))
@@ -912,10 +929,102 @@ class FormDemo {
     ; are one fact and not three. Called from `rebuild`, which is what every
     ; edit, click and keystroke ends with — so there is no "and remember to
     ; validate" anywhere else in the file.
+    ; What is wrong with a field now, whether or not it is shown yet.
+    fn ruleError:string (tid:string) {
+        if (tid == "fm-name") {
+            if ((strlen (trim name.value)) == 0) {
+                return "Enter your full name."
+            }
+            return ""
+        }
+        if (tid == "fm-email") {
+            if ((strlen (trim email.value)) == 0) {
+                return "Enter an email address."
+            }
+            return (FormDemo.mailError(email.value))
+        }
+        if (tid == "fm-secret") {
+            def n:int (strlen secret.value)
+            if (n == 0) {
+                return "Enter a password."
+            }
+            if (n < 8) {
+                return "Use at least 8 characters."
+            }
+            return ""
+        }
+        return ""
+    }
+
+    fn isTouched:boolean (tid:string) {
+        def i:int 0
+        while (i < (array_length touched)) {
+            if ((itemAt touched i) == tid) {
+                return true
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    fn touch:void (tid:string) {
+        if ((this.isTouched(tid)) == false) {
+            push touched tid
+        }
+    }
+
+    ; The three fields with rules, in form order.
+    fn checkedFields:[string] () {
+        def a:[string]
+        push a "fm-name"
+        push a "fm-email"
+        push a "fm-secret"
+        return a
+    }
+
+    fn validateOne:void (tid:string c:InputCtl) {
+        def f:UiField (this.fieldFor(tid))
+        f.error = ""
+        if (submitted || (this.isTouched(tid))) {
+            f.error = (this.ruleError(tid))
+        }
+        f.dressInput(c)
+    }
+
+    ; Submit: every rule shows, and focus goes to the first field that fails
+    ; (what react-hook-form's `shouldFocusError` does under shadcn's Form).
+    ; Returns whether the form was valid.
+    fn submit:boolean () {
+        this.leaveCombo()
+        submitted = true
+        def all:[string] (this.checkedFields())
+        def i:int 0
+        while (i < (array_length all)) {
+            def tid:string (itemAt all i)
+            if ((strlen (this.ruleError(tid))) > 0) {
+                focused = tid
+                lastFocus = tid
+                this.rebuild()
+                return false
+            }
+            i = (i + 1)
+        }
+        focused = "fm-submit"
+        this.rebuild()
+        return true
+    }
+
     fn validate:void () {
-        def f:UiField (this.fieldFor("fm-email"))
-        f.error = (FormDemo.mailError(email.value))
-        f.dressInput(email)
+        ; Leaving a field is what touches it.
+        if (lastFocus != focused) {
+            if ((strlen lastFocus) > 0) {
+                this.touch(lastFocus)
+            }
+            lastFocus = focused
+        }
+        this.validateOne("fm-name" name)
+        this.validateOne("fm-email" email)
+        this.validateOne("fm-secret" secret)
     }
 
     fn rebuild:void () {
@@ -1069,6 +1178,11 @@ class FormDemo {
             return true
         }
         if (this.hasInput(focused)) {
+            ; Enter in a text field submits the form, as it does in a <form>.
+            if (k == "Enter") {
+                this.submit()
+                return true
+            }
             def c:InputCtl (this.inputFor(focused))
             c.keyDownWith(focused k shift ctrl)
             c.ensureCaretVisible((this.engine()))
@@ -1079,6 +1193,12 @@ class FormDemo {
             if (k == " ") {
                 terms.checkState = (1 - terms.checkState)
                 this.rebuild()
+                return true
+            }
+        }
+        if (focused == "fm-submit") {
+            if ((k == " ") || (k == "Enter")) {
+                this.submit()
                 return true
             }
         }
@@ -1163,6 +1283,16 @@ class FormDemo {
         if (target == "fm-terms") {
             focused = target
             terms.checkState = (1 - terms.checkState)
+            this.rebuild()
+            return true
+        }
+        if (target == "fm-submit") {
+            focused = target
+            this.submit()
+            return true
+        }
+        if (target == "fm-cancel") {
+            focused = target
             this.rebuild()
             return true
         }
