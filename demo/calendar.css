@@ -65,6 +65,10 @@
   background-color: #ffffff;
 }
 
+/* A year the calendar cannot show: red border and the message under it. */
+.cd-box-bad { border-color: #dc2626; }
+.cd-error { color: #dc2626; font-size: 12px; width: 320px; }
+
 .ui-datefield-seg {
   color: #18181b;
   font-size: 14px;

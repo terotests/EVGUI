@@ -81,6 +81,13 @@ class DateFieldCtl extends UiCtl {
     ; was captured with the browser's.
     def todayYear:int 2026
 
+    ; How many digits the year takes. 0 is the native control's rule — the
+    ; year accumulates up to 275760 — and is what the oracle measured. A host
+    ; that wants a four-digit year sets 4: the year then stops at 9999, and a
+    ; digit typed into a full year starts it over instead of clamping it, so
+    ; retyping "2027" over "2026" gives 2027 and not 9999.
+    def yearDigits:int 0
+
     ; Placeholders drawn in an empty segment, as the native control does.
     def monthHint:string "mm"
     def dayHint:string "dd"
@@ -220,6 +227,15 @@ class DateFieldCtl extends UiCtl {
         }
         if (i == 1) {
             return 31
+        }
+        if (yearDigits > 0) {
+            def mx:int 1
+            def k:int 0
+            while (k < yearDigits) {
+                mx = (mx * 10)
+                k = (k + 1)
+            }
+            return (mx - 1)
         }
         return 275760
     }
@@ -371,6 +387,13 @@ class DateFieldCtl extends UiCtl {
     fn typeDigit:boolean (d:int) {
         def i:int seg
         def mx:int (this.segMax(i))
+        ; A full four-digit year (see `yearDigits`) starts over.
+        if ((i == 2) && (yearDigits > 0)) {
+            if (bufferLen >= yearDigits) {
+                buffer = -1
+                bufferLen = 0
+            }
+        }
         if (buffer < 0) {
             buffer = d
             bufferLen = 1

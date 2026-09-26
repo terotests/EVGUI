@@ -75,9 +75,12 @@ console.log("--- one label column, whatever is in it ---");
     labels.map((l) => l.calculatedWidth).join(","));
   ok("every control starts on one x", cells.every((c) => Math.abs(c.calculatedX - cells[0].calculatedX) < 0.5),
     cells.map((c) => Math.round(c.calculatedX)).join(","));
-  // A label and its control are centred against each other: compare midlines.
+  // A label and its CONTROL are centred against each other: compare
+  // midlines. The control, not the cell — a hint or an error under the box is
+  // not part of what the label names, and centring on box + hint put
+  // "Customer" eight pixels low (audit P2-7). This used to compare the cell.
   const misaligned = rows.filter((r) => {
-    const l = r.el.children[0], c = r.el.children[1];
+    const l = r.el.children[0], c = r.el.children[1].children[0];
     return Math.abs((l.calculatedY + l.calculatedHeight / 2) - (c.calculatedY + c.calculatedHeight / 2)) > 1;
   });
   ok("label and control share a midline in every row", misaligned.length === 0, misaligned.map((r) => r.el.id).join(","));
