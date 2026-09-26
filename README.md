@@ -58,7 +58,7 @@ shallow checkout of Ranger (`compiler/`, `lib/`, `dist/`,
 `gallery/ui/conformance` and the few gallery modules the dashboard imports —
 no `npm ci`), this repository checked out at `gallery/evgui` inside it, the pages built and checked (`verify-out.mjs`,
 `pages-smoke.mjs` in a real Chromium), then the demo suites (`scripts/gate.sh`).
-Pushes to the default branch are deployed to GitHub Pages. The Ranger ref is
+Pushes to `main` are deployed to GitHub Pages. The Ranger ref is
 `RANGER_REF` in the workflow (`master`); a manual run can override it.
 
 Pages must be set to deploy from GitHub Actions (Settings → Pages → Source).
