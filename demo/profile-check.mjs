@@ -16,7 +16,7 @@
 // inside a container; the flex basis had not, and the two disagreeing is what
 // let it happen.
 //
-//   node gallery/ui/demo/profile-check.mjs
+//   node gallery/evgui/demo/profile-check.mjs
 
 import fs from "node:fs";
 import path from "node:path";
@@ -27,7 +27,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
 const require = createRequire(import.meta.url);
 
-const M = require(path.join(ROOT, "gallery/ui/bin/ProfileDemo.cjs"));
+const M = require(path.join(ROOT, "gallery/evgui/bin/ProfileDemo.cjs"));
 const CSS = fs.readFileSync(path.join(HERE, "profile.css"), "utf8");
 
 let passed = 0;
@@ -121,8 +121,9 @@ console.log("--- the spacers, which were all zero ---");
   );
   ok("and the hint at the left", hint.el.calculatedX - foot.el.calculatedX < 26);
   // A trailing icon inside a box is the same mechanism at a smaller scale.
+  // The date boxes' calendar is a BUTTON now (it opens the picker).
   const birth = one(d, "pf-birth");
-  const icon = birth.el.children.find((k) => (k.className || "").includes("pf-icon"));
+  const icon = birth.el.children.find((k) => (k.className || "").includes("pf-pick"));
   ok(
     "and the calendar at the right edge of its box",
     (birth.el.calculatedX + birth.el.calculatedWidth) - (icon.calculatedX + icon.calculatedWidth) < 16,
@@ -198,7 +199,8 @@ console.log("--- it types, and only where it should ---");
   do { d.tab(false); ring.push(d.focused); } while (d.focused !== start && ring.length < 40);
   ok("Tab comes back to where it started", d.focused === start, ring.join(" "));
   ok("visiting every stop once", new Set(ring).size === ring.length, ring.join(" "));
-  ok("twelve of them", ring.length === 12, "got " + ring.length);
+  // Fourteen: the twelve controls and the two date fields' calendar buttons.
+  ok("fourteen of them", ring.length === 14, "got " + ring.length);
 }
 
 console.log("--- nothing leaks out of its container ---");
@@ -369,6 +371,95 @@ console.log("--- choosing an option, by pointer ---");
   ok("and it is the chosen one", chosen[0] && chosen[0].name === "Nobody",
     JSON.stringify(chosen[0] && chosen[0].name));
   ok("no lint with it open", d.a11yProblems().length === 0, d.a11yProblems().join("; "));
+}
+
+console.log("--- the date picker ---");
+{
+  const d = fresh();
+  const rect = (id) => { const n = one(d, id); return n && n.el; };
+  const clickOn = (id) => {
+    d.displayListJson();
+    const e = rect(id);
+    if (!e) return { hit: "(missing " + id + ")", handled: false };
+    const hit = d.hitId(e.calculatedX + e.calculatedWidth / 2, e.calculatedY + e.calculatedHeight / 2);
+    const handled = d.beginSelection(hit, e.calculatedX + e.calculatedWidth / 2, false);
+    d.displayListJson();
+    return { hit, handled };
+  };
+  const node = (id, gen) => JSON.parse(d.a11yJson(gen || 1, "")).nodes.find((n) => n.id === id);
+
+  const btn = node("pf-birth-pick");
+  ok("the calendar is a button", btn && btn.role === "button", JSON.stringify(btn));
+  ok("named \"Choose date\"", btn && btn.name === "Choose date", JSON.stringify(btn && btn.name));
+  ok("that says it opens a dialog", btn && btn.haspopup === "dialog", JSON.stringify(btn && btn.haspopup));
+  ok("and that it is shut", btn && btn.expanded === 1, JSON.stringify(btn && btn.expanded));
+
+  const c = clickOn("pf-birth-pick");
+  ok("a click on the icon lands on the button", c.hit === "pf-birth-pick", c.hit);
+  ok("and opens the picker", d.pickFor === "pf-birth", d.pickFor);
+  const pop = rect("pf-birth-cal");
+  const box = rect("pf-birth");
+  ok("the popover is drawn", !!pop);
+  ok("under the field", pop && pop.calculatedY >= box.calculatedY + box.calculatedHeight - 1,
+    pop && `pop.y=${pop.calculatedY} box bottom=${box.calculatedY + box.calculatedHeight}`);
+  ok("starting at its left edge", pop && Math.abs(pop.calculatedX - box.calculatedX) < 2,
+    pop && `pop.x=${pop.calculatedX} box.x=${box.calculatedX}`);
+  const cap = () => find(d, "cd-monthtxt")[0].el.textContent + " " + find(d, "cd-yeartxt")[0].el.textContent;
+  ok("on the month of the value", cap() === "September 1991", cap());
+  ok("with the value's day chosen", !!rect("pf-cal-1991-09-18") && /cd-day-selected/.test(rect("pf-cal-1991-09-18").className));
+  ok("and the keyboard on it", d.focused === "pf-cal-1991-09-18", d.focused);
+  const open = node("pf-birth-pick", 2);
+  ok("the button reports itself expanded", open && open.expanded === 2, JSON.stringify(open && open.expanded));
+  const dlg = node("pf-birth-cal", 2);
+  ok("the popover is a named dialog", dlg && dlg.role === "dialog" && !!dlg.name, JSON.stringify(dlg));
+  ok("no lint with it open", d.a11yProblems().length === 0, d.a11yProblems().join("; "));
+
+  // The keyboard: arrows move the day, Enter picks it in the field's format.
+  d.keyWith("ArrowRight", false, false);
+  d.keyWith("ArrowDown", false, false);
+  ok("arrows move the day", d.focused === "pf-cal-1991-09-26", d.focused);
+  d.keyWith("Enter", false, false);
+  ok("Enter writes the date in the field's format", d.birth.value === "Sep 26, 1991", d.birth.value);
+  ok("and closes the picker", d.pickFor === "", d.pickFor);
+  ok("with focus back in the field", d.focused === "pf-birth", d.focused);
+
+  // Keyboard open: Enter on the button; Escape closes and returns focus.
+  d.setFocus("pf-birth-pick");
+  d.keyWith("Enter", false, false);
+  ok("Enter on the button opens it", d.pickFor === "pf-birth", d.pickFor);
+  d.keyWith("PageDown", false, false);
+  d.keyWith("Escape", false, false);
+  ok("Escape closes it", d.pickFor === "", d.pickFor);
+  ok("and puts focus in the field", d.focused === "pf-birth", d.focused);
+  ok("without changing the value", d.birth.value === "Sep 26, 1991", d.birth.value);
+
+  // Alt+ArrowDown, in the field and on the button.
+  d.keyWithAlt("ArrowDown", false, false, true);
+  ok("Alt+ArrowDown in the field opens it", d.pickFor === "pf-birth", d.pickFor);
+  d.keyWith("Escape", false, false);
+  d.setFocus("pf-available-pick");
+  d.keyWithAlt("ArrowDown", false, false, true);
+  ok("Alt+ArrowDown on the button opens it", d.pickFor === "pf-available", d.pickFor);
+  ok("the availability date opens on April 2026", cap() === "April 2026", cap());
+
+  // A pick by pointer keeps the time.
+  const pc = clickOn("pf-cal-2026-04-30");
+  ok("a click reaches the day", pc.hit === "pf-cal-2026-04-30", pc.hit);
+  ok("the date part is set and the time kept", d.available.value === "April 30th, 2026 - 10:30", d.available.value);
+  ok("and it closes", d.pickFor === "" && d.focused === "pf-available", d.pickFor + " @" + d.focused);
+
+  // A click outside closes and returns focus to the field.
+  clickOn("pf-birth-pick");
+  ok("reopened", d.pickFor === "pf-birth", d.pickFor);
+  const nx = clickOn("pf-cal-next");
+  ok("the month arrows still work inside", cap() === "October 1991" && d.pickFor === "pf-birth", cap());
+  // (Not the Company box: the open popover covers it, and a click there is a
+  // click on a day. The name field is above the popover.)
+  const out = clickOn("pf-name");
+  ok("the outside click reaches the field it aimed at", out.hit === "pf-name", out.hit);
+  ok("a click outside closes it", d.pickFor === "", d.pickFor);
+  ok("and returns focus to the field", d.focused === "pf-birth", d.focused);
+  ok("with the value untouched", d.birth.value === "Sep 26, 1991", d.birth.value);
 }
 
 console.log("");

@@ -3,9 +3,9 @@
 //
 // Every text field on every demo page, against the browser's own <input>.
 //
-//   node gallery/ui/demo/input-bench.mjs            # score against the baseline
-//   node gallery/ui/demo/input-bench.mjs --record   # rewrite the baseline
-//   node gallery/ui/demo/input-bench.mjs --only=fm-name --verbose
+//   node gallery/evgui/demo/input-bench.mjs            # score against the baseline
+//   node gallery/evgui/demo/input-bench.mjs --record   # rewrite the baseline
+//   node gallery/evgui/demo/input-bench.mjs --only=fm-name --verbose
 //
 // WHY THIS EXISTS. The fields on these pages do not behave like the fields on
 // a shadcn page, and nothing said so. Nine conformance specs drive `InputCtl`
@@ -50,7 +50,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "node:http";
-import { requireHostTool, findChromium } from "../conformance/dom-adapter.mjs";
+import { requireHostTool, findChromium } from "../../ui/conformance/dom-adapter.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
@@ -68,7 +68,7 @@ const ONLY = (argv.find((a) => a.startsWith("--only=")) || "").slice(7).split(",
 const SCEN = (argv.find((a) => a.startsWith("--scenario=")) || "").slice(11).split(",").filter(Boolean);
 
 if (!fs.existsSync(path.join(HERE, "bundle.js"))) {
-  console.error("bundle.js missing — run `node gallery/ui/demo/build.mjs` first");
+  console.error("bundle.js missing — run `node gallery/evgui/demo/build.mjs` first");
   process.exit(3);
 }
 
@@ -91,7 +91,7 @@ const server = createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
-const URL_ = `http://127.0.0.1:${port}/gallery/ui/demo/index.html`;
+const URL_ = `http://127.0.0.1:${port}/gallery/evgui/demo/index.html`;
 
 const { chromium } = requireHostTool("playwright-core");
 const browser = await chromium.launch({ executablePath: findChromium() });

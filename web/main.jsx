@@ -16,10 +16,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 
-import { App as RadixApp } from "../conformance/dom/app.jsx";
-import { snapshotDom } from "../conformance/dom/snapshot.js";
-import { diffNodes, FIELDS } from "../conformance/diff.mjs";
-import { buildHost } from "../conformance/build-host.cjs";
+import { App as RadixApp } from "../../ui/conformance/dom/app.jsx";
+import { snapshotDom } from "../../ui/conformance/dom/snapshot.js";
+import { diffNodes, FIELDS } from "../../ui/conformance/diff.mjs";
+import { buildHost } from "../../ui/conformance/build-host.cjs";
 import { renderDisplayList } from "../../../lib/evg/gl/evg-webgl.js";
 import * as HostModule from "../bin/ui_host.cjs";
 import { installCanvasMeasurer } from "../../../lib/evg/gl/evg-measure.js";

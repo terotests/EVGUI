@@ -597,10 +597,18 @@
               caret has to know: a leading icon moves where the run starts.
             </p>
             <p class="hint">
-              The date and time boxes are <em>text fields with an icon</em>.
-              Segmented editing &mdash; where ArrowUp on the month changes the
-              month and not the caret &mdash; is its own contract, and it is not
-              built here rather than half-built.
+              <strong>Pick a date.</strong> The calendar at the end of Birth Date
+              and Availability Date is a button: click it, or press Enter or
+              Alt+&darr; on it (or Alt+&darr; in the field), and the calendar
+              demo&rsquo;s own calendar opens under the field on the month of its
+              value. Choosing a day writes it in the field&rsquo;s format (the
+              time after the date is kept); Escape or a click outside closes it
+              and puts you back in the field.
+            </p>
+            <p class="hint">
+              The text itself is still free text. Segmented editing &mdash; where
+              ArrowUp on the month changes the month and not the caret &mdash; is
+              its own contract, and it is not built here rather than half-built.
             </p>
           </section>
           <section data-for="effects">
@@ -791,6 +799,13 @@
               stop is already on the first chip, and a version that spent it
               adopting focus is the defect the controller&rsquo;s gate caught.
             </p>
+            <p class="hint">
+              <strong>&#8942; opens the chip&rsquo;s menu.</strong> Change the
+              operator, edit or clear the value, or remove the filter &mdash;
+              the same <code>MenuCtl</code> the dropdown demo runs, so Enter or
+              Space opens it (on the chip or on &#8942;), the arrows walk it and
+              Escape hands focus back to the button.
+            </p>
           </section>
           <section data-for="eventcal">
             <h2>what to try</h2>
@@ -892,13 +907,13 @@
             <em>rebuilt</em>, not moved: the page holds an order and hands it over, and the
             tree literal builds whatever it is given. Click a row and use Space, &uarr;
             &darr; and Escape for the same thing from the keyboard. The behaviour is the
-            one <code>gallery/ui/src/SortableCtl.rgr</code> is measured against, item for
+            one <code>gallery/evgui/src/SortableCtl.rgr</code> is measured against, item for
             item, with <code>@dnd-kit/sortable</code> as the reference.
           </p>
           <p class="note" data-for="table">
             <strong>The state is not this demo's.</strong> Sorting, page-scoped
             selection and the paging arithmetic all live in
-            <code>gallery/ui/src/TableCtl.rgr</code>, which the conformance
+            <code>gallery/evgui/src/TableCtl.rgr</code>, which the conformance
             harness measures against <code>@tanstack/react-table</code> — the
             library ReUI's table is built on. This file is the other half: a
             <code>treefactory</code> and a stylesheet, and nothing else. The
@@ -912,12 +927,12 @@
             <code>@headless-tree/core</code> renders and therefore what ReUI's
             tree renders. The indent is a spacer this demo adds; a reader never
             sees it and does not need to. Open/closed, focus and every key are
-            <code>gallery/ui/src/TreeCtl.rgr</code>&rsquo;s.
+            <code>gallery/evgui/src/TreeCtl.rgr</code>&rsquo;s.
           </p>
           <p class="note" data-for="dropdown">
             <strong>This demo owns no state at all.</strong> Open/closed, the
             roving focus, the submenu stack, the 100&nbsp;ms hover delay and
-            every key are <code>gallery/ui/src/MenuCtl.rgr</code>&rsquo;s, which
+            every key are <code>gallery/evgui/src/MenuCtl.rgr</code>&rsquo;s, which
             five conformance specs measure against
             <code>@radix-ui/react-dropdown-menu</code>. What is here is a
             <code>treefactory</code>, a stylesheet, and which icon goes on which
@@ -1053,7 +1068,7 @@
   "title": "Filters",
   "src": "FilterDemo",
   "caption": "FilterCtl · measured against @tanstack/table-core",
-  "desc": "A filter bar that actually filters: the chips and the rows under them are both FilterCtl's answer, measured against @tanstack/table-core — including its rule that an emptied chip matches everything."
+  "desc": "A filter bar that actually filters: the chips and the rows under them are both FilterCtl's answer, measured against @tanstack/table-core — including its rule that an emptied chip matches everything. Each chip's ⋮ opens a menu (MenuCtl, as in the dropdown demo) to change the operator, edit or clear the value, or remove the filter."
  },
  "eventcal": {
   "title": "Event Calendar",
@@ -1089,7 +1104,7 @@
   "title": "Profile Form",
   "src": "ProfileDemo",
   "caption": "Label-left form layout · InputCtl fields",
-  "desc": "The other form shape: the label to the left and every control's left edge on one column, across rows of deliberately different heights, so a layout that only worked when they matched would have nowhere to hide."
+  "desc": "The other form shape: the label to the left and every control's left edge on one column, across rows of deliberately different heights. The date fields open the calendar demo's own calendar in a popover under the field; choosing a day writes it back in the field's format."
  },
  "dashboard": {
   "title": "Dashboard",

@@ -11,11 +11,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { assertDomInstalled, MissingDomDeps } from "../conformance/dom-adapter.mjs";
+import { assertDomInstalled, MissingDomDeps } from "../../ui/conformance/dom-adapter.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const UI = path.join(HERE, "..");
-const DOM_DIR = path.join(UI, "conformance", "dom");
+// The conformance harness stays in Ranger, beside this checkout.
+const CONFORMANCE = path.join(UI, "..", "ui", "conformance");
+const DOM_DIR = path.join(CONFORMANCE, "dom");
 const domRequire = createRequire(path.join(DOM_DIR, "package.json"));
 
 // One check, shared with the headless adapter, covering every package the page
@@ -37,7 +39,7 @@ if (!fs.existsSync(HOST)) {
   process.exit(3);
 }
 
-const specsDir = path.join(UI, "conformance", "specs");
+const specsDir = path.join(CONFORMANCE, "specs");
 const specs = fs
   .readdirSync(specsDir)
   .filter((f) => f.endsWith(".json"))

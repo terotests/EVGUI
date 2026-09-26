@@ -17,7 +17,7 @@
 // None of those is visible in a unit test of the rule. All three are visible
 // here, which is what this file is for.
 //
-//   node gallery/ui/demo/resize-check.mjs
+//   node gallery/evgui/demo/resize-check.mjs
 
 import fs from "node:fs";
 import path from "node:path";
@@ -28,7 +28,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
 const require = createRequire(import.meta.url);
 
-const M = require(path.join(ROOT, "gallery/ui/bin/ResizeDemo.cjs"));
+const M = require(path.join(ROOT, "gallery/evgui/bin/ResizeDemo.cjs"));
 const CSS = fs.readFileSync(path.join(HERE, "resize.css"), "utf8");
 
 let passed = 0;
