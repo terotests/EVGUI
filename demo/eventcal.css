@@ -22,7 +22,7 @@
   background-color: #ffffff;
   padding: 20px;
   width: 900px;
-  height: 520px;
+  height: 580px;
 }
 
 .ec-head {
@@ -44,6 +44,10 @@
   border-radius: 8px;
   background-color: #ffffff;
   cursor: pointer;
+}
+
+.ec-navbtn:focus {
+  border-color: #0a0a0a;
 }
 
 .ec-navbtn:hover {
@@ -134,6 +138,7 @@
 }
 
 .ec-bandtxt {
+  font-family: Arial;
   font-size: 11px;
   color: #1e3a8a;
 }
@@ -171,6 +176,7 @@
 }
 
 .ec-evtxt {
+  font-family: Arial;
   font-size: 11px;
   color: #312e81;
 }
@@ -274,3 +280,11 @@
 }
 
 .ec-chiptxt { color: #1e3a8a; font-family: Arial; font-size: 11px; height: 14px; }
+
+/* Focus, for the keyboard ring. Every focusable the demo draws says where the
+ * focus is; before the ring existed nothing here could be focused at all. */
+.ec-viewbtn:focus { border-color: #0a0a0a; }
+.ec-chip:focus { background-color: #bfdbfe; }
+.ec-bandev:focus { background-color: #bfdbfe; }
+.ec-ev:focus { background-color: #c7d2fe; }
+.ec-more:focus { background-color: #e4e4e7; }

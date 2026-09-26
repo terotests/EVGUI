@@ -313,6 +313,53 @@ console.log("every view can be left for every other one");
     `${JSON.stringify(oncall)} vs ${JSON.stringify(col)}`);
 }
 
+console.log("the keyboard reaches every control");
+{
+  // The mirror is one tab stop; the demo walks its own ring. Before it, no
+  // node was focusable and prev/next, the views and the events were
+  // pointer-only.
+  const d = fresh();
+  const seen = [];
+  for (let i = 0; i < 40; i++) {
+    if (!d.keyWith("Tab", false, false)) break;
+    d.displayListJson();
+    seen.push(d.focused);
+  }
+  ok("Tab visits the arrows, Today and the three views first",
+    seen.slice(0, 6).join(",") === "ec-prev,ec-next,ec-today,ec-view-day,ec-view-week,ec-view-month", seen.slice(0, 6).join(","));
+  ok("and then the events", seen.includes("ec-a") && seen.includes("ec-j"), seen.join(","));
+  ok("and lets go at the end, so focus can leave", seen.length < 40, String(seen.length));
+  ok("Shift+Tab walks back", d.keyWith("Tab", true, false) && d.focused === seen[seen.length - 2], d.focused);
+  const nodes = JSON.parse(d.a11yJson(4, d.focused)).nodes;
+  ok("every button is focusable in the mirror",
+    nodes.filter((n) => n.role === "button").every((n) => n.focusable), "");
+  const d2 = fresh();
+  while (d2.focused !== "ec-view-month") d2.keyWith("Tab", false, false);
+  d2.keyWith("Enter", false, false);
+  d2.displayListJson();
+  ok("Enter on Month opens the month", d2.model.view === "month");
+  ok("and the focus stays on its button, which is still drawn", !!byId(d2, d2.focused) && d2.focused === "ec-view-month");
+  d2.keyWith("Tab", true, false);
+  d2.keyWith("Tab", true, false);
+  d2.keyWith(" ", false, false);
+  d2.displayListJson();
+  ok("Space on Day, reached backwards from Month, leaves it", d2.model.view === "day");
+  const d3 = fresh();
+  while (d3.focused !== "ec-f") d3.keyWith("Tab", false, false);
+  d3.keyWith("ArrowRight", false, false);
+  d3.displayListJson();
+  ok("an arrow that steps the focused event off screen hands the focus to the arrow button",
+    d3.focused === "ec-next" && !!byId(d3, "ec-next"), d3.focused);
+}
+
+console.log("titles too long for their box end in an ellipsis");
+{
+  const d = fresh();
+  const txt = (id) => byId(d, id)?.children[0]?.textContent || "";
+  ok("the narrow overlapped box is cut with an ellipsis, not mid-word", /…$/.test(txt("ec-g")), txt("ec-g"));
+  ok("a box with room keeps its whole title", txt("ec-a") === "Standup", txt("ec-a"));
+}
+
 console.log(`\npassed=${passed} failed=${failed}`);
 if (failed > 0) process.exit(1);
 console.log("ALL PASS");

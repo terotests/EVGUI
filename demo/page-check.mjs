@@ -889,6 +889,15 @@ console.log("--- the window follows the pointer ---");
   // the release rebuilt it.
   await page.click('#demos input[value="dialog"]');
   await page.waitForTimeout(300);
+  // The modal opens over the window and its scrim takes every press, as a
+  // modal's should, so it is closed first. (The window used to draw OVER the
+  // modal, which is why this test could drag it with the modal open.)
+  {
+    const cancel = await page.getByRole("button", { name: "Cancel", exact: true }).boundingBox();
+    ok("the modal is open, and on top", !!cancel);
+    if (cancel) await page.mouse.click(cancel.x + cancel.width / 2, cancel.y + cancel.height / 2);
+    await page.waitForTimeout(200);
+  }
   const box = await (await page.$("#stage canvas")).boundingBox();
   const at = () => page.evaluate(() => {
     const l = JSON.parse(window.__lastList || "{}");

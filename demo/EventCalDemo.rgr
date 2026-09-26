@@ -29,6 +29,8 @@
 Import "../src/EventCalCtl.rgr"
 Import "../src/UiTree.rgr"
 Import "../src/UiDate.rgr"
+Import "../src/UiText.rgr"
+Import "pkg:evg/EVGTextEngine.rgr"
 Import "pkg:evg/EVGElement.rgr"
 Import "pkg:evg/EVGLayout.rgr"
 Import "pkg:evg/EVGDisplayList.rgr"
@@ -44,10 +46,10 @@ treefactory Ec {
 
     tag Page     EVGElement (props (className "ec-page"))
     tag Head     EVGElement (props (className "ec-head"))
-    tag NavBtn   EVGElement (props (className "ec-navbtn") (role "button"))
+    tag NavBtn   EVGElement (props (className "ec-navbtn") (role "button") (a11yFocusable true))
     tag NavGlyph EVGElement (props (className "ec-navglyph") (elementType 1) (a11yHidden true))
     tag Caption  EVGElement (props (className "ec-caption") (role "status") (elementType 1))
-    tag ViewBtn  EVGElement (props (className "ec-viewbtn") (role "button"))
+    tag ViewBtn  EVGElement (props (className "ec-viewbtn") (role "button") (a11yFocusable true))
     tag ViewTxt  EVGElement (props (className "ec-viewtxt") (elementType 1) (a11yHidden true))
     tag Body     EVGElement (props (className "ec-body") (role "region"))
     ; The month view's own furniture. A month cell has no time axis, so an
@@ -65,18 +67,18 @@ treefactory Ec {
     tag MonthBg   EVGElement (props (className "ec-monthbg") (a11yHidden true))
     tag MonthBgCell EVGElement (props (className "ec-monthbgcell") (a11yHidden true))
     tag ChipGap   EVGElement (props (className "ec-chipgap") (a11yHidden true))
-    tag More      EVGElement (props (className "ec-more") (role "button"))
+    tag More      EVGElement (props (className "ec-more") (role "button") (a11yFocusable true))
     tag MoreTxt   EVGElement (props (className "ec-moretxt") (elementType 1) (a11yHidden true))
     tag ChipTxt   EVGElement (props (className "ec-chiptxt") (elementType 1) (a11yHidden true))
     tag DayCols  EVGElement (props (className "ec-daycols"))
     tag DayHead  EVGElement (props (className "ec-dayhead") (elementType 1) (a11yHidden true))
     tag Band     EVGElement (props (className "ec-band") (role "list") (a11yLabel "All day"))
     tag BandRow  EVGElement (props (className "ec-bandrow"))
-    tag BandEv   EVGElement (props (className "ec-bandev") (role "listitem"))
+    tag BandEv   EVGElement (props (className "ec-bandev") (role "listitem") (a11yFocusable true))
     tag BandTxt  EVGElement (props (className "ec-bandtxt") (elementType 1) (a11yHidden true))
     tag Grid     EVGElement (props (className "ec-grid") (role "list") (a11yLabel "Events"))
     tag Col      EVGElement (props (className "ec-col"))
-    tag Ev       EVGElement (props (className "ec-ev") (role "listitem"))
+    tag Ev       EVGElement (props (className "ec-ev") (role "listitem") (a11yFocusable true))
     tag EvTxt    EVGElement (props (className "ec-evtxt") (elementType 1) (a11yHidden true))
     tag Note     EVGElement (props (className "ec-note") (elementType 1))
 }
@@ -91,7 +93,11 @@ class EventCalDemo {
     def pressed:string ""
     def focused:string ""
     def pageW:double 900.0
-    def pageH:double 520.0
+    def pageH:double 580.0
+    ; Measures titles so a box too narrow for one ends in an ellipsis rather
+    ; than a word cut in half ("Desigr"). Owns no tree; it only hands out the
+    ; engine, as in FormDemo.
+    def measurer:EVGLayout (new EVGLayout())
 
     ; The day the demo calls today, and the day the user is looking at. The
     ; cursor is kept apart from `model.weekStart` because a week view snaps
@@ -106,7 +112,9 @@ class EventCalDemo {
     def firstHour:int 8
     def lastHour:int 19
     def colGap:double 4.0
-    def gridH:double 300.0
+    ; 360, not 300: at 300 a 30-minute event was 13.6px tall and its 11px
+    ; title spilled into the event under it ("Triage" over "Parser review").
+    def gridH:double 360.0
 
     fn init:void (css:string) {
         def s (new EVGStyleSheet())
@@ -269,12 +277,13 @@ class EventCalDemo {
                             if (e.clipStart != day) {
                                 cid = (cid + "-w" + (to_string row))
                             }
-                            def chip (tree Ec
-                                (Chip (props (id cid) (a11yLabel (this.chipLabel(e))))
-                                    (ChipTxt e.title)))
                             ; Wide enough to cover its days, gaps included, less
                             ; the cell's own padding on either side.
                             def w:double (((cw * (to_double span)) + (colGap * (to_double (span - 1)))) - 8.0)
+                            def chipTitle:string (this.fitTitle(e.title (w - 12.0)))
+                            def chip (tree Ec
+                                (Chip (props (id cid) (a11yLabel (this.chipLabel(e))))
+                                    (ChipTxt chipTitle)))
                             UiTree.inline(chip "width" (EventCalDemo.px(w)))
                             cell.addChild(chip)
                         } {
@@ -346,6 +355,14 @@ class EventCalDemo {
             fs = "0" + fs
         }
         return ((to_string whole) + "." + fs + "px")
+    }
+
+    ; The title, or as much as fits in `w` pixels followed by an ellipsis.
+    fn fitTitle:string (title:string w:double) {
+        if (w < 8.0) {
+            return ""
+        }
+        return (UiText.fit((measurer.getTextEngine()) title "Arial" 11.0 w))
     }
 
     ; --- the look ------------------------------------------------------------
@@ -474,16 +491,18 @@ class EventCalDemo {
                 if ((be.lane == lane) && (model.isVisible(be.id))) {
                     def offset:int (be.clipStart - (model.firstDay()))
                     def spanDays:int ((be.clipEnd - be.clipStart) + 1)
+                    def bandW:double ((((to_double spanDays) * (this.colWidth()))
+                        + ((to_double (spanDays - 1)) * colGap)))
+                    def bandTitle:string (this.fitTitle(be.title (bandW - 10.0)))
                     def chip (tree Ec
                         (BandEv (props (id ("ec-" + be.id)) (a11yLabel (be.title + ", all day")))
-                            (BandTxt be.title)))
+                            (BandTxt bandTitle)))
                     ; Placed by hand, because a band chip spans several day
                     ; columns and no flex row expresses "starts at column 1 and
                     ; is three columns wide". Inline is legal for exactly this:
                     ; a case the sheet cannot say.
                     UiTree.inline(chip "left" (EventCalDemo.px(((to_double offset) * ((this.colWidth()) + colGap)))))
-                    UiTree.inline(chip "width" (EventCalDemo.px((((to_double spanDays) * (this.colWidth()))
-                        + ((to_double (spanDays - 1)) * colGap)))))
+                    UiTree.inline(chip "width" (EventCalDemo.px(bandW)))
                     row.addChild(chip)
                 }
                 bj = (bj + 1)
@@ -504,12 +523,32 @@ class EventCalDemo {
             def k:int 0
             while (k < (array_length dayItems)) {
                 def e:CalEvent (itemAt dayItems k)
+                ; What SHOWS of the box, not its width: a later event laid
+                ; over it covers everything right of its own left edge, so
+                ; the first of three overlaid boxes shows only its first third
+                ; and a title fitted to the full width was cut mid-word there.
+                ; Less the 6px padding, the 3px spine and a little air.
+                def shown:double (model.widthOf(e.id))
+                def q:int 0
+                while (q < (array_length dayItems)) {
+                    def f:CalEvent (itemAt dayItems q)
+                    if ((f.id != e.id) && ((model.zOf(f.id)) > (model.zOf(e.id)))
+                        && (f.startMin < e.endMin) && (f.endMin > e.startMin)
+                        && ((model.leftOf(f.id)) > (model.leftOf(e.id)))) {
+                        def gap:double ((model.leftOf(f.id)) - (model.leftOf(e.id)))
+                        if (gap < shown) {
+                            shown = gap
+                        }
+                    }
+                    q = (q + 1)
+                }
+                def evTitle:string (this.fitTitle(e.title ((shown * (this.colWidth())) - 12.0)))
                 def box (tree Ec
                     (Ev (props (id ("ec-" + e.id))
                                (className (this.evClass(e.id)))
                                (a11yLabel (e.title + ", " + (EventCalCtl.clock(e.startMin))
                                    + " to " + (EventCalCtl.clock(e.endMin)))))
-                        (EvTxt e.title)))
+                        (EvTxt evTitle)))
                 ; THE MEASURED NUMBERS, become pixels. `left` and `width` are
                 ; fractions of the column: column 0 of 3 is the full width,
                 ; column 2 of 3 is a third of it, offset two thirds — the
@@ -541,17 +580,23 @@ class EventCalDemo {
             return false
         }
         if (target == "ec-prev") {
+            focused = target
             return (this.go(-1))
         }
         if (target == "ec-next") {
+            focused = target
             return (this.go(1))
         }
         if (target == "ec-today") {
+            focused = target
             cursor = today
             this.show()
             return true
         }
-        if (target == "ec-view-day") { return (this.pickView("day")) }
+        if (target == "ec-view-day") {
+            focused = target
+            return (this.pickView("day"))
+        }
         if ((strlen target) > 8) {
             if ((substring target 0 8) == "ec-more-") {
                 def parsed@(optional):int (to_int (substring target 8 (strlen target)))
@@ -560,11 +605,20 @@ class EventCalDemo {
                 }
                 def dayNo:int (unwrap parsed)
                 cursor = dayNo
+                ; The "+N more" button is gone once the day is open; the
+                ; focus goes to the view it opened.
+                focused = "ec-view-day"
                 return (this.pickView("day"))
             }
         }
-        if (target == "ec-view-week") { return (this.pickView("week")) }
-        if (target == "ec-view-month") { return (this.pickView("month")) }
+        if (target == "ec-view-week") {
+            focused = target
+            return (this.pickView("week"))
+        }
+        if (target == "ec-view-month") {
+            focused = target
+            return (this.pickView("month"))
+        }
         focused = target
         model.activeId = target
         this.rebuild()
@@ -597,7 +651,32 @@ class EventCalDemo {
         model.step(delta)
         cursor = model.weekStart
         this.show()
+        ; An event that had the focus may not exist in the new range; the focus
+        ; then goes to the arrow that moved it, not to <body>.
+        if (delta > 0) {
+            this.keepFocus("ec-next")
+        } {
+            this.keepFocus("ec-prev")
+        }
         return true
+    }
+
+    ; If what has the focus was not redrawn, give it to `fallback`.
+    fn keepFocus:void (fallback:string) {
+        if (focused == "") {
+            return
+        }
+        def ring:[string] (this.tabRing())
+        def i:int 0
+        while (i < (array_length ring)) {
+            if ((itemAt ring i) == focused) {
+                return
+            }
+            i = (i + 1)
+        }
+        focused = fallback
+        model.activeId = fallback
+        this.rebuild()
     }
 
     fn pickView:boolean (v:string) {
@@ -610,7 +689,83 @@ class EventCalDemo {
         ; smaller half of why the buttons did nothing.
         model.layout()
         this.rebuild()
+        this.keepFocus(("ec-view-" + model.view))
         return true
+    }
+
+    ; --- the keyboard ---------------------------------------------------------
+    ;
+    ; The mirror is a roving tabindex: one tab stop for the canvas. So the demo
+    ; owns Tab (`ownsTab` in main.js) and walks every focusable it drew, in the
+    ; order it drew them — arrows, Today, the three views, then the events.
+    ; Past either end the browser takes the Tab and focus leaves the calendar.
+    ; Enter and Space press what has the focus; the arrow keys still step.
+
+    fn collectFocusable:void (el:EVGElement out:[string]) {
+        if (el.a11yFocusable && ((strlen el.id) > 0)) {
+            push out el.id
+        }
+        def i:int 0
+        while (i < (el.getChildCount())) {
+            this.collectFocusable((el.getChild(i)) out)
+            i = (i + 1)
+        }
+    }
+
+    fn tabRing:[string] () {
+        def out:[string]
+        def r:EVGElement (unwrap root)
+        this.collectFocusable(r out)
+        return out
+    }
+
+    fn tab:boolean (back:boolean) {
+        def ring:[string] (this.tabRing())
+        def n:int (array_length ring)
+        if (n == 0) {
+            return false
+        }
+        def at:int -1
+        def i:int 0
+        while (i < n) {
+            if ((itemAt ring i) == focused) {
+                at = i
+            }
+            i = (i + 1)
+        }
+        if (at < 0) {
+            if back {
+                focused = (itemAt ring (n - 1))
+            } {
+                focused = (itemAt ring 0)
+            }
+        } {
+            if back {
+                at = (at - 1)
+            } {
+                at = (at + 1)
+            }
+            if ((at < 0) || (at >= n)) {
+                return false
+            }
+            focused = (itemAt ring at)
+        }
+        model.activeId = focused
+        this.rebuild()
+        return true
+    }
+
+    fn keyWith:boolean (k:string shift:boolean ctrl:boolean) {
+        if (k == "Tab") {
+            return (this.tab(shift))
+        }
+        if ((k == "Enter") || (k == " ")) {
+            if ((strlen focused) > 0) {
+                return (this.press(focused))
+            }
+            return false
+        }
+        return (this.key(k))
     }
 
     fn key:boolean (k:string) {
