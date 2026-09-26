@@ -693,7 +693,12 @@ const DEMOS = {
       profile.setHover(id);
       return true;
     },
-    keyWith: (k, shift, ctrl) => profile.keyWith(k, shift, ctrl),
+    // Alt as well: Alt+ArrowDown opens a date field's calendar popover.
+    keyWith: (k, shift, ctrl, alt) => profile.keyWithAlt(k, shift, ctrl, !!alt),
+    // …and so the field's editing session has to hand that chord back.
+    ownsKey: (k, ev) => profile.ownsKeyAlt(k, !!(ev && ev.altKey)),
+    // The wheel over the date picker's year list.
+    scroll: (dy) => profile.scrollBy(dy),
     // The demo owns its own tab ring — see the keydown handler.
     ownsTab: true,
     key: (k) => profile.key(k),
@@ -2352,11 +2357,15 @@ window.addEventListener("keydown", (ev) => {
   // A demo that reads modifiers gets them; the rest keep the one-argument
   // door they have always had.
   const took = d0.keyWith
-    ? d0.keyWith(ev.key, ev.shiftKey, ev.ctrlKey || ev.metaKey)
+    ? d0.keyWith(ev.key, ev.shiftKey, ev.ctrlKey || ev.metaKey, ev.altKey)
     : d0.key(ev.key);
   if (!took) return;
   ev.preventDefault();
   paint();
+  // A key can put the focus back in a field without the pointer — Escape out
+  // of the profile's date picker returns it to the date box — and the editing
+  // session has to follow, or the next keystroke types nowhere.
+  if (d0.textSession) syncTextSession();
   // A key that opened a menu asked for a row inside it, and the rows only
   // exist once that paint has built them. One more pass settles it.
   if (settlePendingRow()) paint();
@@ -2402,9 +2411,9 @@ const textInput = createTextInputBridge({
     // Three keys are the application's on every page, and a demo may claim
     // more for the field that has the focus: the combobox wants its arrows,
     // because there they walk the list rather than the caret.
-    const claimed = typeof d.ownsKey === "function" && d.ownsKey(k.key);
+    const claimed = typeof d.ownsKey === "function" && d.ownsKey(k.key, k);
     if (!claimed && k.key !== "Tab" && k.key !== "Escape" && k.key !== "Enter") return false;
-    const took = d.keyWith ? d.keyWith(k.key, k.shiftKey, k.ctrlKey || k.metaKey) : false;
+    const took = d.keyWith ? d.keyWith(k.key, k.shiftKey, k.ctrlKey || k.metaKey, k.altKey) : false;
     // Focus may have moved to another field, or off the fields entirely.
     syncTextSession();
     if (took) paint();
