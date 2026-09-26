@@ -462,6 +462,46 @@ console.log("--- the date picker ---");
   ok("with the value untouched", d.birth.value === "Sep 26, 1991", d.birth.value);
 }
 
+// Audit P1-1 / P2-8: the fields check what they hold (shadcn-style: red
+// border, message under the box, aria-invalid, aria-describedby), Full Name
+// is required, the completion badge follows the fields, and the avatar shows
+// initials.
+console.log("validation, completion and the avatar");
+{
+  const d = fresh();
+  const node = (id) => JSON.parse(d.a11yJson(5, d.focused)).nodes.find((n) => n.id === id);
+  const badge = () => one(d, "pf-progress").el.children[0].textContent;
+  ok("a full profile with no photo reads 86%", badge() === "86% complete", badge());
+  ok("the avatar shows the initials", one(d, "pf-avatar").el.children[0].textContent === "NB");
+  ok("the name is required", node("pf-name").required === "true");
+  const set = (c, v) => { c.value = v; c.caret = v.length; c.anchor = v.length; };
+  d.press("pf-phone"); set(d.phone, "hello"); d.rebuild(); d.displayListJson();
+  ok("an unleft field shows no error yet", !one(d, "pf-phone-error"));
+  d.press("pf-company"); d.displayListJson();
+  const pe = one(d, "pf-phone-error");
+  ok("leaving a bad phone number shows why", pe && /phone number/.test(pe.el.textContent), pe && pe.el.textContent);
+  ok("with the red border", has(one(d, "pf-phone"), "pf-box-bad"), one(d, "pf-phone").cls);
+  const pn = node("pf-phone");
+  ok("aria-invalid and aria-describedby to the message", pn.invalid === "true" && pn.describedby === "pf-phone-error", JSON.stringify(pn));
+  ok("and the badge drops", badge() === "71% complete", badge());
+  // The label lines up with the box, not with box + message.
+  const row = one(d, "pf-phone-row").el;
+  const box = one(d, "pf-phone").el;
+  ok("the label stays centred on the box", Math.abs(mid(row.children[0]) - mid(box)) < 2, mid(row.children[0]) + " vs " + mid(box));
+  // Save reports the untouched ones too and lands on the first bad field.
+  set(d.dismissal, "99.99"); set(d.birth, "not a date"); set(d.fullName, ""); d.rebuild();
+  d.press("pf-save"); d.displayListJson();
+  ok("Save flags an empty Full Name", one(d, "pf-name-error") && one(d, "pf-name-error").el.textContent === "Enter your full name.");
+  ok("a birth date that is not a date", !!one(d, "pf-birth-error"));
+  ok("and a time that is not a time", !!one(d, "pf-dismissal-error"));
+  ok("focus goes to the first of them", d.focused === "pf-name", d.focused);
+  ok("the avatar with no name has no initials", one(d, "pf-avatar").el.children[0].textContent === "");
+  ok("the page grows to hold the messages", d.heightPx() > 800, d.heightPx());
+  set(d.dismissal, "7:05"); set(d.phone, "+44 20 7946 0958"); set(d.birth, "Sep 18, 1991"); set(d.fullName, "Ada Lovelace"); d.rebuild(); d.displayListJson();
+  ok("fixed values clear every message", !one(d, "pf-name-error") && !one(d, "pf-dismissal-error") && !one(d, "pf-phone-error") && !one(d, "pf-birth-error"));
+  ok("and the initials follow the name", one(d, "pf-avatar").el.children[0].textContent === "AL");
+}
+
 console.log("");
 console.log("passed=" + passed + " failed=" + failed);
 if (failed > 0) { console.log("FAILURES"); process.exit(1); }
