@@ -108,7 +108,7 @@ console.log("the bar is drawn, and the overflow is on the screen");
 console.log("every part of a chip is reachable by the pointer");
 {
   const d = fresh();
-  for (const part of ["seed-1-field", "seed-1-op", "seed-1-value", "seed-1-menu", "seed-2-value", "add"]) {
+  for (const part of ["seed-1-field", "seed-1-op", "seed-1-value", "seed-1-menu-trigger", "seed-2-value", "add"]) {
     const el = byId(d, part);
     const cx = el.calculatedX + el.calculatedWidth / 2;
     const cy = el.calculatedY + el.calculatedHeight / 2;
@@ -166,14 +166,86 @@ console.log("a chosen option is legible, not black on black");
     `${box && rgba(box.c)} vs ${glyphs && rgba(glyphs.c)}`);
 }
 
-console.log("removing a chip");
+console.log("the chip's three dots open a menu, and removing is IN it");
 {
+  // Reported: the ⋮ button deleted the chip outright. Three dots promise a
+  // menu, as in the reference, so clicking one must open the chip's actions
+  // and leave the chip exactly where it was.
   const d = fresh();
-  const gone = clickOn(d, "seed-2-menu");
-  ok("clicking the chip's menu is handled", gone.handled, `hit [${gone.hit}]`);
+  const open = clickOn(d, "seed-2-menu-trigger");
+  ok("clicking ⋮ is handled", open.handled, `hit [${open.hit}]`);
+  ok("and the chip is still on the page", byId(d, "seed-2") !== undefined);
+  eq("with the answer unchanged", countText(d), "2 of 6 tasks");
+  ok("a menu surface opened", byId(d, "seed-2-menu-content") !== undefined);
+  const t = texts(d);
+  for (const label of ["Change operator", "Edit value", "Clear value", "Remove filter"]) {
+    ok(`the menu offers "${label}"`, t.includes(label), t.join(" / "));
+  }
+  eq("focus is on the menu surface, as Radix puts it", d.focused, "seed-2-menu-content");
+  const trig = byId(d, "seed-2-menu-trigger");
+  const surf = byId(d, "seed-2-menu-content");
+  ok("the menu hangs under its button",
+    surf.calculatedY >= trig.calculatedY + trig.calculatedHeight - 1,
+    `button bottom ${trig.calculatedY + trig.calculatedHeight}, menu top ${surf.calculatedY}`);
+
+  // Removing, through the menu item.
+  const gone = clickOn(d, "seed-2-menu-item-remove");
+  ok("clicking Remove filter is handled", gone.handled, `hit [${gone.hit}]`);
   ok("the chip is off the page", byId(d, "seed-2") === undefined);
+  ok("and the menu with it", byId(d, "seed-2-menu-content") === undefined);
   // Only the assignee chip is left: everyone but r3 has an assignee in it.
   eq("and the answer widens", countText(d), "5 of 6 tasks");
+}
+
+console.log("a press outside the open menu only closes it");
+{
+  const d = fresh();
+  clickOn(d, "seed-2-menu-trigger");
+  const out = clickOn(d, "seed-1-value");
+  ok("the press is taken", out.handled);
+  ok("the menu closed", byId(d, "seed-2-menu-content") === undefined);
+  ok("and the press did not also open the value list underneath", byId(d, "seed-1-list") === undefined);
+}
+
+console.log("the menu by keyboard");
+{
+  const d = fresh();
+  d.setFocus("seed-2-menu-trigger");
+  ok("Enter on ⋮ opens it", d.key("Enter") && byId(d.displayListJson() && d, "seed-2-menu-content") !== undefined);
+  d.key("ArrowDown");
+  eq("ArrowDown enters at the first row", d.focused, "seed-2-menu-item-operator");
+  // The highlight is `:focus`, and it has to be DRAWN: the row the arrows are
+  // on gets a fill no other row has.
+  d.displayListJson();
+  const row = byId(d, "seed-2-menu-item-operator");
+  const fills = cmds(d).filter((c) => c.text === undefined &&
+    Math.abs(c.y - row.calculatedY) < 1 && Math.abs(c.h - row.calculatedHeight) < 1);
+  ok("and the focused row is painted with a highlight", fills.length > 0, JSON.stringify(row && [row.calculatedY, row.calculatedHeight]));
+  d.key("ArrowRight");
+  eq("ArrowRight opens the operator submenu at its first row", d.focused, "seed-2-menu-item-operator-item-is");
+  d.key("ArrowDown");
+  d.key("Enter");
+  ok("Enter on 'is not' closes the menu", byId(d.displayListJson() && d, "seed-2-menu-content") === undefined);
+  eq("and focus is back on ⋮", d.focused, "seed-2-menu-trigger");
+  ok("the chip now reads 'is not'", texts(d).includes("is not"), texts(d).join(" / "));
+  eq("and the answer flipped", countText(d), "3 of 6 tasks");
+
+  d.key(" ");
+  d.displayListJson();
+  ok("Space opens it again", byId(d, "seed-2-menu-content") !== undefined);
+  d.key("Escape");
+  d.displayListJson();
+  ok("Escape closes it", byId(d, "seed-2-menu-content") === undefined);
+  eq("and returns focus to ⋮", d.focused, "seed-2-menu-trigger");
+
+  // Clear value: the rule stays, with nothing chosen, and stops filtering.
+  d.key("Enter");
+  d.key("ArrowDown"); d.key("ArrowDown"); d.key("ArrowDown");
+  eq("the third row is Clear value", d.focused, "seed-2-menu-item-clear");
+  d.key("Enter");
+  d.displayListJson();
+  ok("the chip survives a clear", byId(d, "seed-2") !== undefined);
+  eq("and no longer narrows anything", countText(d), "5 of 6 tasks");
 }
 
 console.log("the keyboard reaches the bar");
