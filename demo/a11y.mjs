@@ -58,6 +58,7 @@ const { FilterDemo } = require(path.join(ROOT, "gallery/evgui/bin/FilterDemo.cjs
 const { EventCalDemo } = require(path.join(ROOT, "gallery/evgui/bin/EventCalDemo.cjs"));
 const { MessageDemo } = require(path.join(ROOT, "gallery/evgui/bin/MessageDemo.cjs"));
 const { ControlsDemo } = require(path.join(ROOT, "gallery/evgui/bin/ControlsDemo.cjs"));
+const { TabsDemo } = require(path.join(ROOT, "gallery/evgui/bin/TabsDemo.cjs"));
 const MENUBAR_CSS = fs.readFileSync(path.join(HERE, "menubar.css"), "utf8");
 const TOOLBAR_CSS = fs.readFileSync(path.join(HERE, "toolbar.css"), "utf8");
 const SORTABLE_CSS = fs.readFileSync(path.join(HERE, "sortable.css"), "utf8");
@@ -89,6 +90,12 @@ const filters = atRest(FilterDemo, "filters.css");
 const eventcal = atRest(EventCalDemo, "eventcal.css");
 const message = atRest(MessageDemo, "message.css");
 const controls = atRest(ControlsDemo, "controls.css");
+const tabs = atRest(TabsDemo, "tabs.css");
+// And on its other tab, with a save announced: the second panel, the masked
+// fields and a status region with something in it.
+const tabsPw = atRest(TabsDemo, "tabs.css");
+tabsPw.press("tb-tab-password");
+tabsPw.press("tb-save-password");
 const sizeOf = (d) => [typeof d.widthPx === "function" ? d.widthPx() : 900, d.heightPx()];
 const REST = [
   ["profile — a label-left form", profile, 40],
@@ -99,6 +106,8 @@ const REST = [
   ["eventcal — a week of events", eventcal, 45],
   ["message — a chat transcript", message, 46],
   ["controls — stepper, sliders and a number field", controls, 47],
+  ["tabs — Account panel", tabs, 48],
+  ["tabs — Password panel, saved", tabsPw, 49],
 ].map(([name, d, gen]) => ({
   name,
   size: sizeOf(d),

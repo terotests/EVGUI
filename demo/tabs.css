@@ -1,0 +1,262 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * shadcn / ReUI Tabs: a pill tab list on a muted track, the active tab a white
+ * raised pill, and under it a card whose footer is a light grey strip with a
+ * rule on top and one dark button. zinc palette, as shadcn's default theme.
+ */
+
+.tb-page {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 40px;
+  padding: 40px 24px 40px 24px;
+  background-color: #ffffff;
+  width: 900px;
+  height: 630px;
+}
+
+.tb-stack {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 8px;
+  width: 400px;
+}
+
+/* --- the list ------------------------------------------------------------ */
+
+.tb-list {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  padding: 3px;
+  border-radius: 10px;
+  background-color: #f4f4f5;
+  height: 36px;
+}
+
+.tb-tab {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  flex-grow: 1;
+  flex-basis: 0px;
+  height: 30px;
+  border-radius: 7px;
+  border: 1px solid #f4f4f5;
+  background-color: #f4f4f5;
+  color: #71717a;
+  cursor: pointer;
+  transition: background-color 120ms ease-out, color 120ms ease-out;
+}
+
+/* The raised pill: white, a hairline border and a soft shadow under it. */
+.tb-tab-on {
+  background-color: #ffffff;
+  border-color: #e4e4e7;
+  color: #09090b;
+  shadow-color: rgba(0, 0, 0, 0.10);
+  shadow-radius: 3px;
+  shadow-offset-y: 1px;
+}
+
+.tb-tab-text { color: #71717a; font-size: 14px; font-weight: 500; height: 20px; line-height: 20px; }
+.tb-tab-text-hover { color: #3f3f46; }
+.tb-tab-text-on { color: #09090b; }
+
+/* --- the card ------------------------------------------------------------ */
+
+.tb-card {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  border-radius: 12px;
+  border: 1px solid #e4e4e7;
+  background-color: #ffffff;
+  shadow-color: rgba(0, 0, 0, 0.05);
+  shadow-radius: 2px;
+  shadow-offset-y: 1px;
+}
+
+.tb-head {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 6px;
+  padding: 24px 24px 0 24px;
+}
+
+.tb-title { color: #09090b; font-size: 16px; font-weight: 600; height: 20px; line-height: 20px; }
+.tb-desc { color: #71717a; font-size: 14px; height: auto; line-height: 20px; }
+
+.tb-body {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 20px;
+  padding: 24px 24px 24px 24px;
+}
+
+.tb-field {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.tb-label { color: #09090b; font-size: 14px; font-weight: 500; height: 16px; line-height: 16px; }
+
+.tb-box {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  position: relative;
+  border-radius: 8px;
+  border: 1px solid #e4e4e7;
+  background-color: #ffffff;
+  padding: 0 12px 0 12px;
+  height: 36px;
+  cursor: text;
+}
+.tb-box:hover { border-color: #d4d4d8; }
+.tb-box:focus {
+  border-color: #a1a1aa;
+  shadow-color: rgba(161, 161, 170, 0.45);
+  shadow-radius: 3px;
+}
+
+.tb-text { color: #09090b; font-family: Arial; font-size: 14px; height: 20px; line-height: 20px; }
+.tb-ghost { color: #a1a1aa; }
+
+.tb-caret {
+  position: absolute;
+  top: 8px;
+  width: 1px;
+  height: 20px;
+  background-color: #09090b;
+}
+
+.tb-band {
+  position: absolute;
+  top: 8px;
+  height: 20px;
+  background-color: #bfdbfe;
+}
+
+/* The footer: a rule, then the grey strip. */
+.tb-rule { height: 1px; background-color: #e4e4e7; }
+
+.tb-foot {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+  padding: 16px 24px 16px 24px;
+  border-radius: 11px;
+  background-color: #fafafa;
+}
+
+/* Squares the strip's top corners, which sit under the rule. */
+.tb-foot-top {
+  position: absolute;
+  left: 0px;
+  top: 0px;
+  width: 100%;
+  height: 12px;
+  background-color: #fafafa;
+}
+
+.tb-save {
+  border: 1px solid #18181b;
+  border-radius: 8px;
+  background-color: #18181b;
+  color: #fafafa;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  padding: 7px 16px 7px 16px;
+  cursor: pointer;
+  transition: background-color 120ms ease-out;
+}
+.tb-save:hover  { background-color: #27272a; border-color: #27272a; }
+.tb-save:active { background-color: #3f3f46; border-color: #3f3f46; }
+.tb-save:focus  { border-color: #a1a1aa; }
+
+.tb-status { flex-grow: 1; flex-basis: 0px; color: #15803d; font-size: 13px; font-weight: 500; height: 20px; line-height: 20px; }
+
+/* --- the vertical example ------------------------------------------------ */
+
+.tb-vcard {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 16px;
+  width: 400px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid #e4e4e7;
+  background-color: #ffffff;
+}
+
+.tb-vlist {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background-color: #f4f4f5;
+  width: 120px;
+}
+
+.tb-vtab {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  height: 30px;
+  padding: 0 10px 0 10px;
+  border-radius: 7px;
+  border: 1px solid #f4f4f5;
+  background-color: #f4f4f5;
+  color: #71717a;
+  cursor: pointer;
+}
+.tb-vtab-on {
+  background-color: #ffffff;
+  border-color: #e4e4e7;
+  color: #09090b;
+  shadow-color: rgba(0, 0, 0, 0.10);
+  shadow-radius: 3px;
+  shadow-offset-y: 1px;
+}
+
+.tb-vpanel {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 6px;
+  flex-grow: 1;
+  flex-basis: 0px;
+  padding: 4px 0 0 0;
+}
+.tb-vtitle { color: #09090b; font-size: 14px; font-weight: 600; height: 20px; line-height: 20px; }
+.tb-vtext { color: #71717a; font-size: 13px; height: auto; line-height: 20px; }
+
+/* --- a phone ------------------------------------------------------------- */
+
+@media (max-width: 600px) {
+  .tb-page { width: 100%; height: 100%; padding: 24px 16px 24px 16px; gap: 24px; }
+  .tb-stack { width: 100%; }
+  .tb-vcard { width: 100%; }
+  .tb-vlist { width: 104px; }
+}

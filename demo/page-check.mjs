@@ -108,7 +108,7 @@ const names = await page.evaluate(() =>
 // fourteenth demo arrived — a number in an assertion is a second place to
 // remember something, and it is the place nobody remembers.
 const EXPECTED = ["menubar", "toolbar", "sortable", "table", "tree", "timeline",
-  "resizable", "form", "calendar", "filters", "eventcal", "message", "controls", "otp", "metadata", "profile", "dashboard", "dropdown", "dialog", "motion", "effects"];
+  "resizable", "form", "calendar", "filters", "eventcal", "message", "controls", "otp", "metadata", "profile", "dashboard", "dropdown", "dialog", "motion", "effects", "tabs"];
 ok("the switcher offers every demo",
   EXPECTED.every((n) => names.includes(n)) && names.length === EXPECTED.length,
   names.join(","));

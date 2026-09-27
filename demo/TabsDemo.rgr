@@ -1,0 +1,809 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; TabsDemo — shadcn / ReUI's Tabs example: Account | Password over a card
+; =============================================================================
+; A pill tab list (a muted track, the active tab a white raised pill) and under
+; it the active tab's card: a title, a muted line, two text fields and a footer
+; strip with one dark button. Save says "Saved" in a polite status region.
+;
+; THE STATE IS NOT REBUILT HERE. `TabsCtl` owns which tab is active, the roving
+; focus and every key on the strip (arrows, Home, End, automatic activation),
+; and it is measured against @radix-ui/react-tabs by the conformance specs
+; `tabs_pointer`, `tabs_arrows` and `tabs_home_end`. `TabsCtl.build()` makes a
+; plain conformance-shaped tree; this file draws shadcn's from the same ids
+; (`tabTid`, `panelTid`) and reads `value` — the split the dropdown demo makes
+; with MenuCtl.
+;
+; The fields are `InputCtl`s wired to the page's text session exactly as the
+; form and profile demos are: the page parks a real <input> over the focused
+; box and hands every edit back through `applyEdit`, so caret, selection,
+; clipboard and IME are the platform's.
+;
+; A second, smaller card shows the same controller VERTICAL: the arrow pair
+; that moves is Up/Down there, and Left/Right do nothing — Radix's rule.
+;
+; The Tab order is the page's generic one, read off the accessible tree: the
+; tab list is ONE stop (its selected tab), then the panel's fields and its
+; button. The panel itself is not a stop here; Radix gives an empty panel
+; `tabIndex=0` so it can be reached, and these panels start with a field.
+; =============================================================================
+
+Import "../src/TabsCtl.rgr"
+Import "../src/InputCtl.rgr"
+Import "../src/UiCtl.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGUnit.rgr"
+Import "pkg:evg/EVGLayout.rgr"
+Import "pkg:evg/EVGDisplayList.rgr"
+Import "pkg:evg/EVGStyleSheet.rgr"
+Import "pkg:evg/EVGTransition.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+Import "pkg:evg/EVGA11yFromTree.rgr"
+Import "pkg:evg/EVGHitTest.rgr"
+Import "pkg:evg/EVGTextEngine.rgr"
+
+treefactory Tb {
+    child addChild
+    text  textContent
+
+    tag Page     EVGElement (props (className "tb-page"))
+    tag Stack    EVGElement (props (className "tb-stack"))
+    tag List     EVGElement (props (className "tb-list") (role "tablist"))
+    tag Tab      EVGElement (props (className "tb-tab") (role "tab") (a11yFocusable true))
+    tag TabTx    EVGElement (props (className "tb-tab-text") (elementType 1))
+    tag Panel    EVGElement (props (className "tb-card") (role "tabpanel"))
+    tag Head     EVGElement (props (className "tb-head"))
+    tag Title    EVGElement (props (className "tb-title") (elementType 1) (role "heading") (a11yLevel 2))
+    tag Desc     EVGElement (props (className "tb-desc") (elementType 1))
+    tag Body     EVGElement (props (className "tb-body"))
+    tag Field    EVGElement (props (className "tb-field"))
+    tag Label    EVGElement (props (className "tb-label") (elementType 1) (a11yHidden true))
+    tag Box      EVGElement (props (className "tb-box") (role "textbox"))
+    tag Text     EVGElement (props (className "tb-text") (elementType 1))
+    tag Ghost    EVGElement (props (className "tb-text tb-ghost") (elementType 1))
+    tag Caret    EVGElement (props (className "tb-caret") (a11yHidden true))
+    tag Band     EVGElement (props (className "tb-band") (a11yHidden true))
+    tag Rule     EVGElement (props (className "tb-rule") (a11yHidden true))
+    tag Foot     EVGElement (props (className "tb-foot"))
+    ; The footer is a grey strip with rounded BOTTOM corners and square top
+    ; ones, and EVG has one radius for all four: the strip is rounded all
+    ; round and this patch squares its top.
+    tag FootTop  EVGElement (props (className "tb-foot-top") (a11yHidden true))
+    tag Save     EVGElement (props (className "tb-save") (elementType 1) (role "button") (a11yFocusable true))
+    tag Status   EVGElement (props (className "tb-status") (elementType 1) (role "status"))
+
+    ; The second example: a vertical list beside its panel.
+    tag VCard    EVGElement (props (className "tb-vcard"))
+    tag VList    EVGElement (props (className "tb-vlist") (role "tablist"))
+    tag VTab     EVGElement (props (className "tb-vtab") (role "tab") (a11yFocusable true))
+    tag VPanel   EVGElement (props (className "tb-vpanel") (role "tabpanel"))
+    tag VTitle   EVGElement (props (className "tb-vtitle") (elementType 1))
+    tag VText    EVGElement (props (className "tb-vtext") (elementType 1))
+}
+
+class TabsDemo {
+
+    def model:TabsCtl (new TabsCtl())
+    def side:TabsCtl (new TabsCtl())
+    def name:InputCtl (new InputCtl())
+    def username:InputCtl (new InputCtl())
+    def current:InputCtl (new InputCtl())
+    def next:InputCtl (new InputCtl())
+
+    def root@(optional):EVGElement
+    def sheet@(optional):EVGStyleSheet
+    def layout@(optional):EVGLayout
+    def transitions:EVGTransition (new EVGTransition())
+    def measurer:EVGLayout (new EVGLayout())
+
+    def hovered:string ""
+    def pressed:string ""
+    def focused:string ""
+    def dragField:string ""
+    ; What each panel's status region says. Empty until Save; an edit after it
+    ; empties it again, because "Saved" about a value that has since changed
+    ; is not true any more.
+    def savedAccount:string ""
+    def savedPassword:string ""
+    ; How many times each Save was pressed, for the check.
+    def saves:int 0
+
+    def pageW:double 900.0
+    def pageH:double 630.0
+    ; The width of the text run inside a box (400 − 2×24 card padding − 2×13
+    ; box inset), for InputCtl's scrolling.
+    def boxTextW:double 326.0
+    def boxFont:string "Arial"
+    def boxFontSize:double 14.0
+
+    Constructor () {
+    }
+
+    fn dress:void (c:InputCtl tid:string label:string) {
+        c.tid = tid
+        c.name = label
+        c.fontFamily = boxFont
+        c.fontSize = boxFontSize
+        c.boxWidth = boxTextW
+    }
+
+    fn init:void (css:string) {
+        def s (new EVGStyleSheet())
+        s.parse(css)
+        sheet = s
+
+        model.tid = "tb"
+        model.name = "Account settings"
+        model.addItem("account" "Account" "" false)
+        model.addItem("password" "Password" "" false)
+        model.value = "account"
+        model.rovingValue = "account"
+
+        side.tid = "tv"
+        side.name = "Project sections"
+        side.orientation = "vertical"
+        side.addItem("overview" "Overview" "" false)
+        side.addItem("activity" "Activity" "" false)
+        side.addItem("settings" "Settings" "" false)
+        side.value = "overview"
+        side.rovingValue = "overview"
+
+        this.dress(name "tb-name" "Name")
+        name.value = "Sarah Johnson"
+        name.caret = 13
+        name.anchor = 13
+        this.dress(username "tb-username" "Username")
+        username.value = "@sarahj"
+        username.caret = 7
+        username.anchor = 7
+        this.dress(current "tb-current" "Current password")
+        current.kind = "password"
+        this.dress(next "tb-new" "New password")
+        next.kind = "password"
+        this.rebuild()
+    }
+
+    ; --- lookups ----------------------------------------------------------------
+
+    fn engine:EVGTextEngine () {
+        return (measurer.getTextEngine())
+    }
+
+    ; Only the ACTIVE panel's fields: the other panel is not in the tree, and
+    ; a field that is not drawn has no box to edit in.
+    fn inputs:[InputCtl] () {
+        def a:[InputCtl]
+        if (model.value == "account") {
+            push a name
+            push a username
+        } {
+            push a current
+            push a next
+        }
+        return a
+    }
+
+    fn inputFor:InputCtl (tid:string) {
+        def all:[InputCtl] (this.inputs())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:InputCtl (itemAt all i)
+            if (c.tid == tid) {
+                return c
+            }
+            i = (i + 1)
+        }
+        return (new InputCtl())
+    }
+
+    fn hasInput:boolean (tid:string) {
+        if ((strlen tid) == 0) {
+            return false
+        }
+        def c:InputCtl (this.inputFor(tid))
+        return (c.tid == tid)
+    }
+
+    sfn byId:EVGElement (el:EVGElement tid:string) {
+        if (el.id == tid) {
+            return el
+        }
+        def i:int 0
+        while (i < (el.getChildCount())) {
+            def kid:EVGElement (TabsDemo.byId((el.getChild(i)) tid))
+            if (kid.id == tid) {
+                return kid
+            }
+            i = (i + 1)
+        }
+        return el
+    }
+
+    fn isTabOf:boolean (ctl:TabsCtl target:string) {
+        def i:int 0
+        while (i < (array_length ctl.items)) {
+            def it:UiItem (itemAt ctl.items i)
+            if ((ctl.tabTid(it.value)) == target) {
+                return true
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    fn saveTid:string () {
+        return ("tb-save-" + model.value)
+    }
+
+    fn statusText:string () {
+        if (model.value == "account") {
+            return savedAccount
+        }
+        return savedPassword
+    }
+
+    ; --- the look ---------------------------------------------------------------
+
+    fn tabEl:EVGElement (ctl:TabsCtl it:UiItem vertical:boolean) {
+        def tabTid:string (ctl.tabTid(it.value))
+        def on:boolean (it.value == ctl.value)
+        def sel:int (EVGA11yTri.no())
+        def cls:string "tb-tab"
+        if vertical {
+            cls = "tb-vtab"
+        }
+        if on {
+            sel = (EVGA11yTri.yes())
+            cls = (cls + " " + cls + "-on")
+        }
+        ; The label's ink is set on the LABEL: a text run takes its colour
+        ; from its own rule, not from the tab around it, so the muted / dark
+        ; / hovered states are classes the tree writes.
+        def txCls:string "tb-tab-text"
+        if on {
+            txCls = "tb-tab-text tb-tab-text-on"
+        } {
+            if (hovered == tabTid) {
+                txCls = "tb-tab-text tb-tab-text-hover"
+            }
+        }
+        def el (tree Tb
+            (Tab (props (id tabTid) (className cls) (a11yLabel it.name)
+                        (a11ySelected sel) (a11yControls (ctl.panelTid(it.value))))
+                (TabTx (props (className txCls)) it.name)))
+        return el
+    }
+
+    fn listEl:EVGElement () {
+        def list (tree Tb (List (props (id (model.listTid())) (a11yLabel model.name) (a11yOrientation "horizontal"))))
+        def i:int 0
+        while (i < (array_length model.items)) {
+            def it:UiItem (itemAt model.items i)
+            list.addChild((this.tabEl(model it false)))
+            i = (i + 1)
+        }
+        return list
+    }
+
+    ; One text box. The band goes in before the text, so the selection is
+    ; painted under the glyphs; only the focused field draws a caret.
+    fn boxFor:EVGElement (c:InputCtl) {
+        def box (tree Tb (Box (props (id c.tid) (a11yLabel c.name))))
+        if (c.kind != "password") {
+            box.a11yValue = c.value
+        }
+        box.a11yFocusable = true
+        def eng:EVGTextEngine (this.engine())
+        if ((focused == c.tid) && (c.hasSelection())) {
+            def s:double (c.caretXAt(eng (c.selStart())))
+            def e:double (c.caretXAt(eng (c.selEnd())))
+            def band (tree Tb (Band))
+            band.left = (EVGUnit.px((s - c.scrollX)))
+            band.width = (EVGUnit.px((e - s)))
+            box.addChild(band)
+        }
+        if ((strlen c.value) == 0) {
+            box.addChild((tree Tb (Ghost c.placeholder)))
+        } {
+            box.addChild((tree Tb (Text (props (id (c.tid + "-text"))) (c.glyphText()))))
+        }
+        if (focused == c.tid) {
+            def cx:double (c.caretXAt(eng c.caret))
+            def car (tree Tb (Caret))
+            car.left = (EVGUnit.px((cx - c.scrollX)))
+            box.addChild(car)
+        }
+        return box
+    }
+
+    fn fieldEl:EVGElement (c:InputCtl) {
+        def f (tree Tb (Field (Label c.name)))
+        f.addChild((this.boxFor(c)))
+        return f
+    }
+
+    fn panelEl:EVGElement () {
+        def v:string model.value
+        def title:string "Account"
+        def desc:string "Update your account information."
+        def button:string "Save changes"
+        if (v == "password") {
+            title = "Password"
+            desc = "Change your password here. After saving, you'll be logged out."
+            button = "Save password"
+        }
+        def body (tree Tb (Body))
+        def all:[InputCtl] (this.inputs())
+        def i:int 0
+        while (i < (array_length all)) {
+            body.addChild((this.fieldEl((itemAt all i))))
+            i = (i + 1)
+        }
+        def panel (tree Tb
+            (Panel (props (id (model.panelTid(v))) (a11yLabel title) (a11yLabelledBy (model.tabTid(v))))
+                (Head
+                    (Title title)
+                    (Desc desc))
+                (child body)
+                (Rule)
+                (Foot
+                    (FootTop)
+                    (Save (props (id (this.saveTid()))) button)
+                    (Status (props (id ("tb-status-" + v))) (this.statusText())))))
+        return panel
+    }
+
+    ; The second example: the same controller, vertical, with a short panel.
+    fn sideEl:EVGElement () {
+        def list (tree Tb (VList (props (id (side.listTid())) (a11yLabel side.name) (a11yOrientation "vertical"))))
+        def i:int 0
+        while (i < (array_length side.items)) {
+            def it:UiItem (itemAt side.items i)
+            list.addChild((this.tabEl(side it true)))
+            i = (i + 1)
+        }
+        def v:string side.value
+        def title:string "Overview"
+        def text:string "Three open issues, two pull requests waiting for review."
+        if (v == "activity") {
+            title = "Activity"
+            text = "Sarah merged 4 changes and closed 2 issues this week."
+        }
+        if (v == "settings") {
+            title = "Settings"
+            text = "Visibility, notifications and who can invite members."
+        }
+        def label:string title
+        return (tree Tb
+            (VCard (props (id "tv"))
+                (child list)
+                (VPanel (props (id (side.panelTid(v))) (a11yLabel label) (a11yLabelledBy (side.tabTid(v))))
+                    (VTitle title)
+                    (VText text))))
+    }
+
+    fn pageBody:EVGElement () {
+        def stack (tree Tb (Stack (props (id "tb"))))
+        stack.addChild((this.listEl()))
+        stack.addChild((this.panelEl()))
+        def sideCard:EVGElement (this.sideEl())
+        return (tree Tb
+            (Page (props (id "tb-page"))
+                (child stack)
+                (child sideCard)))
+    }
+
+    fn rebuild:void () {
+        root = (this.pageBody())
+    }
+
+    ; --- layout -----------------------------------------------------------------
+
+    fn markStates:void (el:EVGElement) {
+        el.isHovered = ((strlen hovered) > 0) && (el.id == hovered)
+        el.isFocused = ((strlen focused) > 0) && (el.id == focused)
+        el.isPressed = ((strlen pressed) > 0) && (el.id == pressed)
+        def i:int 0
+        while (i < (array_length el.children)) {
+            this.markStates((itemAt el.children i))
+            i = (i + 1)
+        }
+    }
+
+    ; Laid out afresh on every ask, as the form does: a hover or a focus is a
+    ; flag on an element and the sheet has to see it.
+    fn laidOut:EVGLayout () {
+        def r:EVGElement (unwrap root)
+        def s:EVGStyleSheet (unwrap sheet)
+        this.markStates(r)
+        s.setViewport(pageW pageH false)
+        s.applyTree(r "")
+        def lay (new EVGLayout())
+        lay.setPageSize(pageW pageH)
+        lay.layout(r)
+        layout = lay
+        return lay
+    }
+
+    ; --- input ------------------------------------------------------------------
+
+    fn save:boolean () {
+        saves = (saves + 1)
+        if (model.value == "account") {
+            savedAccount = "✓ Saved"
+        } {
+            savedPassword = "✓ Password saved"
+        }
+        this.rebuild()
+        return true
+    }
+
+    ; An edit makes an earlier "Saved" untrue.
+    fn edited:void () {
+        if (model.value == "account") {
+            savedAccount = ""
+        } {
+            savedPassword = ""
+        }
+    }
+
+    fn press:boolean (target:string) {
+        if (this.isTabOf(model target)) {
+            focused = target
+            model.onFocus(target)
+            model.activate(target)
+            this.rebuild()
+            return true
+        }
+        if (this.isTabOf(side target)) {
+            focused = target
+            side.onFocus(target)
+            side.activate(target)
+            this.rebuild()
+            return true
+        }
+        if (target == (this.saveTid())) {
+            focused = target
+            return (this.save())
+        }
+        if (this.hasInput(target)) {
+            focused = target
+            this.rebuild()
+            return true
+        }
+        return false
+    }
+
+    fn key:boolean (k:string) {
+        return (this.keyWith(k false false))
+    }
+
+    ; The strip's keys are TabsCtl's, and it answers with the tab the focus
+    ; lands on (already activated — automatic activation). A key it does not
+    ; take (Tab, a letter) is left for the page.
+    fn keyWith:boolean (k:string shift:boolean ctrl:boolean) {
+        if (k == "Tab") {
+            return false
+        }
+        if (this.isTabOf(model focused)) {
+            def landed:string (model.keyDown(focused k))
+            if ((strlen landed) > 0) {
+                focused = landed
+                this.rebuild()
+                return true
+            }
+            if (UiCtl.activatesOn(k)) {
+                this.rebuild()
+                return true
+            }
+            return false
+        }
+        if (this.isTabOf(side focused)) {
+            def landed2:string (side.keyDown(focused k))
+            if ((strlen landed2) > 0) {
+                focused = landed2
+                this.rebuild()
+                return true
+            }
+            if (UiCtl.activatesOn(k)) {
+                this.rebuild()
+                return true
+            }
+            return false
+        }
+        if (this.hasInput(focused)) {
+            ; Enter in a field saves, as Enter in a <form> submits.
+            if (k == "Enter") {
+                return (this.save())
+            }
+            def c:InputCtl (this.inputFor(focused))
+            def before:string c.value
+            c.keyDownWith(focused k shift ctrl)
+            c.ensureCaretVisible((this.engine()))
+            if (c.value != before) {
+                this.edited()
+            }
+            this.rebuild()
+            return true
+        }
+        if (focused == (this.saveTid())) {
+            if ((k == " ") || (k == "Enter")) {
+                return (this.save())
+            }
+        }
+        return false
+    }
+
+    fn ownsKey:boolean (k:string) {
+        return false
+    }
+
+    fn type:boolean (ch:string) {
+        if ((this.hasInput(focused)) == false) {
+            return false
+        }
+        def c:InputCtl (this.inputFor(focused))
+        def took:boolean (c.typeChar(focused ch))
+        if took {
+            c.ensureCaretVisible((this.engine()))
+            this.edited()
+            this.rebuild()
+        }
+        return took
+    }
+
+    ; --- the pointer in a field ---------------------------------------------------
+
+    ; The text run is the box's child and is what the pointer is usually over,
+    ; so a hit on "<tid>-text" belongs to the field "<tid>".
+    fn fieldOwning:string (target:string) {
+        def n:int (strlen target)
+        if (n > 5) {
+            if ((substring target (n - 5) n) == "-text") {
+                def base:string (substring target 0 (n - 5))
+                if (this.hasInput(base)) {
+                    return base
+                }
+            }
+        }
+        return target
+    }
+
+    fn fieldBoxOf:EVGElement (target:string) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        return (TabsDemo.byId(r target))
+    }
+
+    fn indexAt:int (target:string px:double) {
+        def c:InputCtl (this.inputFor(target))
+        def box:EVGElement (this.fieldBoxOf(target))
+        if (box.id != target) {
+            return -1
+        }
+        return (InputCtl.indexAtPageX((this.engine()) c box px))
+    }
+
+    fn beginSelection:boolean (rawTarget:string px:double extend:boolean) {
+        def target:string (this.fieldOwning(rawTarget))
+        def took:boolean (this.press(target))
+        if (took == false) {
+            return false
+        }
+        def c:InputCtl (this.inputFor(target))
+        if (c.tid != target) {
+            dragField = ""
+            return true
+        }
+        def idx:int (this.indexAt(target px))
+        if (idx < 0) {
+            dragField = ""
+            return true
+        }
+        c.placeCaret(idx extend)
+        dragField = target
+        this.rebuild()
+        return true
+    }
+
+    fn extendSelection:boolean (px:double) {
+        if (dragField == "") {
+            return false
+        }
+        def c:InputCtl (this.inputFor(dragField))
+        if (c.tid != dragField) {
+            return false
+        }
+        def idx:int (this.indexAt(dragField px))
+        if (idx < 0) {
+            return false
+        }
+        if (idx == c.caret) {
+            return false
+        }
+        c.placeCaret(idx true)
+        this.rebuild()
+        return true
+    }
+
+    fn endSelection:boolean () {
+        dragField = ""
+        return false
+    }
+
+    fn selectWordAt:boolean (rawTarget:string px:double) {
+        def target:string (this.fieldOwning(rawTarget))
+        def c:InputCtl (this.inputFor(target))
+        if (c.tid != target) {
+            return false
+        }
+        def idx:int (this.indexAt(target px))
+        if (idx < 0) {
+            return false
+        }
+        def at:int idx
+        if (at >= (strlen c.value)) {
+            at = ((strlen c.value) - 1)
+        }
+        c.selectWordAt(at)
+        this.rebuild()
+        return true
+    }
+
+    ; The page x of a caret index, for a check that clicks at a stated place.
+    fn pageXOf:double (target:string index:int) {
+        def c:InputCtl (this.inputFor(target))
+        if (c.tid != target) {
+            return 0.0
+        }
+        def box:EVGElement (this.fieldBoxOf(target))
+        if (box.id != target) {
+            return 0.0
+        }
+        def inset:double (box.box.borderWidthPx + box.box.paddingLeftPx)
+        def eng:EVGTextEngine (this.engine())
+        return ((((box.calculatedX) + inset) + (c.caretXAt(eng index))) - c.scrollX)
+    }
+
+    fn cursorAt:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def all:[InputCtl] (this.inputs())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:InputCtl (itemAt all i)
+            def box:EVGElement (TabsDemo.byId(r c.tid))
+            if (box.id == c.tid) {
+                def x0:double (box.calculatedX)
+                def y0:double (box.calculatedY)
+                if ((px >= x0) && (px <= (x0 + (box.calculatedWidth)))) {
+                    if ((py >= y0) && (py <= (y0 + (box.calculatedHeight)))) {
+                        return "text"
+                    }
+                }
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    ; --- the platform text-input session ----------------------------------------
+
+    fn focusedField:string () {
+        if (this.hasInput(focused)) {
+            return focused
+        }
+        return ""
+    }
+
+    fn fieldStateJson:string (tid:string) {
+        def c:InputCtl (this.inputFor(tid))
+        if (c.tid != tid) {
+            return "null"
+        }
+        def box:EVGElement (this.fieldBoxOf(tid))
+        def out:string "{"
+        out = (out + "\"tid\":" + (EVGA11yTree.jsonString(c.tid)))
+        out = (out + ",\"value\":" + (EVGA11yTree.jsonString(c.value)))
+        out = (out + ",\"selStart\":" + (to_string (c.selStart())))
+        out = (out + ",\"selEnd\":" + (to_string (c.selEnd())))
+        out = (out + ",\"kind\":" + (EVGA11yTree.jsonString(c.kind)))
+        out = (out + ",\"maxLength\":" + (to_string c.maxLength))
+        out = (out + ",\"placeholder\":" + (EVGA11yTree.jsonString(c.placeholder)))
+        if (box.id == tid) {
+            out = (out + ",\"box\":{\"x\":" + (to_string (to_int (box.calculatedX))))
+            out = (out + ",\"y\":" + (to_string (to_int (box.calculatedY))))
+            out = (out + ",\"w\":" + (to_string (to_int (box.calculatedWidth))))
+            out = (out + ",\"h\":" + (to_string (to_int (box.calculatedHeight))) + "}")
+        }
+        return (out + "}")
+    }
+
+    fn applyEdit:boolean (tid:string v:string selStart:int selEnd:int) {
+        def c:InputCtl (this.inputFor(tid))
+        if (c.tid != tid) {
+            return false
+        }
+        def before:string c.value
+        c.applyEdit(v selStart selEnd)
+        c.ensureCaretVisible((this.engine()))
+        if (c.value != before) {
+            this.edited()
+        }
+        this.rebuild()
+        return true
+    }
+
+    fn setHover:void (id:string) {
+        hovered = id
+        this.rebuild()
+    }
+
+    fn setPressed:void (id:string) {
+        pressed = id
+    }
+
+    ; Focus arriving from the page (a Tab, a reader). A tab that takes focus
+    ; tells its controller, so the next arrow starts from it.
+    fn setFocus:void (id:string) {
+        focused = id
+        if (this.isTabOf(model id)) {
+            model.onFocus(id)
+        }
+        if (this.isTabOf(side id)) {
+            side.onFocus(id)
+        }
+    }
+
+    ; --- what the page asks for -------------------------------------------------
+
+    fn displayListJson:string () {
+        def lay:EVGLayout (this.laidOut())
+        def r:EVGElement (unwrap root)
+        def dl (new EVGDisplayList())
+        dl.setTextEngine((lay.getTextEngine()))
+        dl.build(r)
+        return (dl.toJson())
+    }
+
+    fn hitId:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def hit (new EVGHitTest())
+        return (hit.idAt(r px py))
+    }
+
+    fn a11yJson:string (generation:int focusId:string) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Tabs demo" generation focusId))
+        return (t.toJson())
+    }
+
+    fn a11yProblems:[string] () {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Tabs demo" 1 ""))
+        return (t.lint())
+    }
+
+    fn styleErrorCount:int () {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (array_length s.errors)
+    }
+
+    fn styleErrorAt:string (i:int) {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (itemAt s.errors i)
+    }
+
+    fn widthPx:double () { return pageW }
+    fn heightPx:double () { return pageH }
+
+    fn summary:string () {
+        return (model.value + "|" + side.value + "|" + focused + "|" + (this.statusText()))
+    }
+}
