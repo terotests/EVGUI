@@ -49,6 +49,8 @@ import * as ToolbarModule from "../bin/ToolbarDemo.cjs";
 import * as SortableModule from "../bin/SortableDemo.cjs";
 const fontMeasure = installCanvasMeasurer(MODULES);
 window.__fontMeasure = fontMeasure;
+import { AccordionDemo } from "./generated-host.js";
+import { ACCORDION_CSS } from "./generated.js";
 import { MENUBAR_CSS, TOOLBAR_CSS, SORTABLE_CSS, MOTION_CSS, TABLE_CSS, DROPDOWN_CSS, DIALOG_CSS, TREE_CSS, TIMELINE_CSS, RESIZE_CSS, FORM_CSS, PROFILE_CSS, DASHBOARD_CSS, CALENDAR_CSS, FILTERS_CSS, EVENTCAL_CSS, MESSAGE_CSS, CONTROLS_CSS, OTP_CSS, METADATA_CSS, EFFECTS_CSS, EFFECT_PRESETS_CSS } from "./generated.js";
 
 // The default stage width. A demo wider than this says so — the dashboard
@@ -307,6 +309,16 @@ dropdown.init(DROPDOWN_CSS);
 let lastDropdownHover = "";
 
 /**
+ * The accordion: three lists, each an `AccordionCtl` — the controller
+ * measured against @radix-ui/react-accordion — which owns what is open, the
+ * single / multiple / collapsible rules and the keyboard. The demo owns the
+ * look, the focus and its page's height, which follows the open items.
+ */
+const accordion = new AccordionDemo();
+accordion.init(ACCORDION_CSS);
+let lastAccordionHover = "";
+
+/**
  * The dialog and the window — the same class twice, with one flag different.
  *
  * This is the demo with a gesture the others do not have: the window's title
@@ -450,6 +462,35 @@ const HOSTS = {
 // they keep, because a transition cannot survive being rebuilt. Behind these
 // thunks the difference stops mattering to the rest of the page.
 const DEMOS = {
+  accordion: {
+    height: () => accordion.heightPx(),
+    list: () => accordion.displayListJson(),
+    hit: (x, y) => accordion.hitId(x, y),
+    a11y: (gen, focus) => accordion.a11yJson(gen, focus),
+    press: (id) => accordion.press(id),
+    hover: (id) => {
+      if (id === lastAccordionHover) return false;
+      lastAccordionHover = id;
+      accordion.setHover(id);
+      return true;
+    },
+    // Straight through to AccordionCtl: arrows and Home/End between the
+    // triggers, Enter and Space to toggle.
+    key: (k) => accordion.key(k),
+    host: () => ({
+      tick: (dt) => accordion.tick(dt),
+      busy: () => accordion.busyNow(),
+      setHover: (id) => {
+        if (id === lastAccordionHover) return false;
+        lastAccordionHover = id;
+        accordion.setHover(id);
+        return true;
+      },
+      setPressed: (id) => accordion.setPressed(id),
+      root: () => null,
+    }),
+    animated: true,
+  },
   menubar: {
     height: 560,
     args: () => [MENUBAR_CSS, state.checked, state.profile, state.open, state.submenu, state.atBottom],
@@ -1466,6 +1507,7 @@ window.addEventListener("unhandledrejection", (ev) => reportError(ev.reason, "an
 const INSTANCE = {
   table: () => table,
   dropdown: () => dropdown,
+  accordion: () => accordion,
   tree: () => treeview,
   timeline: () => timeline,
   resizable: () => resize,
@@ -1595,6 +1637,8 @@ const NARROW = {
   metadata: { min: 320, h: "auto", keep: true },
   profile: { min: 320, h: "own" },
   dropdown: { min: 320, h: "auto", keep: true },
+  // The page follows the open items, so its height is the demo's own.
+  accordion: { min: 320, h: "own" },
   motion: { min: 320, h: "auto" },
   effects: { min: 320, h: "auto" },
 };
@@ -2315,7 +2359,7 @@ function syncPanels() {
 // `?demo=dashboard` lands on one directly. A page with eighteen demos and one
 // entry point makes every link to it a click instruction; a check that wants
 // the dashboard should not have to press a radio to get there.
-const DEMO_NAMES = ["menubar", "toolbar", "sortable", "table", "tree", "timeline", "resizable", "form", "calendar", "filters", "eventcal", "message", "controls", "otp", "metadata", "profile", "dashboard", "dropdown", "dialog", "motion", "effects"];
+const DEMO_NAMES = ["menubar", "toolbar", "sortable", "table", "tree", "timeline", "resizable", "form", "calendar", "filters", "eventcal", "message", "controls", "otp", "metadata", "profile", "dashboard", "dropdown", "dialog", "motion", "effects", "accordion"];
 const wanted = new URLSearchParams(location.search).get("demo");
 if (wanted && DEMO_NAMES.includes(wanted)) state.which = wanted;
 
@@ -3430,6 +3474,22 @@ function kbApplyStops(tree) {
 function kbAfterPaint(tree) {
   kbApplyStops(tree);
   const domId = (id) => "evg-" + String(id).replace(/[^A-Za-z0-9_-]/g, "_");
+  // Id references the tree has no field for (an accordion's aria-controls and
+  // aria-labelledby): a demo lists them as [from, attribute, to] and they are
+  // set on the mirror here. A target that is not mirrored (a closed panel) is
+  // still named by its DOM id, as Radix names an unmounted panel.
+  const rel = instance();
+  if (rel && typeof rel.relationsJson === "function") {
+    for (const [from, attr, to] of JSON.parse(rel.relationsJson())) {
+      const el = mirror.elementOf(from);
+      if (!el) continue;
+      if (!el.id) el.id = domId(from);
+      const target = mirror.elementOf(to);
+      if (target && !target.id) target.id = domId(to);
+      const want = target ? target.id : domId(to);
+      if (el.getAttribute(attr) !== want) el.setAttribute(attr, want);
+    }
+  }
   for (const n of tree.nodes) {
     if (n.role !== "combobox") continue;
     const el = mirror.elementOf(n.id);

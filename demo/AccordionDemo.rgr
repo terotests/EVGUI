@@ -1,0 +1,497 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; AccordionDemo — shadcn / ReUI's Accordion, three ways
+; =============================================================================
+; The references are https://reui.io/components/accordion and
+; https://ui.shadcn.com/docs/components/accordion:
+;
+;   1. ReUI's bordered FAQ: type="single", "billing" open, every item its own
+;      rounded box, 8px apart, the list at most 512px wide and centred.
+;   2. shadcn's default: type="single" collapsible, the first item open, the
+;      items divided by 1px rules.
+;   3. type="multiple": any number open at once.
+;
+; THE STATE IS NOT REBUILT HERE. Each list is an `AccordionCtl` — measured
+; against @radix-ui/react-accordion — which owns which items are open, the
+; single / multiple / collapsible rules and the keyboard (ArrowUp / ArrowDown
+; between the triggers, Home / End, Enter / Space to toggle). This file is the
+; other half, the split the dropdown and the table demos make: the controller
+; says what is true, the tree literal below says what it looks like.
+;
+; What the demo owns: the focus (which trigger the keyboard is on), the hover,
+; and the page's HEIGHT. An accordion changes how tall the page is every time
+; it opens, so `laidOut` measures the content and sizes the page to it, both
+; ways — the page shrinks again when an item closes.
+;
+; EVG transitions move colours, opacity and transforms, not box heights, so a
+; panel opens at once (the same thing Radix does with its animation turned
+; off); the chevron's half-turn IS a transform, and turns over 200ms — which
+; is why a press folds the rebuilt tree into the live one (`rebuild`).
+; =============================================================================
+
+Import "../src/AccordionCtl.rgr"
+Import "../src/UiCtl.rgr"
+Import "../src/UiTree.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGUnit.rgr"
+Import "pkg:evg/EVGLayout.rgr"
+Import "pkg:evg/EVGDisplayList.rgr"
+Import "pkg:evg/EVGStyleSheet.rgr"
+Import "pkg:evg/EVGTransition.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+Import "pkg:evg/EVGA11yFromTree.rgr"
+Import "pkg:evg/EVGHitTest.rgr"
+Import "pkg:evg/EVGReconcile.rgr"
+
+treefactory Ac {
+    child addChild
+    text  textContent
+
+    tag Page      EVGElement (props (className "ac-page"))
+    tag Card      EVGElement (props (className "ac-card"))
+    tag CardHead  EVGElement (props (className "ac-cardhead"))
+    tag CardTitle EVGElement (props (className "ac-cardtitle") (elementType 1))
+    tag CardSub   EVGElement (props (className "ac-cardsub") (elementType 1))
+    ; The list. Roleless, like Radix's root: it is not a widget of its own and
+    ; not a tab stop — every trigger in it is.
+    tag Root      EVGElement (props (className "ac-root"))
+    tag Item      EVGElement (props (className "ac-item"))
+    ; A button with aria-expanded. The name is the label's text, collected by
+    ; EVGA11yFromTree from the roleless child.
+    tag Trigger   EVGElement (props (className "ac-trigger") (role "button") (a11yFocusable true))
+    tag TrigLabel EVGElement (props (className "ac-triglabel") (elementType 1))
+    ; Lucide's chevron-down. Decoration: aria-expanded already says it.
+    tag Chevron   EVGElement (props (className "ac-chevron") (tagName "path") (elementType 3) (viewBox "0 0 24 24") (svgPath "M6 9l6 6 6-6") (a11yHidden true))
+    tag Content   EVGElement (props (className "ac-content") (role "region"))
+    tag Para      EVGElement (props (className "ac-text") (elementType 1))
+    ; shadcn's border-b on an item, drawn as a 1px box at the item's foot:
+    ; EVG has per-side border widths but no per-side border to paint.
+    tag Rule      EVGElement (props (className "ac-rule") (a11yHidden true))
+}
+
+class AccordionDemo {
+
+    ; ReUI's bordered FAQ — the main card.
+    def billing:AccordionCtl (new AccordionCtl())
+    ; shadcn's default: single, collapsible.
+    def faq:AccordionCtl (new AccordionCtl())
+    ; type="multiple".
+    def multi:AccordionCtl (new AccordionCtl())
+
+    def root@(optional):EVGElement
+    def sheet@(optional):EVGStyleSheet
+    def transitions:EVGTransition (new EVGTransition())
+    ; A press rebuilds the tree and this folds it into the live one, keyed by
+    ; id, so the chevron that turns is the element that was there before —
+    ; a fresh element would start its flight at the destination.
+    def reconciler:EVGReconcile (new EVGReconcile())
+    def layout@(optional):EVGLayout
+    def hovered:string ""
+    def pressed:string ""
+    def focused:string ""
+    def pageW:double 900.0
+    ; Not a constant: `fitHeight` sets it to what is laid out.
+    def pageH:double 800.0
+
+    Constructor () {
+    }
+
+    fn init:void (css:string) {
+        def s (new EVGStyleSheet())
+        s.parse(css)
+        sheet = s
+
+        billing.tid = "acb"
+        billing.name = "Billing FAQ"
+        billing.collapsible = true
+        billing.addItem("billing" "How does billing work?" "We offer monthly and annual subscription plans. Billing is charged at the beginning of each cycle, and you can cancel anytime. All plans include automatic backups, 24/7 support, and unlimited team members. There are no hidden fees or setup costs." false)
+        billing.addItem("security" "Is my data secure?" "Yes. We use end-to-end encryption, SOC 2 Type II compliance, and regular third-party security audits. All data is encrypted at rest and in transit using industry-standard protocols. We also offer optional two-factor authentication and single sign-on for enterprise customers." false)
+        billing.addItem("integrations" "What integrations do you support?" "We integrate with 500+ popular tools including Slack, Zapier, Salesforce, HubSpot, and more. You can also build custom integrations using our REST API and webhooks.\nOur API documentation includes code examples in 10+ programming languages." false)
+        billing.openValue = "billing"
+
+        faq.tid = "acs"
+        faq.name = "Product FAQ"
+        faq.collapsible = true
+        faq.addItem("item-1" "Is it accessible?" "Yes. It adheres to the WAI-ARIA design pattern." false)
+        faq.addItem("item-2" "Is it styled?" "Yes. It comes with default styles that match the other components' aesthetic." false)
+        faq.addItem("item-3" "Is it animated?" "Yes. It's animated by default, but you can disable it if you prefer." false)
+        faq.openValue = "item-1"
+
+        multi.tid = "acm"
+        multi.name = "Order details"
+        multi.multiple = true
+        multi.addItem("product" "Product Information" "Our flagship product combines cutting-edge technology with sleek design. Built with premium materials, it offers unparalleled performance and reliability." false)
+        multi.addItem("shipping" "Shipping Details" "We offer worldwide shipping through trusted courier partners. Standard delivery takes 3-5 business days, while express shipping ensures delivery within 1-2 business days." false)
+        multi.addItem("returns" "Return Policy" "We stand behind our products with a comprehensive 30-day return policy. If you're not completely satisfied, simply return the item in its original condition." false)
+        push multi.openValues "product"
+
+        billing.build()
+        faq.build()
+        multi.build()
+        this.rebuild()
+        this.laidOut()
+    }
+
+    ; --- the look ---------------------------------------------------------------
+
+    fn item:EVGElement (ctl:AccordionCtl it:UiItem variant:string isLast:boolean) {
+        def open:boolean (ctl.isOpen(it.value))
+        def itemCls:string ("ac-item ac-item-" + variant)
+        def trigCls:string ("ac-trigger ac-trigger-" + variant)
+        def chevCls:string "ac-chevron"
+        if open {
+            chevCls = "ac-chevron ac-chevron-open"
+        }
+        def trigTid:string (ctl.triggerTid(it.value))
+        def expanded:int (EVGA11yTri.no())
+        if open {
+            expanded = (EVGA11yTri.yes())
+        }
+        def trig (tree Ac
+            (Trigger (props (id trigTid) (className trigCls) (a11yExpanded expanded))
+                (TrigLabel it.name)
+                (Chevron (props (id (trigTid + "-chevron")) (className chevCls)))))
+        def box (tree Ac (Item (props (id (ctl.itemTid(it.value))) (className itemCls))))
+        box.addChild(trig)
+        if open {
+            def body (tree Ac
+                (Content (props (id (ctl.contentTid(it.value))) (className ("ac-content ac-content-" + variant)) (a11yLabel it.name))))
+            def paras:[string] (strsplit it.body "\n")
+            def i:int 0
+            while (i < (array_length paras)) {
+                def p:string (itemAt paras i)
+                body.addChild((tree Ac (Para p)))
+                i = (i + 1)
+            }
+            box.addChild(body)
+        }
+        if ((variant == "ruled") && (isLast == false)) {
+            box.addChild((tree Ac (Rule)))
+        }
+        return box
+    }
+
+    fn list:EVGElement (ctl:AccordionCtl variant:string) {
+        def r (tree Ac (Root (props (id ctl.tid) (className ("ac-root ac-root-" + variant)))))
+        def n:int (array_length ctl.items)
+        def i:int 0
+        while (i < n) {
+            def it:UiItem (itemAt ctl.items i)
+            r.addChild((this.item(ctl it variant (i == (n - 1)))))
+            i = (i + 1)
+        }
+        return r
+    }
+
+    fn card:EVGElement (cardId:string title:string sub:string body:EVGElement) {
+        def c (tree Ac
+            (Card (props (id cardId))
+                (CardHead
+                    (CardTitle title)
+                    (CardSub sub))))
+        c.addChild(body)
+        return c
+    }
+
+    fn page:EVGElement () {
+        def p (tree Ac (Page (props (id "page"))))
+        p.addChild((this.card("ac-card-bordered" "Bordered" "type=\"single\" · each item in its own box" (this.list(billing "boxed")))))
+        p.addChild((this.card("ac-card-single" "Single" "type=\"single\" collapsible · the first item open" (this.list(faq "ruled")))))
+        p.addChild((this.card("ac-card-multiple" "Multiple" "type=\"multiple\" · open as many as you like" (this.list(multi "ruled")))))
+        return p
+    }
+
+    sfn keyAll:void (el:EVGElement) {
+        if ((strlen el.id) > 0) {
+            el.key = el.id
+        }
+        def i:int 0
+        while (i < (array_length el.children)) {
+            def kid:EVGElement (itemAt el.children i)
+            AccordionDemo.keyAll(kid)
+            i = (i + 1)
+        }
+    }
+
+    fn rebuild:void () {
+        def next:EVGElement (this.page())
+        AccordionDemo.keyAll(next)
+        if (null? root) {
+            root = next
+            return
+        }
+        reconciler.reconcile((unwrap root) next)
+    }
+
+    ; --- the host ----------------------------------------------------------------
+
+    ; Which of the three lists a trigger id belongs to: 0, 1, 2, or -1.
+    fn ownerIndex:int (target:string) {
+        if ((billing.indexOfTrigger(target)) >= 0) {
+            return 0
+        }
+        if ((faq.indexOfTrigger(target)) >= 0) {
+            return 1
+        }
+        if ((multi.indexOfTrigger(target)) >= 0) {
+            return 2
+        }
+        return -1
+    }
+
+    fn ctlAt:AccordionCtl (i:int) {
+        if (i == 0) {
+            return billing
+        }
+        if (i == 1) {
+            return faq
+        }
+        return multi
+    }
+
+    fn press:boolean (target:string) {
+        def k0:int (this.ownerIndex(target))
+        if (k0 < 0) {
+            return false
+        }
+        def ctl:AccordionCtl (this.ctlAt(k0))
+        ctl.activate(target)
+        focused = target
+        this.rebuild()
+        return true
+    }
+
+    fn key:boolean (k:string) {
+        def k0:int (this.ownerIndex(focused))
+        if (k0 < 0) {
+            return false
+        }
+        def ctl:AccordionCtl (this.ctlAt(k0))
+        def isToggle:boolean (UiCtl.activatesOn(k))
+        def next:string (ctl.keyDown(focused k))
+        if ((strlen next) > 0) {
+            focused = next
+            this.rebuild()
+            return true
+        }
+        if isToggle {
+            this.rebuild()
+            return true
+        }
+        return false
+    }
+
+    fn setHover:void (id:string) {
+        hovered = id
+    }
+
+    fn setPressed:void (id:string) {
+        pressed = id
+    }
+
+    fn setFocus:void (id:string) {
+        focused = id
+    }
+
+    ; aria-controls on each trigger and aria-labelledby on each open region, as
+    ; [from, attribute, to] triples. The tree has no field for an id reference,
+    ; so the page sets these on the mirror after each paint. A closed item's
+    ; region is not in the tree (Radix unmounts it too); its trigger still
+    ; names it, which is what aria-expanded="false" allows.
+    fn relationsJson:string () {
+        def out:string "["
+        def first:boolean true
+        def ctls:[AccordionCtl]
+        push ctls billing
+        push ctls faq
+        push ctls multi
+        def j:int 0
+        while (j < (array_length ctls)) {
+            def ctl:AccordionCtl (itemAt ctls j)
+            def i:int 0
+            while (i < (array_length ctl.items)) {
+                def it:UiItem (itemAt ctl.items i)
+                def t:string (ctl.triggerTid(it.value))
+                def r:string (ctl.contentTid(it.value))
+                if (first == false) {
+                    out = (out + ",")
+                }
+                first = false
+                out = (out + "[\"" + t + "\",\"aria-controls\",\"" + r + "\"]")
+                if (ctl.isOpen(it.value)) {
+                    out = (out + ",[\"" + r + "\",\"aria-labelledby\",\"" + t + "\"]")
+                }
+                i = (i + 1)
+            }
+            j = (j + 1)
+        }
+        return (out + "]")
+    }
+
+    fn markStates:void (el:EVGElement) {
+        el.isHovered = false
+        el.isPressed = false
+        el.isFocused = false
+        if ((strlen el.id) > 0) {
+            if (el.id == hovered) {
+                el.isHovered = true
+            }
+            if (el.id == pressed) {
+                el.isPressed = true
+            }
+            if (el.id == focused) {
+                el.isFocused = true
+            }
+        }
+        def i:int 0
+        while (i < (array_length el.children)) {
+            def kid:EVGElement (itemAt el.children i)
+            this.markStates(kid)
+            i = (i + 1)
+        }
+    }
+
+    ; The bottom of the last card plus the page's own bottom padding.
+    fn contentBottom:double () {
+        def r:EVGElement (unwrap root)
+        def bottom:double 0.0
+        def i:int 0
+        while (i < (r.getChildCount())) {
+            def c:EVGElement (r.getChild(i))
+            def b:double (c.calculatedY + c.calculatedHeight)
+            if (b > bottom) {
+                bottom = b
+            }
+            i = (i + 1)
+        }
+        def pad:double 0.0
+        if (!null? r.box) {
+            def bx:EVGBox r.box
+            def pb:EVGUnit bx.paddingBottom
+            if (!null? pb) {
+                if pb.isSet {
+                    pad = pb.pixels
+                }
+            }
+        }
+        return (bottom + pad)
+    }
+
+    ; The page is as tall as what is in it — grown when an item opens and
+    ; shrunk when it closes, so nothing is clipped and nothing trails.
+    fn fitHeight:void (lay:EVGLayout) {
+        def want:double (to_double (to_int ((this.contentBottom()) + 0.999)))
+        def diff:double (want - pageH)
+        if ((diff > 0.5) || (diff < -0.5)) {
+            pageH = want
+            def s:EVGStyleSheet (unwrap sheet)
+            def r:EVGElement (unwrap root)
+            UiTree.inline(r "height" ((to_string (to_int pageH)) + "px"))
+            s.setViewport(pageW pageH false)
+            s.applyTree(r "")
+            lay.setPageSize(pageW pageH)
+            lay.layout(r)
+        }
+    }
+
+    fn laidOut:EVGLayout () {
+        def r:EVGElement (unwrap root)
+        def s:EVGStyleSheet (unwrap sheet)
+        UiTree.inline(r "height" ((to_string (to_int pageH)) + "px"))
+        s.setViewport(pageW pageH false)
+        this.markStates(r)
+        s.applyTree(r "")
+        def t:EVGTransition transitions
+        t.reconcileTree(r)
+        if layout {
+            def lay:EVGLayout (unwrap layout)
+            if ((s.layoutClean()) == false) {
+                lay.setPageSize(pageW pageH)
+                lay.layout(r)
+                this.fitHeight(lay)
+            }
+            return lay
+        }
+        def fresh (new EVGLayout())
+        fresh.setPageSize(pageW pageH)
+        layout = fresh
+        fresh.layout(r)
+        this.fitHeight(fresh)
+        return fresh
+    }
+
+    fn tick:boolean (dtMs:double) {
+        def r:EVGElement (unwrap root)
+        def t:EVGTransition transitions
+        t.advanceTree(r dtMs)
+        return (t.busy(r))
+    }
+
+    fn busyNow:boolean () {
+        def r:EVGElement (unwrap root)
+        def t:EVGTransition transitions
+        return (t.busy(r))
+    }
+
+    fn displayListJson:string () {
+        def lay:EVGLayout (this.laidOut())
+        def r:EVGElement (unwrap root)
+        def dl (new EVGDisplayList())
+        dl.setTextEngine((lay.getTextEngine()))
+        dl.build(r)
+        return (dl.toJson())
+    }
+
+    fn hitId:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def hit (new EVGHitTest())
+        return (hit.idAt(r px py))
+    }
+
+    fn a11yJson:string (generation:int focusId:string) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Accordion demo" generation focusId))
+        return (t.toJson())
+    }
+
+    fn a11yProblems:[string] () {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Accordion demo" 1 ""))
+        return (t.lint())
+    }
+
+    fn styleErrorCount:int () {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (s.getErrorCount())
+    }
+
+    fn styleErrorAt:string (i:int) {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (s.getError(i))
+    }
+
+    fn heightPx:double () {
+        this.laidOut()
+        return pageH
+    }
+
+    fn summary:string () {
+        def m:string ""
+        def i:int 0
+        while (i < (array_length multi.openValues)) {
+            def v:string (itemAt multi.openValues i)
+            if (i > 0) {
+                m = (m + "+")
+            }
+            m = (m + v)
+            i = (i + 1)
+        }
+        return ("bordered " + billing.openValue + ", single " + faq.openValue + ", multiple " + m)
+    }
+}

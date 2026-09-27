@@ -11,7 +11,16 @@
 ;             does not rove: every header stays reachable by Tab
 ;   content   role region, unreachable while closed
 ;   single    opening one closes the one that was open; clicking the open one
-;             closes it (collapsible)
+;             closes it when `collapsible` (Radix's prop; the default here is
+;             true, which is what this controller always did) and does nothing
+;             when not
+;   multiple  `multiple = true` (Radix's type="multiple"): every item toggles
+;             on its own and any number may be open; `collapsible` does not
+;             apply
+;   keyboard  vertical: ArrowDown / ArrowUp step between the enabled triggers
+;             and wrap at the ends, Home / End go to the first / last; the
+;             horizontal arrows do nothing. Enter and Space toggle — they are
+;             a button's own keys, so `keyDown` answers them with `activate`.
 ; =============================================================================
 
 Import "UiCtl.rgr"
@@ -23,11 +32,71 @@ class AccordionCtl extends UiCtl {
     def items:[UiItem]
     ; The open section's value; "" when everything is closed.
     def openValue:string ""
+    ; type="multiple": the open items' values, in the order they opened.
+    ; `openValue` is not used in that mode.
+    def multiple:boolean false
+    def openValues:[string]
+    ; type="single" only: whether the open item closes when its own trigger is
+    ; pressed.
+    def collapsible:boolean true
 
     Constructor () {
         rootEl = (EVGElement.createDiv())
         def empty:[UiItem]
         items = empty
+        def none:[string]
+        openValues = none
+    }
+
+    fn isOpen:boolean (itemValue:string) {
+        if (itemValue == "") {
+            return false
+        }
+        if multiple {
+            def i:int 0
+            while (i < (array_length openValues)) {
+                def v:string (itemAt openValues i)
+                if (v == itemValue) {
+                    return true
+                }
+                i = (i + 1)
+            }
+            return false
+        }
+        return (openValue == itemValue)
+    }
+
+    ; Open or close one item by value, by the rules of the type. Returns true
+    ; when anything changed.
+    fn toggle:boolean (itemValue:string) {
+        if multiple {
+            def next:[string]
+            def was:boolean false
+            def i:int 0
+            while (i < (array_length openValues)) {
+                def v:string (itemAt openValues i)
+                if (v == itemValue) {
+                    was = true
+                } {
+                    push next v
+                }
+                i = (i + 1)
+            }
+            if (was == false) {
+                push next itemValue
+            }
+            openValues = next
+            return true
+        }
+        if (openValue == itemValue) {
+            if (collapsible == false) {
+                return false
+            }
+            openValue = ""
+            return true
+        }
+        openValue = itemValue
+        return true
     }
 
     fn addItem:void (itemValue:string itemName:string itemBody:string itemDisabled:boolean) {
@@ -61,7 +130,7 @@ class AccordionCtl extends UiCtl {
         while (i < (array_length items)) {
             def it:UiItem (itemAt items i)
             def word:string "closed"
-            if (it.value == openValue) {
+            if (this.isOpen(it.value)) {
                 word = "open"
             }
 
@@ -88,7 +157,7 @@ class AccordionCtl extends UiCtl {
             UiTree.clearChildren(body)
             def blabel:EVGElement (UiTree.label((body.id + "__label") "ui-accordion-body" it.body))
             body.addChild(blabel)
-            if (it.value == openValue) {
+            if (this.isOpen(it.value)) {
                 section.addChild(body)
             }
 
@@ -108,19 +177,82 @@ class AccordionCtl extends UiCtl {
                 if it.disabled {
                     return ""
                 }
-                ; single + collapsible: the open one closes, anything else
-                ; becomes the only open one.
-                if (openValue == it.value) {
-                    openValue = ""
-                } {
-                    openValue = it.value
-                }
+                ; single: the open one closes (when collapsible), anything
+                ; else becomes the only open one. multiple: this one toggles.
+                this.toggle(it.value)
                 this.build()
                 return ""
             }
             i = (i + 1)
         }
         return ""
+    }
+
+    fn indexOfTrigger:int (target:string) {
+        def i:int 0
+        while (i < (array_length items)) {
+            def it:UiItem (itemAt items i)
+            if ((this.triggerTid(it.value)) == target) {
+                return i
+            }
+            i = (i + 1)
+        }
+        return -1
+    }
+
+    ; The first enabled trigger, or the last when `fromEnd`.
+    fn edgeTrigger:string (fromEnd:boolean) {
+        def n:int (array_length items)
+        def i:int 0
+        while (i < n) {
+            def k:int i
+            if fromEnd {
+                k = ((n - 1) - i)
+            }
+            def it:UiItem (itemAt items k)
+            if (it.disabled == false) {
+                return (this.triggerTid(it.value))
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    ; Returns the trigger the focus moves to, or "" when it stays put.
+    fn keyDown:string (target:string key:string) {
+        if disabled {
+            return ""
+        }
+        def from:int (this.indexOfTrigger(target))
+        if (from < 0) {
+            return ""
+        }
+        if (UiCtl.activatesOn(key)) {
+            this.activate(target)
+            return ""
+        }
+        if (key == "Home") {
+            return (this.edgeTrigger(false))
+        }
+        if (key == "End") {
+            return (this.edgeTrigger(true))
+        }
+        def delta:int 0
+        if (key == "ArrowDown") {
+            delta = 1
+        }
+        if (key == "ArrowUp") {
+            delta = -1
+        }
+        if (delta == 0) {
+            return ""
+        }
+        def landed:int (UiCtl.stepIndex(items from delta))
+        if (landed == from) {
+            return ""
+        }
+        def it:UiItem (itemAt items landed)
+        return (this.triggerTid(it.value))
     }
 
     fn tids:[string] () {
@@ -163,10 +295,7 @@ class AccordionCtl extends UiCtl {
         def i:int 0
         while (i < (array_length items)) {
             def it:UiItem (itemAt items i)
-            def isOpen:boolean false
-            if (it.value == openValue) {
-                isOpen = true
-            }
+            def isOpen:boolean (this.isOpen(it.value))
             def word:string "closed"
             if isOpen {
                 word = "open"
