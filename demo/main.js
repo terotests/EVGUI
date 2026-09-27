@@ -51,6 +51,8 @@ const fontMeasure = installCanvasMeasurer(MODULES);
 window.__fontMeasure = fontMeasure;
 import { AccordionDemo } from "./generated-host.js";
 import { ACCORDION_CSS } from "./generated.js";
+import { AutocompleteDemo } from "./generated-host.js";
+import { AUTOCOMPLETE_CSS } from "./generated.js";
 import { MENUBAR_CSS, TOOLBAR_CSS, SORTABLE_CSS, MOTION_CSS, TABLE_CSS, DROPDOWN_CSS, DIALOG_CSS, TREE_CSS, TIMELINE_CSS, RESIZE_CSS, FORM_CSS, PROFILE_CSS, DASHBOARD_CSS, CALENDAR_CSS, FILTERS_CSS, EVENTCAL_CSS, MESSAGE_CSS, CONTROLS_CSS, OTP_CSS, METADATA_CSS, EFFECTS_CSS, SEPARATOR_CSS, TABS_CSS, EFFECT_PRESETS_CSS } from "./generated.js";
 
 // The default stage width. A demo wider than this says so — the dashboard
@@ -417,6 +419,11 @@ effects.init(EFFECTS_CSS);
 let tabs = new TabsDemo();
 tabs.init(TABS_CSS);
 let lastTabsHover = "";
+// Autocomplete: six ComboboxCtls in autocomplete mode (Base UI's Autocomplete,
+// ReUI's look), their boxes on the page's text session like the form's.
+let autocomplete = new AutocompleteDemo();
+autocomplete.init(AUTOCOMPLETE_CSS);
+let lastAutocompleteHover = "";
 // ONE DRIVER FOR THE PAGE. It reads the effect instances off whatever display
 // list is being painted, so it works for any demo whose stylesheet declares an
 // effect and costs nothing on the nineteen that do not.
@@ -1299,6 +1306,49 @@ const DEMOS = {
       root: () => null,
     }),
   },
+
+  // Autocomplete. The generic Tab walk: each box is one stop, and the demo's
+  // `setFocus` closes a box's list as the focus leaves it. The arrows are
+  // claimed from the editing session (`ownsKey`), because they walk the list.
+  // `animated` for the async card, whose results arrive on the demo's clock.
+  autocomplete: {
+    height: () => autocomplete.heightPx(),
+    list: () => autocomplete.displayListJson(),
+    hit: (x, y) => autocomplete.hitId(x, y),
+    a11y: (gen, focus) => autocomplete.a11yJson(gen, focus),
+    cursorAt: (x, y) => autocomplete.cursorAt(x, y),
+    textSession: {
+      focused: () => autocomplete.focusedField(),
+      state: (tid) => JSON.parse(autocomplete.fieldStateJson(tid)),
+      apply: (tid, v, a, b) => autocomplete.applyEdit(tid, v, a, b),
+    },
+    press: (id, x, y, ev) => autocomplete.beginSelection(id, x, !!(ev && ev.shiftKey)),
+    drag: (id, ev) => autocomplete.extendSelection(ev.offsetX),
+    drop: () => autocomplete.endSelection(),
+    dblclick: (id, x) => autocomplete.selectWordAt(id, x),
+    hover: (id) => {
+      if (id === lastAutocompleteHover) return false;
+      lastAutocompleteHover = id;
+      autocomplete.setHover(id);
+      return true;
+    },
+    keyWith: (k, shift, ctrl) => autocomplete.keyWith(k, shift, ctrl),
+    key: (k) => autocomplete.key(k),
+    ownsKey: (k) => autocomplete.ownsKey(k),
+    host: () => ({
+      tick: (dt) => autocomplete.tick(dt),
+      busy: () => autocomplete.busyNow(),
+      setHover: (id) => {
+        if (id === lastAutocompleteHover) return false;
+        lastAutocompleteHover = id;
+        autocomplete.setHover(id);
+        return true;
+      },
+      setPressed: (id) => autocomplete.setPressed(id),
+      root: () => null,
+    }),
+    animated: true,
+  },
 };
 
 /**
@@ -1576,6 +1626,7 @@ const INSTANCE = {
   effects: () => effects,
   separator: () => separator,
   tabs: () => tabs,
+  autocomplete: () => autocomplete,
 };
 
 /** The demo showing now, or null for one of the three kept trees. */
@@ -1696,6 +1747,8 @@ const NARROW = {
   effects: { min: 320, h: "auto" },
   separator: { min: 320, h: "auto" },
   tabs: { min: 320, h: "auto" },
+  // The page grows under an open list, so its height is the demo's own.
+  autocomplete: { min: 320, h: "own" },
 };
 const NARROW_AT = 600;
 const naturalSize = {};
@@ -2415,6 +2468,7 @@ function syncPanels() {
 // entry point makes every link to it a click instruction; a check that wants
 // the dashboard should not have to press a radio to get there.
 const DEMO_NAMES = ["menubar", "toolbar", "sortable", "table", "tree", "timeline", "resizable", "form", "calendar", "filters", "eventcal", "message", "controls", "otp", "metadata", "profile", "dashboard", "dropdown", "dialog", "motion", "effects", "accordion", "separator", "tabs"];
+DEMO_NAMES.push("autocomplete");
 const wanted = new URLSearchParams(location.search).get("demo");
 if (wanted && DEMO_NAMES.includes(wanted)) state.which = wanted;
 
@@ -3018,6 +3072,9 @@ const textInput = createTextInputBridge({
     if (!tid) return;
     if (!s.apply(tid, value, selStart, selEnd)) return;
     paint();
+    // An edit can start something on the demo's clock (the autocomplete's
+    // async card fetches after a keystroke).
+    if (d.animated) animate();
     // The model may have REFUSED part of it — a number field will not take
     // letters, and the platform has no idea. Push the corrected value back
     // into the session, but only when it actually differs: writing to the
@@ -3098,6 +3155,7 @@ window.__resetDemo = (name) => {
   else if (name === "metadata") { metadata = new MetadataDemo(); metadata.init(METADATA_CSS); lastMetadataHover = ""; }
   else if (name === "message") { message = new MessageDemo(); message.init(MESSAGE_CSS); lastMessageHover = ""; }
   else if (name === "tabs") { tabs = new TabsDemo(); tabs.init(TABS_CSS); lastTabsHover = ""; }
+  else if (name === "autocomplete") { autocomplete = new AutocompleteDemo(); autocomplete.init(AUTOCOMPLETE_CSS); lastAutocompleteHover = ""; }
   else if (name === "dialog") { dialog = new DialogDemo(); dialog.init(DIALOG_CSS); lastDialogHover = ""; }
   else return false;
   held = false;
@@ -3550,6 +3608,11 @@ function kbAfterPaint(tree) {
     if (!el) continue;
     let list = null;
     let opt = null;
+    // aria-autocomplete, for a demo that says ("list", or "both" with inline
+    // completion). The tree has no field for it either.
+    const acInst = instance();
+    const ac = acInst && typeof acInst.ariaAutocomplete === "function" ? acInst.ariaAutocomplete(n.id) : "";
+    if (ac && el.getAttribute("aria-autocomplete") !== ac) el.setAttribute("aria-autocomplete", ac);
     if (n.expanded === 2) {
       const at = tree.nodes.indexOf(n);
       const lists = tree.nodes.filter((x) => x.role === "listbox");

@@ -88,6 +88,7 @@ const DEMOS = [
   ["ToolbarDemo", "toolbar.css"],
   ["TreeDemo", "tree.css"],
   ["TabsDemo", "tabs.css"],
+  ["AutocompleteDemo", "autocomplete.css"],
 ];
 
 const rect = (e) => ({

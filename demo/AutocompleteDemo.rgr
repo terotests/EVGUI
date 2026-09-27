@@ -1,0 +1,885 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; AutocompleteDemo — ReUI's Autocomplete, one card per pattern
+; =============================================================================
+; ReUI's Autocomplete is Base UI's: a text box whose typed text filters a list
+; of suggestions in a popup under it. Unlike a select or a combobox the TEXT is
+; the value — a suggestion only completes it, and Enter with nothing
+; highlighted keeps what was typed. Six cards, as on ReUI's page:
+;
+;   Basic            fruits, the matching letters of each row in bold
+;   With groups      frameworks under "Frontend" and "Backend" headings
+;   With clear       countries, prefilled, a × that empties the box
+;   Inline           languages, aria-autocomplete="both": the rest of the
+;                    first row that starts with the text is written in after
+;                    the caret, selected
+;   Async            movies fetched 450ms after a keystroke: "Searching…",
+;                    then the results or "No results found."
+;   Limit            thirty countries, five at a time and "25 more"
+;
+; THE BEHAVIOUR IS NOT WRITTEN HERE. Each box is a `ComboboxCtl` in its
+; autocomplete mode — the controller measured against Base UI's Combobox and
+; used by the form's "Find a customer" and the metadata card — so the filter,
+; the highlight walk, Enter / Escape / Tab and the tree with its roles are the
+; controller's. This file dresses the tree (the caret and selection band, the
+; focus ring), routes the pointer and the page's text session to it, and plays
+; the server for the async card.
+;
+; The text is edited by the page's text session (a real <input> parked over
+; the focused box), as in the form: caret, selection, clipboard and IME are
+; the platform's. The arrows are claimed back (`ownsKey`) because here they
+; walk the list.
+; =============================================================================
+
+Import "../src/ComboboxCtl.rgr"
+Import "../src/InputCtl.rgr"
+Import "../src/UiCtl.rgr"
+Import "../src/UiTree.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGUnit.rgr"
+Import "pkg:evg/EVGLayout.rgr"
+Import "pkg:evg/EVGDisplayList.rgr"
+Import "pkg:evg/EVGStyleSheet.rgr"
+Import "pkg:evg/EVGTransition.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+Import "pkg:evg/EVGA11yFromTree.rgr"
+Import "pkg:evg/EVGHitTest.rgr"
+Import "pkg:evg/EVGTextEngine.rgr"
+
+treefactory Au {
+    child addChild
+    text  textContent
+
+    tag Page     EVGElement (props (className "au-page"))
+    tag Card     EVGElement (props (className "au-card"))
+    tag Caption  EVGElement (props (className "au-caption") (elementType 1) (role "heading") (a11yLevel 2))
+    tag Stage    EVGElement (props (className "au-stage"))
+    tag Field    EVGElement (props (className "au-field"))
+    ; The input carries the label as its name; the drawn one is not read twice.
+    tag Label    EVGElement (props (className "au-label") (elementType 1) (a11yHidden true))
+    tag Hint     EVGElement (props (className "au-hint") (elementType 1) (a11yHidden true))
+    tag Status   EVGElement (props (className "au-hint") (elementType 1) (role "status"))
+    tag Band     EVGElement (props (className "au-band") (a11yHidden true))
+}
+
+class AutocompleteDemo {
+
+    def basic:ComboboxCtl (new ComboboxCtl())
+    def grouped:ComboboxCtl (new ComboboxCtl())
+    def clearable:ComboboxCtl (new ComboboxCtl())
+    def inline:ComboboxCtl (new ComboboxCtl())
+    def remote:ComboboxCtl (new ComboboxCtl())
+    def limited:ComboboxCtl (new ComboboxCtl())
+
+    def root@(optional):EVGElement
+    def sheet@(optional):EVGStyleSheet
+    def layout@(optional):EVGLayout
+    def measurer:EVGLayout (new EVGLayout())
+
+    def hovered:string ""
+    def pressed:string ""
+    def focused:string ""
+    def dragField:string ""
+
+    ; The async card's "server": every title, the query it is answering and
+    ; how long until it answers.
+    def movies:[string]
+    def askedFor:string ""
+    def pendingMs:double 0.0
+    def fetches:int 0
+
+    def pageW:double 900.0
+    def pageH:double 640.0
+    def boxFont:string "Arial"
+    def boxFontSize:double 14.0
+
+    Constructor () {
+        def m:[string]
+        movies = m
+    }
+
+    fn ctls:[ComboboxCtl] () {
+        def a:[ComboboxCtl]
+        push a basic
+        push a grouped
+        push a clearable
+        push a inline
+        push a remote
+        push a limited
+        return a
+    }
+
+    fn dress:void (c:ComboboxCtl tid:string label:string hint:string placeholder:string) {
+        c.tid = tid
+        c.name = label
+        c.description = hint
+        c.placeholder = placeholder
+        c.autocomplete = true
+        c.showTrigger = false
+        c.showClear = false
+        c.emphasis = true
+        c.emptyText = "No results found."
+        def inner:InputCtl (unwrap c.input)
+        inner.tid = (c.inputTid())
+        inner.fontFamily = boxFont
+        inner.fontSize = boxFontSize
+        inner.boxWidth = 280.0
+    }
+
+    fn addAll:void (c:ComboboxCtl names:[string]) {
+        def i:int 0
+        while (i < (array_length names)) {
+            def n:string (itemAt names i)
+            c.addItem((AutocompleteDemo.slug(n)) n false)
+            i = (i + 1)
+        }
+    }
+
+    ; An id-safe value from a label: lower case, letters and digits, dashes.
+    sfn slug:string (s:string) {
+        def low:string (to_lowercase s)
+        def out:string ""
+        def i:int 0
+        def n:int (strlen low)
+        while (i < n) {
+            def ch:string (substring low i (i + 1))
+            if ((indexOf "abcdefghijklmnopqrstuvwxyz0123456789" ch) >= 0) {
+                out = (out + ch)
+            } {
+                if (((strlen out) > 0) && ((substring out ((strlen out) - 1) (strlen out)) != "-")) {
+                    out = (out + "-")
+                }
+            }
+            i = (i + 1)
+        }
+        return out
+    }
+
+    fn init:void (css:string) {
+        def s (new EVGStyleSheet())
+        s.parse(css)
+        sheet = s
+
+        this.dress(basic "au-basic" "Fruit" "" "Search fruits…")
+        this.addAll(basic ([] _:string ("Apple" "Banana" "Blueberry" "Cherry" "Grape" "Mango" "Orange" "Strawberry")))
+
+        this.dress(grouped "au-groups" "Framework" "" "Search frameworks…")
+        grouped.addGroupedItem("react" "React" "Frontend")
+        grouped.addGroupedItem("vue" "Vue" "Frontend")
+        grouped.addGroupedItem("svelte" "Svelte" "Frontend")
+        grouped.addGroupedItem("angular" "Angular" "Frontend")
+        grouped.addGroupedItem("express" "Express" "Backend")
+        grouped.addGroupedItem("django" "Django" "Backend")
+        grouped.addGroupedItem("rails" "Rails" "Backend")
+        grouped.addGroupedItem("laravel" "Laravel" "Backend")
+
+        this.dress(clearable "au-clear" "Country" "" "Search countries…")
+        clearable.showClear = true
+        this.addAll(clearable ([] _:string ("Argentina" "Australia" "Brazil" "Canada" "France" "Germany" "Japan" "Mexico")))
+        clearable.typed = "Canada"
+        clearable.putText("Canada")
+
+        this.dress(inline "au-inline" "Language" "" "Search languages…")
+        inline.inlineComplete = true
+        inline.emphasis = false
+        this.addAll(inline ([] _:string ("JavaScript" "TypeScript" "Python" "Rust" "Go" "Ruby" "Java" "Kotlin" "Swift")))
+
+        this.dress(remote "au-async" "Movie" "" "Search movies…")
+        remote.loadingText = "Searching…"
+        remote.limit = 6
+        movies = ([] _:string ("The Godfather" "The Dark Knight" "Pulp Fiction" "Forrest Gump" "Inception" "The Matrix" "Goodfellas" "Interstellar" "Parasite" "Gladiator" "The Prestige" "Whiplash" "Alien" "Arrival" "Casablanca" "Jaws" "Heat" "Amadeus" "The Shining" "Spirited Away" "Toy Story" "Back to the Future" "The Lion King" "Titanic"))
+
+        this.dress(limited "au-limit" "Destination" "" "Search 30 countries…")
+        limited.limit = 5
+        this.addAll(limited ([] _:string ("Argentina" "Australia" "Austria" "Belgium" "Brazil" "Canada" "Chile" "China" "Denmark" "Egypt" "Finland" "France" "Germany" "Greece" "India" "Indonesia" "Ireland" "Italy" "Japan" "Kenya" "Mexico" "Netherlands" "Norway" "Portugal" "South Africa" "Spain" "Sweden" "Switzerland" "United Kingdom" "United States")))
+
+        this.rebuild()
+    }
+
+    ; --- lookups ----------------------------------------------------------------
+
+    fn engine:EVGTextEngine () {
+        return (measurer.getTextEngine())
+    }
+
+    ; The controller owning an id, or a blank one (tid "") when none does.
+    fn ctlFor:ComboboxCtl (target:string) {
+        if ((strlen target) == 0) {
+            return (new ComboboxCtl())
+        }
+        def all:[ComboboxCtl] (this.ctls())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:ComboboxCtl (itemAt all i)
+            if (c.owns(target)) {
+                return c
+            }
+            if (target == (c.tid + "-group")) {
+                return c
+            }
+            i = (i + 1)
+        }
+        return (new ComboboxCtl())
+    }
+
+    fn isInput:boolean (tid:string) {
+        if ((strlen tid) == 0) {
+            return false
+        }
+        def c:ComboboxCtl (this.ctlFor(tid))
+        return ((strlen c.tid) > 0) && (tid == (c.inputTid()))
+    }
+
+    ; A hit on the text run, the caret or the bordered group around the box
+    ; is a hit on the box.
+    fn fieldOwning:string (target:string) {
+        def c:ComboboxCtl (this.ctlFor(target))
+        if ((strlen c.tid) == 0) {
+            return target
+        }
+        def inp:string (c.inputTid())
+        if ((target == (inp + "-text")) || (target == (inp + "-caret")) || (target == (c.tid + "-group"))) {
+            return inp
+        }
+        return target
+    }
+
+    sfn byId:EVGElement (el:EVGElement tid:string) {
+        if (el.id == tid) {
+            return el
+        }
+        def i:int 0
+        while (i < (array_length el.children)) {
+            def kid:EVGElement (AutocompleteDemo.byId((itemAt el.children i) tid))
+            if (kid.id == tid) {
+                return kid
+            }
+            i = (i + 1)
+        }
+        return el
+    }
+
+    ; --- the look ---------------------------------------------------------------
+
+    ; The caret and the selection band inside the controller's box, placed by
+    ; measurement, as the form's combobox is.
+    fn dressBox:void (c:ComboboxCtl) {
+        def inner:InputCtl (unwrap c.input)
+        def box:EVGElement (unwrap inner.rootEl)
+        def txt:EVGElement (unwrap inner.textEl)
+        def car:EVGElement (unwrap inner.caretEl)
+        def eng:EVGTextEngine (this.engine())
+        def hasFocus:boolean (focused == (c.inputTid()))
+        def kids:[EVGElement]
+        if hasFocus {
+            inner.ensureCaretVisible(eng)
+            if (inner.hasSelection()) {
+                def a:double (inner.caretXAt(eng (inner.selStart())))
+                def b:double (inner.caretXAt(eng (inner.selEnd())))
+                def band (tree Au (Band (props (id ((c.inputTid()) + "-band")))))
+                band.left = (EVGUnit.px((a - inner.scrollX)))
+                band.width = (EVGUnit.px((b - a)))
+                push kids band
+            }
+        }
+        push kids txt
+        if (hasFocus && ((inner.hasSelection()) == false)) {
+            def cx:double (inner.caretXAt(eng inner.caret))
+            car.left = (EVGUnit.px((cx - inner.scrollX)))
+            push kids car
+        }
+        box.children = kids
+        if hasFocus {
+            def g:EVGElement (unwrap c.groupEl)
+            UiTree.addClass(g "au-group-focus")
+        }
+    }
+
+    fn remoteStatus:string () {
+        if remote.loading {
+            return "Searching…"
+        }
+        if ((strlen remote.typed) == 0) {
+            return "Results arrive 450 ms after a keystroke."
+        }
+        def n:int (array_length (remote.matchedItems()))
+        if (n == 0) {
+            return "No movies match."
+        }
+        if (n == 1) {
+            return "1 movie found."
+        }
+        return ((to_string n) + " movies found.")
+    }
+
+    fn card:EVGElement (c:ComboboxCtl title:string hint:string) {
+        UiTree.dress(c)
+        this.dressBox(c)
+        def body:EVGElement (unwrap c.rootEl)
+        def field (tree Au (Field (Label c.name)))
+        field.addChild(body)
+        if (c.tid == remote.tid) {
+            field.addChild((tree Au (Status (props (id "au-async-status")) (this.remoteStatus()))))
+        } {
+            field.addChild((tree Au (Hint hint)))
+        }
+        return (tree Au
+            (Card (props (id (c.tid + "-card")))
+                (Caption (props (id (c.tid + "-caption"))) title)
+                (Stage (child field))))
+    }
+
+    fn pageBody:EVGElement () {
+        def page (tree Au (Page (props (id "au-page"))))
+        page.addChild((this.card(basic "Basic" "Type to filter; ↑ ↓ highlight, Enter completes.")))
+        page.addChild((this.card(grouped "With groups" "Suggestions under section headings.")))
+        page.addChild((this.card(clearable "With clear button" "The × empties the box and keeps the focus.")))
+        page.addChild((this.card(inline "Inline autocomplete" "Type “ty”: the rest of TypeScript is written in.")))
+        page.addChild((this.card(remote "Async search" "")))
+        page.addChild((this.card(limited "With limit" "Five suggestions at a time out of thirty.")))
+        return page
+    }
+
+    fn rebuild:void () {
+        ; The text run's width, for the box's own scrolling: the field less
+        ; the group's padding and the clear button.
+        def fieldW:double 320.0
+        if (pageW < 600.0) {
+            fieldW = (pageW - 58.0)
+        }
+        def all:[ComboboxCtl] (this.ctls())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:ComboboxCtl (itemAt all i)
+            def inner:InputCtl (unwrap c.input)
+            inner.boxWidth = (fieldW - 52.0)
+            i = (i + 1)
+        }
+        root = (this.pageBody())
+    }
+
+    ; --- layout -----------------------------------------------------------------
+
+    fn markStates:void (el:EVGElement) {
+        el.isHovered = ((strlen hovered) > 0) && (el.id == hovered)
+        el.isFocused = ((strlen focused) > 0) && (el.id == focused)
+        el.isPressed = ((strlen pressed) > 0) && (el.id == pressed)
+        def i:int 0
+        while (i < (array_length el.children)) {
+            this.markStates((itemAt el.children i))
+            i = (i + 1)
+        }
+    }
+
+    ; The controllers keep their elements from one build to the next, and a
+    ; layout reads some of its last answers back; a fresh pass forgets them.
+    sfn forgetFlex:void (el:EVGElement) {
+        el.calculatedFlexHeight = 0.0
+        el.calculatedHeight = 0.0
+        el.calculatedWidth = 0.0
+        el.calculatedInnerHeight = 0.0
+        el.calculatedInnerWidth = 0.0
+        el.hasDefiniteHeight = false
+        el.layoutClean = false
+        def i:int 0
+        while (i < (array_length el.children)) {
+            AutocompleteDemo.forgetFlex((itemAt el.children i))
+            i = (i + 1)
+        }
+    }
+
+    ; The lowest edge of anything drawn — an open popup included, so the page
+    ; grows to hold the list under the last card instead of clipping it.
+    sfn deepBottom:double (el:EVGElement top:boolean) {
+        def b:double 0.0
+        if (top == false) {
+            b = ((el.calculatedY) + (el.calculatedHeight))
+        }
+        def i:int 0
+        while (i < (array_length el.children)) {
+            def k:double (AutocompleteDemo.deepBottom((itemAt el.children i) false))
+            if (k > b) {
+                b = k
+            }
+            i = (i + 1)
+        }
+        return b
+    }
+
+    ; Where an open list ends when it opens DOWNWARDS. A list that does not
+    ; fit under its box is flipped above it by the layout; the page grows
+    ; instead, so every list opens under its box as on ReUI's page.
+    fn popupBottom:double (floor:double) {
+        def b:double floor
+        def all:[ComboboxCtl] (this.ctls())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:ComboboxCtl (itemAt all i)
+            if c.open {
+                def g:EVGElement (unwrap c.groupEl)
+                def pop:EVGElement (unwrap c.contentEl)
+                def under:double ((((g.calculatedY) + (g.calculatedHeight)) + 4.0) + (pop.calculatedHeight))
+                if (under > b) {
+                    b = under
+                }
+            }
+            i = (i + 1)
+        }
+        return b
+    }
+
+    fn laidOut:EVGLayout () {
+        def r:EVGElement (unwrap root)
+        def s:EVGStyleSheet (unwrap sheet)
+        this.markStates(r)
+        AutocompleteDemo.forgetFlex(r)
+        r.height = (EVGUnit.px(pageH))
+        s.setViewport(pageW pageH false)
+        s.applyTree(r "")
+        def lay (new EVGLayout())
+        lay.setPageSize(pageW pageH)
+        lay.layout(r)
+        def need:double (to_double (to_int (((this.popupBottom((AutocompleteDemo.deepBottom(r true)))) + 24.0) + 0.999)))
+        if (need < 320.0) {
+            need = 320.0
+        }
+        if ((need > (pageH + 0.5)) || (need < (pageH - 0.5))) {
+            pageH = need
+            AutocompleteDemo.forgetFlex(r)
+            r.height = (EVGUnit.px(pageH))
+            s.setViewport(pageW pageH false)
+            s.applyTree(r "")
+            def sized (new EVGLayout())
+            sized.setPageSize(pageW pageH)
+            sized.layout(r)
+            layout = sized
+            return sized
+        }
+        layout = lay
+        return lay
+    }
+
+    ; --- the async card's server -------------------------------------------------
+
+    ; After anything that may have changed the async box's text: a new query
+    ; starts a fetch; an empty one cancels it.
+    fn afterEdit:void () {
+        if (remote.typed == askedFor) {
+            return
+        }
+        askedFor = remote.typed
+        if ((strlen askedFor) == 0) {
+            pendingMs = 0.0
+            remote.loading = false
+            remote.clearItems()
+            remote.build()
+            return
+        }
+        remote.loading = true
+        pendingMs = 450.0
+        remote.build()
+    }
+
+    ; The answer arrives: the titles containing the query.
+    fn answer:void () {
+        pendingMs = 0.0
+        fetches = (fetches + 1)
+        remote.clearItems()
+        def low:string (to_lowercase askedFor)
+        def i:int 0
+        while (i < (array_length movies)) {
+            def t:string (itemAt movies i)
+            if ((indexOf (to_lowercase t) low) >= 0) {
+                remote.addItem((AutocompleteDemo.slug(t)) t false)
+            }
+            i = (i + 1)
+        }
+        remote.loading = false
+        this.rebuild()
+    }
+
+    fn tick:boolean (dtMs:double) {
+        if (pendingMs <= 0.0) {
+            return false
+        }
+        pendingMs = (pendingMs - dtMs)
+        if (pendingMs <= 0.0) {
+            this.answer()
+            return false
+        }
+        return true
+    }
+
+    fn busyNow:boolean () {
+        return (pendingMs > 0.0)
+    }
+
+    ; For a check: answer now rather than after the clock.
+    fn settle:void () {
+        if (pendingMs > 0.0) {
+            this.answer()
+        }
+    }
+
+    ; --- focus ------------------------------------------------------------------
+
+    ; Focus moving from one box to anything else closes that box's list and
+    ; keeps its text — the controller's `commitBlur`.
+    fn moveFocus:void (id:string) {
+        if ((strlen focused) > 0) {
+            def was:ComboboxCtl (this.ctlFor(focused))
+            def now:ComboboxCtl (this.ctlFor(id))
+            if (((strlen was.tid) > 0) && (was.tid != now.tid)) {
+                was.onBlur(focused)
+            }
+        }
+        focused = id
+    }
+
+    fn setFocus:void (id:string) {
+        this.moveFocus(id)
+        def c:ComboboxCtl (this.ctlFor(id))
+        if ((strlen c.tid) > 0) {
+            c.onFocus(id)
+        }
+    }
+
+    ; --- input ------------------------------------------------------------------
+
+    fn press:boolean (rawTarget:string) {
+        def target:string (this.fieldOwning(rawTarget))
+        def c:ComboboxCtl (this.ctlFor(target))
+        if ((strlen c.tid) == 0) {
+            this.moveFocus("")
+            this.rebuild()
+            return true
+        }
+        this.moveFocus(target)
+        def landed:string (c.activate(target))
+        if ((strlen landed) > 0) {
+            focused = landed
+        }
+        if (focused != (c.inputTid())) {
+            ; Only the box takes focus; a press on a row, the clear button or
+            ; the popup's padding leaves it there.
+            focused = (c.inputTid())
+        }
+        this.afterEdit()
+        this.rebuild()
+        return true
+    }
+
+    fn key:boolean (k:string) {
+        return (this.keyWith(k false false))
+    }
+
+    fn keyWith:boolean (k:string shift:boolean ctrl:boolean) {
+        if (k == "Tab") {
+            ; The page's Tab walk; `setFocus` closes the list on the way out.
+            return false
+        }
+        if ((this.isInput(focused)) == false) {
+            return false
+        }
+        def c:ComboboxCtl (this.ctlFor(focused))
+        if (((strlen k) == 1) && (ctrl == false)) {
+            c.typeChar(focused k)
+        } {
+            def landed:string (c.keyDownWith(focused k shift ctrl))
+            if ((strlen landed) > 0) {
+                focused = landed
+            }
+        }
+        def inner:InputCtl (unwrap c.input)
+        inner.ensureCaretVisible((this.engine()))
+        this.afterEdit()
+        this.rebuild()
+        return true
+    }
+
+    ; The arrows walk the list rather than the caret, so the editing session
+    ; hands them back while a box has the focus.
+    fn ownsKey:boolean (k:string) {
+        if ((this.isInput(focused)) == false) {
+            return false
+        }
+        return ((k == "ArrowDown") || (k == "ArrowUp"))
+    }
+
+    fn type:boolean (ch:string) {
+        if ((this.isInput(focused)) == false) {
+            return false
+        }
+        def c:ComboboxCtl (this.ctlFor(focused))
+        def took:boolean (c.typeChar(focused ch))
+        if took {
+            this.afterEdit()
+            this.rebuild()
+        }
+        return took
+    }
+
+    ; --- the pointer in a box ---------------------------------------------------
+
+    fn indexAt:int (target:string px:double) {
+        def c:ComboboxCtl (this.ctlFor(target))
+        def inner:InputCtl (unwrap c.input)
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def box:EVGElement (AutocompleteDemo.byId(r target))
+        if (box.id != target) {
+            return -1
+        }
+        return (InputCtl.indexAtPageX((this.engine()) inner box px))
+    }
+
+    fn beginSelection:boolean (rawTarget:string px:double extend:boolean) {
+        def target:string (this.fieldOwning(rawTarget))
+        this.press(target)
+        if ((this.isInput(target)) == false) {
+            dragField = ""
+            return true
+        }
+        def idx:int (this.indexAt(target px))
+        if (idx < 0) {
+            dragField = ""
+            return true
+        }
+        def c:ComboboxCtl (this.ctlFor(target))
+        def inner:InputCtl (unwrap c.input)
+        inner.placeCaret(idx extend)
+        c.applyEdit(target inner.value (inner.selStart()) (inner.selEnd()))
+        dragField = target
+        this.rebuild()
+        return true
+    }
+
+    fn extendSelection:boolean (px:double) {
+        if (dragField == "") {
+            return false
+        }
+        def idx:int (this.indexAt(dragField px))
+        if (idx < 0) {
+            return false
+        }
+        def c:ComboboxCtl (this.ctlFor(dragField))
+        def inner:InputCtl (unwrap c.input)
+        if (idx == inner.caret) {
+            return false
+        }
+        inner.placeCaret(idx true)
+        this.rebuild()
+        return true
+    }
+
+    fn endSelection:boolean () {
+        dragField = ""
+        return false
+    }
+
+    fn selectWordAt:boolean (rawTarget:string px:double) {
+        def target:string (this.fieldOwning(rawTarget))
+        if ((this.isInput(target)) == false) {
+            return false
+        }
+        def idx:int (this.indexAt(target px))
+        if (idx < 0) {
+            return false
+        }
+        def c:ComboboxCtl (this.ctlFor(target))
+        def inner:InputCtl (unwrap c.input)
+        def at:int idx
+        if (at >= (strlen inner.value)) {
+            at = ((strlen inner.value) - 1)
+        }
+        inner.selectWordAt(at)
+        this.rebuild()
+        return true
+    }
+
+    ; The page x of a caret index, for a check that clicks at a stated place.
+    fn pageXOf:double (target:string index:int) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def box:EVGElement (AutocompleteDemo.byId(r target))
+        if (box.id != target) {
+            return 0.0
+        }
+        def c:ComboboxCtl (this.ctlFor(target))
+        def inner:InputCtl (unwrap c.input)
+        def inset:double (box.box.borderWidthPx + box.box.paddingLeftPx)
+        return ((((box.calculatedX) + inset) + (inner.caretXAt((this.engine()) index))) - inner.scrollX)
+    }
+
+    fn cursorAt:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def all:[ComboboxCtl] (this.ctls())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:ComboboxCtl (itemAt all i)
+            def box:EVGElement (AutocompleteDemo.byId(r (c.inputTid())))
+            if (box.id == (c.inputTid())) {
+                def x0:double (box.calculatedX)
+                def y0:double (box.calculatedY)
+                if ((px >= x0) && (px <= (x0 + (box.calculatedWidth)))) {
+                    if ((py >= y0) && (py <= (y0 + (box.calculatedHeight)))) {
+                        return "text"
+                    }
+                }
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    ; --- the platform text-input session ----------------------------------------
+
+    fn focusedField:string () {
+        if (this.isInput(focused)) {
+            return focused
+        }
+        return ""
+    }
+
+    fn fieldStateJson:string (tid:string) {
+        if ((this.isInput(tid)) == false) {
+            return "null"
+        }
+        def c:ComboboxCtl (this.ctlFor(tid))
+        def inner:InputCtl (unwrap c.input)
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def box:EVGElement (AutocompleteDemo.byId(r tid))
+        def out:string "{"
+        out = (out + "\"tid\":" + (EVGA11yTree.jsonString(tid)))
+        out = (out + ",\"value\":" + (EVGA11yTree.jsonString(inner.value)))
+        out = (out + ",\"selStart\":" + (to_string (inner.selStart())))
+        out = (out + ",\"selEnd\":" + (to_string (inner.selEnd())))
+        out = (out + ",\"kind\":" + (EVGA11yTree.jsonString(inner.kind)))
+        out = (out + ",\"maxLength\":" + (to_string inner.maxLength))
+        out = (out + ",\"placeholder\":" + (EVGA11yTree.jsonString(inner.placeholder)))
+        if (box.id == tid) {
+            out = (out + ",\"box\":{\"x\":" + (to_string (to_int (box.calculatedX))))
+            out = (out + ",\"y\":" + (to_string (to_int (box.calculatedY))))
+            out = (out + ",\"w\":" + (to_string (to_int (box.calculatedWidth))))
+            out = (out + ",\"h\":" + (to_string (to_int (box.calculatedHeight))) + "}")
+        }
+        return (out + "}")
+    }
+
+    fn applyEdit:boolean (tid:string v:string selStart:int selEnd:int) {
+        if ((this.isInput(tid)) == false) {
+            return false
+        }
+        def c:ComboboxCtl (this.ctlFor(tid))
+        def took:boolean (c.applyEdit(tid v selStart selEnd))
+        def inner:InputCtl (unwrap c.input)
+        inner.ensureCaretVisible((this.engine()))
+        this.afterEdit()
+        this.rebuild()
+        return took
+    }
+
+    fn setHover:void (id:string) {
+        hovered = id
+        def c:ComboboxCtl (this.ctlFor(id))
+        if ((strlen c.tid) > 0) {
+            c.hover(id)
+        }
+        this.rebuild()
+    }
+
+    fn setPressed:void (id:string) {
+        pressed = id
+    }
+
+    ; What the page names as a box's aria-activedescendant and
+    ; aria-autocomplete.
+    fn activeDescendant:string (tid:string) {
+        def c:ComboboxCtl (this.ctlFor(tid))
+        if (((strlen c.tid) > 0) && (tid == (c.inputTid()))) {
+            return (c.activeOptionTid())
+        }
+        return ""
+    }
+
+    fn ariaAutocomplete:string (tid:string) {
+        def c:ComboboxCtl (this.ctlFor(tid))
+        if (((strlen c.tid) == 0) || (tid != (c.inputTid()))) {
+            return ""
+        }
+        if c.inlineComplete {
+            return "both"
+        }
+        return "list"
+    }
+
+    ; --- what the page asks for -------------------------------------------------
+
+    fn displayListJson:string () {
+        def lay:EVGLayout (this.laidOut())
+        def r:EVGElement (unwrap root)
+        def dl (new EVGDisplayList())
+        dl.setTextEngine((lay.getTextEngine()))
+        dl.build(r)
+        return (dl.toJson())
+    }
+
+    fn hitId:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def hit (new EVGHitTest())
+        return (hit.idAt(r px py))
+    }
+
+    fn a11yJson:string (generation:int focusId:string) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Autocomplete demo" generation focusId))
+        return (t.toJson())
+    }
+
+    fn a11yProblems:[string] () {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Autocomplete demo" 1 ""))
+        return (t.lint())
+    }
+
+    fn styleErrorCount:int () {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (array_length s.errors)
+    }
+
+    fn styleErrorAt:string (i:int) {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (itemAt s.errors i)
+    }
+
+    fn widthPx:double () { return pageW }
+
+    fn heightPx:double () {
+        this.laidOut()
+        return pageH
+    }
+
+    fn summary:string () {
+        def out:string ""
+        def all:[ComboboxCtl] (this.ctls())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:ComboboxCtl (itemAt all i)
+            def inner:InputCtl (unwrap c.input)
+            if (i > 0) {
+                out = (out + "|")
+            }
+            out = (out + inner.value)
+            i = (i + 1)
+        }
+        return (out + "|" + focused)
+    }
+}

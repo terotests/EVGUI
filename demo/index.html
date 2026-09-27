@@ -716,6 +716,26 @@
               <strong>&uarr;</strong> / <strong>&darr;</strong> instead.
             </p>
           </section>
+          <section data-for="autocomplete">
+            <h2>what to try</h2>
+            <p class="hint">
+              Type <em>an</em> into <strong>Fruit</strong>: the list opens under
+              the box with the matching letters in bold. <strong>&darr;</strong> /
+              <strong>&uarr;</strong> or the pointer highlight a suggestion,
+              <strong>Enter</strong> or a click completes the text with it.
+              Enter with nothing highlighted keeps what you typed &mdash; the
+              text is the value.
+            </p>
+            <p class="hint">
+              <strong>Escape</strong> closes the list; a second Escape empties
+              the box. <strong>Tab</strong> leaves without taking anything.
+              Type <em>ty</em> into <strong>Language</strong>: the rest of
+              &ldquo;TypeScript&rdquo; is written in, selected &mdash; keep typing
+              over it, or Backspace it away. <strong>Movie</strong> answers
+              after 450&nbsp;ms (&ldquo;Searching&hellip;&rdquo;), and
+              <em>zz</em> anywhere shows &ldquo;No results found.&rdquo;
+            </p>
+          </section>
           <section data-for="metadata">
             <h2>what to try</h2>
             <p class="hint">
@@ -1282,6 +1302,12 @@
   "src": "SeparatorDemo",
   "caption": "SeparatorCtl · Radix Separator semantics, shadcn / ReUI's look",
   "desc": "ReUI's six Separator patterns, one card each: content sections, inline links, menu groups, list rows, a labelled rule and an order summary. SeparatorCtl gives each rule its role and aria-orientation, or takes a decorative one out of the accessible tree, following Radix's Separator; there is no interaction to measure, so the look is specified from shadcn's source, not measured."
+ },
+ "autocomplete": {
+  "title": "Autocomplete",
+  "src": "AutocompleteDemo",
+  "caption": "ComboboxCtl in autocomplete mode · after Base UI's Autocomplete, ReUI's look",
+  "desc": "ReUI's Autocomplete patterns, one card each: basic, grouped suggestions, a clear button, inline completion, an async search with a loading state, and a limit with a count of the rest. The text is the value and the suggestions only complete it. Every box is a ComboboxCtl — the controller measured against Base UI's Combobox — in its autocomplete mode, which follows Base UI's documented Autocomplete and the WAI-ARIA combobox pattern (aria-autocomplete list / both, aria-activedescendant) rather than a measurement of its own; the text is edited on the page's text session."
  },
  "tabs": {
   "title": "Tabs",
