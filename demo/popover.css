@@ -1,0 +1,364 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * Popover, as an EVG stylesheet: shadcn / ReUI's look — zinc greys, a white
+ * surface with a 1px #e4e4e7 border, 8px radius and `shadow-md`, 36px
+ * outline buttons.
+ *
+ * Every class here is one PopoverDemo.rgr writes (`pv-*`); PopoverCtl owns
+ * the behaviour and none of the look. Class-first, one token per selector,
+ * no descendant selectors: a variant is its own token on the same element.
+ */
+
+/* --- the page: one card per pattern ------------------------------------------- */
+
+.pv-page {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 24px;
+  width: 900px;
+  height: 470px;
+  background-color: #ffffff;
+}
+
+.pv-card {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  flex-grow: 1;
+  flex-basis: 0px;
+  min-width: 0px;
+  height: 422px;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  background-color: #ffffff;
+}
+
+.pv-card-dim { flex-grow: 4; }
+.pv-card-place { flex-grow: 3; }
+.pv-card-notif { flex-grow: 3; }
+
+.pv-caption {
+  height: 40px;
+  line-height: 40px;
+  padding: 0 16px;
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 500;
+  border-bottom: 1px solid #f4f4f5;
+}
+
+/* The trigger sits high in the preview, so the popover opens into the card. */
+.pv-stage {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  flex-grow: 1;
+  padding: 48px 16px 16px 16px;
+}
+.pv-stage-place { gap: 20px; }
+
+/* The trigger and its content: the content is an overlay, so the slot is as
+ * big as the trigger. */
+.pv-slot {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+}
+
+.pv-status {
+  color: #71717a;
+  font-size: 12px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.pv-line {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+}
+.pv-line-text { color: #09090b; font-size: 14px; font-weight: 500; height: 20px; line-height: 20px; }
+
+.pv-grid {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+.pv-grid-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+/* --- buttons ------------------------------------------------------------------ */
+
+.pv-btn {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background-color: #ffffff;
+  cursor: pointer;
+  transition: background-color 120ms ease-out, border-color 120ms ease-out;
+}
+
+.pv-btn-outline {
+  shadow-color: rgba(0, 0, 0, 0.05);
+  shadow-radius: 2px;
+  shadow-offset-y: 1px;
+}
+.pv-btn-outline:hover { background-color: #f4f4f5; }
+.pv-btn-outline:focus { border-color: #a1a1aa; }
+
+.pv-btn-side { width: 88px; padding: 0px; }
+
+/* Square, for an icon alone: `size="icon"`. */
+.pv-btn-icon {
+  position: relative;
+  width: 36px;
+  padding: 0px;
+}
+
+.pv-btn-text {
+  color: #09090b;
+  font-size: 14px;
+  font-weight: 500;
+  height: 20px;
+  line-height: 20px;
+  text-align: center;
+}
+
+.pv-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: #09090b;
+  stroke-width: 2;
+}
+
+/* The unread count on the bell, hanging off its top-right corner. */
+.pv-badge {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  border: 2px solid #ffffff;
+  background-color: #ef4444;
+}
+.pv-badge-text { color: #ffffff; font-size: 10px; font-weight: 600; height: 12px; line-height: 12px; text-align: center; }
+
+/* --- the popover ---------------------------------------------------------------- */
+
+/* shadcn's PopoverContent: `w-72 rounded-md border p-4 shadow-md`. */
+.pv-content {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 16px;
+  width: 288px;
+  padding: 16px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background-color: #ffffff;
+  shadow-color: rgba(0, 0, 0, 0.12);
+  shadow-radius: 12px;
+  shadow-offset-y: 4px;
+}
+
+/* The Dimensions example is `w-80`. */
+.pv-content-dim { width: 320px; }
+.pv-content-side { width: 240px; gap: 6px; padding: 12px 16px; }
+.pv-content-text { width: 256px; padding: 12px 16px; }
+.pv-content-flush { width: 320px; padding: 0px; gap: 0px; }
+
+.pv-header {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.pv-title {
+  color: #09090b;
+  font-size: 14px;
+  font-weight: 600;
+  height: 16px;
+  line-height: 16px;
+}
+.pv-mono { font-family: monospace; font-size: 13px; }
+
+.pv-desc {
+  color: #71717a;
+  font-size: 14px;
+  height: auto;
+  line-height: 20px;
+}
+
+.pv-para {
+  color: #52525b;
+  font-size: 13px;
+  height: auto;
+  line-height: 20px;
+}
+
+/* Four rows of `grid-cols-3 items-center gap-4`: a label, and the input over
+ * the other two columns. */
+.pv-rows {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.pv-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.pv-label { width: 85px; color: #09090b; font-size: 14px; font-weight: 500; height: 16px; line-height: 16px; }
+
+/* `h-8`. */
+.pv-box {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  position: relative;
+  flex-grow: 1;
+  flex-basis: 0px;
+  min-width: 0px;
+  overflow: hidden;
+  border-radius: 6px;
+  border: 1px solid #e4e4e7;
+  background-color: #ffffff;
+  padding: 0 12px;
+  height: 32px;
+  cursor: text;
+  transition: border-color 120ms ease-out;
+}
+.pv-box:hover { border-color: #d4d4d8; }
+.pv-box:focus {
+  border-color: #a1a1aa;
+  shadow-color: rgba(161, 161, 170, 0.45);
+  shadow-radius: 3px;
+}
+
+.pv-text { color: #09090b; font-family: Arial; font-size: 14px; height: 20px; line-height: 20px; }
+
+.pv-caret {
+  position: absolute;
+  top: 5px;
+  width: 1px;
+  height: 20px;
+  background-color: #09090b;
+}
+
+.pv-band {
+  position: absolute;
+  top: 5px;
+  height: 20px;
+  background-color: #bfdbfe;
+}
+
+/* --- notifications ------------------------------------------------------------- */
+
+.pv-nhead {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 12px 12px 16px;
+}
+
+.pv-link {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.pv-link:hover { background-color: #f4f4f5; }
+.pv-link:focus { background-color: #f4f4f5; }
+.pv-link-text { color: #52525b; font-size: 12px; font-weight: 500; height: 16px; line-height: 16px; }
+
+.pv-rule { height: 1px; background-color: #e4e4e7; }
+
+.pv-list {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  padding: 4px;
+}
+
+.pv-item {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.pv-item:hover { background-color: #f4f4f5; }
+.pv-item:focus { background-color: #f4f4f5; }
+
+.pv-dot {
+  width: 8px;
+  height: 8px;
+  margin: 6px 0 0 0;
+  border-radius: 4px;
+  background-color: #3b82f6;
+}
+.pv-dot-read { background-color: #ffffff; }
+
+.pv-item-body {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  flex-grow: 1;
+  flex-basis: 0px;
+  min-width: 0px;
+  gap: 2px;
+}
+.pv-item-text { color: #09090b; font-size: 14px; height: auto; line-height: 20px; }
+.pv-item-time { color: #71717a; font-size: 12px; height: 16px; line-height: 16px; }
+
+/* --- narrow -------------------------------------------------------------------- */
+
+@media (max-width: 600px) {
+  .pv-page { width: 100%; height: 100%; flex-direction: column; flex-wrap: nowrap; align-items: stretch; padding: 16px; gap: 12px; }
+  .pv-card { flex-grow: 0; flex-basis: auto; width: 100%; height: 200px; }
+  .pv-stage { padding: 32px 16px 16px 16px; }
+  .pv-card-place { flex-grow: 0; height: 240px; }
+  .pv-card-dim { flex-grow: 0; }
+  .pv-card-notif { flex-grow: 0; }
+}

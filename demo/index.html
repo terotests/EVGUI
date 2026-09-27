@@ -991,6 +991,30 @@
               AlertDialog. Continue deletes nothing.
             </p>
           </section>
+          <section data-for="popover">
+            <h2>what to try</h2>
+            <p class="hint">
+              <strong>Open popover</strong> opens shadcn&rsquo;s Dimensions panel
+              under its button with the focus in <em>Width</em>. The four fields
+              are real (the browser does the editing), and the line under the
+              button follows what you type.
+            </p>
+            <p class="hint">
+              A popover is <strong>not modal</strong>: nothing behind it is dimmed
+              or locked. <strong>Tab</strong> goes from the trigger through the
+              popover&rsquo;s fields and on out of it, and focus leaving it closes
+              it. <strong>Escape</strong>, the trigger again, or a click anywhere
+              outside closes it and gives the focus back to the trigger.
+            </p>
+            <p class="hint">
+              The <strong>bell</strong> opens a notifications list: press one to
+              mark it read, or <strong>Mark all as read</strong>; the badge counts
+              down. Under <strong>Placement</strong>, the &#9432; button opens a
+              short text popover and Top / Right / Bottom / Left open on that
+              side. Narrow the window: a popover that would leave the demo flips
+              to the other side or slides back in.
+            </p>
+          </section>
           <section data-for="message">
             <h2>what to try</h2>
             <p class="hint">
@@ -1087,6 +1111,16 @@
             and <code>@radix-ui/react-alert-dialog</code>. The page adds the trapped
             Tab ring and the clipboard write; the look is shadcn&rsquo;s, read from
             its source.
+          </p>
+          <p class="note" data-for="popover">
+            <strong>The behaviour is the controller&rsquo;s.</strong> Open and
+            closed, the focus into the content on open, Escape and the focus back
+            to the trigger are <code>PopoverCtl</code>&rsquo;s (<code>src/</code>),
+            which the conformance specs measure against
+            <code>@radix-ui/react-popover</code>. The page adds the non-modal Tab
+            walk and the outside press; where each popover sits (side, align, the
+            4px offset, the flip and the shift) is EVG&rsquo;s overlay layout. The
+            look is shadcn&rsquo;s, read from its source.
           </p>
           <p class="note" data-for="motion">
             <strong>Hover the cards at the bottom.</strong> Nothing in
@@ -1276,6 +1310,12 @@
   "src": "MotionDemo",
   "caption": "Transitions from motion.css · checked against a browser by EVGTimingTest",
   "desc": "What the CSS engine does with time: seven timing functions racing under the curves that move them, staggered delays, transform origins and cards that answer the pointer — every one a rule in motion.css."
+ },
+ "popover": {
+  "title": "Popover",
+  "src": "PopoverDemo",
+  "caption": "PopoverCtl · measured against @radix-ui/react-popover",
+  "desc": "shadcn's Dimensions popover with four real fields, a notifications list behind a bell, and a text popover with top, right, bottom and left placements. Open/closed, the focus into the content and back, and Escape are PopoverCtl's, which the conformance specs measure against Radix Popover; the page adds the non-modal Tab walk and outside-press dismissal, and EVG's overlay pass anchors each popover 4px from its trigger and flips or shifts it to stay inside the demo."
  },
  "separator": {
   "title": "Separator",

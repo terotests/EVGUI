@@ -27,6 +27,22 @@ class PopoverCtl extends UiCtl {
     def bodyText:string ""
     def innerLabel:string "Inner"
     def closeLabel:string "Close"
+    ; --- additions for hosts that draw their own content (PopoverDemo) -------
+    ; `Popover.Content`'s `side` and `align`. The defaults are what this file
+    ; always drew, so the conformance host is unchanged; shadcn's own default
+    ; is align "center", which a host sets.
+    def side:string "bottom"
+    def align:string "start"
+    ; An optional heading and description. Radix Popover has neither part, so
+    ; a host that shows a title labels the dialog with it itself
+    ; (`aria-labelledby`); empty publishes nothing, as before.
+    def title:string ""
+    def description:string ""
+    ; Where the focus lands on open. Radix moves it to the first tabbable
+    ; node in the content, or to the content itself when there is none. The
+    ; built-in content's first is the inner button, the default here; a host
+    ; drawing its own content names its first field, or the content id.
+    def initialFocus:string ""
     def triggerEl:EVGElement
     def contentEl:EVGElement
     def bodyEl:EVGElement
@@ -93,7 +109,7 @@ class PopoverCtl extends UiCtl {
         def content:EVGElement (unwrap contentEl)
         content.id = (this.contentTid())
         content.className = "ui-popover-content"
-        UiTree.surface(content "bottom" "start")
+        UiTree.surface(content side align)
         UiTree.setState(content "ui-popover-content" word)
         UiTree.clearChildren(content)
 
@@ -120,6 +136,9 @@ class PopoverCtl extends UiCtl {
     fn openAndFocus:string () {
         open = true
         this.build()
+        if ((strlen initialFocus) > 0) {
+            return initialFocus
+        }
         return (this.innerTid())
     }
 
@@ -127,6 +146,19 @@ class PopoverCtl extends UiCtl {
         open = false
         this.build()
         return (this.triggerTid())
+    }
+
+    ; Dismissal from outside: a pointer down outside the content (and not on
+    ; its trigger), or the focus moving out of it. Radix's non-modal content
+    ; dismisses on both (`DismissableLayer` onPointerDownOutside /
+    ; onFocusOutside). Returns the trigger's id; whether the host moves the
+    ; focus there is the host's call, since a focus that left already went
+    ; somewhere.
+    fn dismiss:string () {
+        if (open == false) {
+            return ""
+        }
+        return (this.closeAndRestore())
     }
 
     fn activate:string (target:string) {
@@ -218,7 +250,7 @@ class PopoverCtl extends UiCtl {
         ; Radix gives the surface role dialog but does NOT make it a tab stop:
         ; it is focused programmatically on open and then left out of the tab
         ; ring, so Tab moves between the things inside it.
-        def contentRow:UiRow (UiRow.of((this.contentTid()) (EVGA11yRole.dialog()) ""))
+        def contentRow:UiRow (UiRow.of((this.contentTid()) (EVGA11yRole.dialog()) title))
         contentRow.state = word
         push out contentRow
 

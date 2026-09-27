@@ -79,6 +79,7 @@ const DEMOS = [
   ["MessageDemo", "message.css"],
   ["MotionDemo", "motion.css"],
   ["OtpDemo", "otp.css"],
+  ["PopoverDemo", "popover.css"],
   ["ProfileDemo", "profile.css"],
   ["ResizeDemo", "resize.css"],
   ["SeparatorDemo", "separator.css"],

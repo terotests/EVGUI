@@ -1,0 +1,1183 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; PopoverDemo — shadcn / ReUI's Popover patterns, one card each
+; =============================================================================
+; Three cards, after https://ui.shadcn.com/docs/components/popover and
+; https://reui.io/components/popover:
+;
+;   Dimensions      shadcn's default: an outline "Open popover" trigger, a
+;                   title, a muted line and four label + input rows (Width,
+;                   Max. width, Height, Max. height) — real fields
+;   Notifications   a bell with an unread badge; the popover lists three
+;                   notifications, each marks itself read when pressed, and
+;                   "Mark all as read" clears them
+;   Placement       an (i) button with a short text popover, and four buttons
+;                   that open on the top, right, bottom and left
+;
+; THE BEHAVIOUR IS THE CONTROLLER'S. Every popover is a `PopoverCtl`, measured
+; against @radix-ui/react-popover by the conformance specs: whether it is
+; open, where the focus goes when it opens (the first tabbable node inside,
+; or the content itself when there is none), what Escape does and where the
+; focus goes back to. This file draws shadcn's tree from the controller's ids
+; and reads `open` — the split the dialog demo makes with DialogCtl.
+;
+; A popover is NOT modal. Nothing behind it is hidden or inert, and there is
+; no trap: Tab walks from the trigger into the content and on out of it, and
+; a focus that leaves the content (to anything but its own trigger) closes it,
+; as Radix's non-modal content does. A press outside closes it too.
+;
+; WHERE IT GOES is the layout engine's: the content is an overlay surface
+; anchored to its trigger (`UiTree.anchor` / `UiTree.surface`), 4px away
+; (Radix's `sideOffset`), and the overlay pass flips it to the other side and
+; shifts it along when it would leave the demo's page.
+; =============================================================================
+
+Import "../src/PopoverCtl.rgr"
+Import "../src/InputCtl.rgr"
+Import "../src/UiCtl.rgr"
+Import "../src/UiTree.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGUnit.rgr"
+Import "pkg:evg/EVGLayout.rgr"
+Import "pkg:evg/EVGDisplayList.rgr"
+Import "pkg:evg/EVGStyleSheet.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+Import "pkg:evg/EVGA11yFromTree.rgr"
+Import "pkg:evg/EVGHitTest.rgr"
+Import "pkg:evg/EVGTextEngine.rgr"
+
+treefactory Pv {
+    child addChild
+    text  textContent
+
+    tag Page     EVGElement (props (className "pv-page"))
+    tag Card     EVGElement (props (className "pv-card"))
+    tag Caption  EVGElement (props (className "pv-caption") (elementType 1))
+    tag Stage    EVGElement (props (className "pv-stage"))
+    tag Slot     EVGElement (props (className "pv-slot"))
+    tag Grid     EVGElement (props (className "pv-grid"))
+    tag GridRow  EVGElement (props (className "pv-grid-row"))
+    tag Line     EVGElement (props (className "pv-line"))
+    tag LineTx   EVGElement (props (className "pv-line-text") (elementType 1))
+    tag Trigger  EVGElement (props (className "pv-btn pv-btn-outline") (role "button") (a11yFocusable true) (a11yHasPopup "dialog"))
+    tag BtnTx    EVGElement (props (className "pv-btn-text") (elementType 1))
+    tag Status   EVGElement (props (className "pv-status") (elementType 1) (role "status"))
+    tag Icon     EVGElement (props (className "pv-icon") (tagName "path") (elementType 3) (viewBox "0 0 24 24") (a11yHidden true))
+    tag Badge    EVGElement (props (className "pv-badge") (a11yHidden true))
+    tag BadgeTx  EVGElement (props (className "pv-badge-text") (elementType 1))
+
+    ; --- the popover ---
+    tag Content  EVGElement (props (className "pv-content") (role "dialog"))
+    tag Header   EVGElement (props (className "pv-header"))
+    tag Title    EVGElement (props (className "pv-title") (elementType 1) (role "heading") (a11yLevel 4))
+    tag Desc     EVGElement (props (className "pv-desc") (elementType 1) (role "text"))
+    tag Para     EVGElement (props (className "pv-para") (elementType 1))
+    tag Rows     EVGElement (props (className "pv-rows"))
+    tag Row      EVGElement (props (className "pv-row"))
+    tag Label    EVGElement (props (className "pv-label") (elementType 1) (a11yHidden true))
+    tag Box      EVGElement (props (className "pv-box") (role "textbox"))
+    tag Text     EVGElement (props (className "pv-text") (elementType 1))
+    tag Caret    EVGElement (props (className "pv-caret") (a11yHidden true))
+    tag Band     EVGElement (props (className "pv-band") (a11yHidden true))
+
+    ; --- notifications ---
+    tag NHead    EVGElement (props (className "pv-nhead"))
+    tag Link     EVGElement (props (className "pv-link") (role "button") (a11yFocusable true))
+    tag LinkTx   EVGElement (props (className "pv-link-text") (elementType 1))
+    tag Rule     EVGElement (props (className "pv-rule") (a11yHidden true))
+    tag List     EVGElement (props (className "pv-list"))
+    tag Item     EVGElement (props (className "pv-item") (role "button") (a11yFocusable true))
+    tag Dot      EVGElement (props (className "pv-dot") (a11yHidden true))
+    tag ItemBody EVGElement (props (className "pv-item-body"))
+    tag ItemTx   EVGElement (props (className "pv-item-text") (elementType 1))
+    tag ItemTime EVGElement (props (className "pv-item-time") (elementType 1))
+}
+
+class PopoverDemo {
+
+    def dim:PopoverCtl (new PopoverCtl())
+    def notif:PopoverCtl (new PopoverCtl())
+    def info:PopoverCtl (new PopoverCtl())
+    def top:PopoverCtl (new PopoverCtl())
+    def right:PopoverCtl (new PopoverCtl())
+    def bottom:PopoverCtl (new PopoverCtl())
+    def left:PopoverCtl (new PopoverCtl())
+
+    def width:InputCtl (new InputCtl())
+    def maxWidth:InputCtl (new InputCtl())
+    def height:InputCtl (new InputCtl())
+    def maxHeight:InputCtl (new InputCtl())
+
+    ; The three notifications and whether each has been read.
+    def nWho:[string]
+    def nWhat:[string]
+    def nWhen:[string]
+    def nRead:[boolean]
+
+    def root@(optional):EVGElement
+    def sheet@(optional):EVGStyleSheet
+    def layout@(optional):EVGLayout
+    def measurer:EVGLayout (new EVGLayout())
+
+    def hovered:string ""
+    def pressed:string ""
+    def focused:string ""
+    def dragField:string ""
+
+    def pageW:double 900.0
+    def pageH:double 470.0
+    ; The text run inside a box: 187 wide less 2x12 padding and 2x1 border.
+    def boxTextW:double 160.0
+    def boxFont:string "Arial"
+    def boxFontSize:double 14.0
+
+    Constructor () {
+    }
+
+    fn dress:void (c:InputCtl tid:string label:string value:string) {
+        c.tid = tid
+        c.name = label
+        c.fontFamily = boxFont
+        c.fontSize = boxFontSize
+        c.boxWidth = boxTextW
+        c.value = value
+        c.caret = (strlen value)
+        c.anchor = (strlen value)
+    }
+
+    fn sidePop:void (p:PopoverCtl word:string label:string) {
+        p.tid = ("pv-" + word)
+        p.name = label
+        p.side = word
+        p.align = "center"
+        p.title = ("side=\"" + word + "\"")
+        p.initialFocus = (p.contentTid())
+    }
+
+    fn init:void (css:string) {
+        def s (new EVGStyleSheet())
+        s.parse(css)
+        sheet = s
+
+        dim.tid = "pv-dim"
+        dim.name = "Open popover"
+        dim.align = "center"
+        dim.title = "Dimensions"
+        dim.description = "Set the dimensions for the layer."
+        dim.initialFocus = "pv-width"
+
+        notif.tid = "pv-notif"
+        notif.name = "Notifications"
+        notif.align = "end"
+        notif.title = "Notifications"
+        notif.initialFocus = "pv-notif-markall"
+
+        info.tid = "pv-info"
+        info.name = "About popovers"
+        info.align = "center"
+        info.title = "About popovers"
+        info.initialFocus = (info.contentTid())
+
+        this.sidePop(top "top" "Top")
+        this.sidePop(right "right" "Right")
+        this.sidePop(bottom "bottom" "Bottom")
+        this.sidePop(left "left" "Left")
+
+        this.dress(width "pv-width" "Width" "100%")
+        this.dress(maxWidth "pv-maxwidth" "Max. width" "300px")
+        this.dress(height "pv-height" "Height" "25px")
+        this.dress(maxHeight "pv-maxheight" "Max. height" "none")
+
+        push nWho "Chris Tompson"
+        push nWhat "requested a review on PR #42"
+        push nWhen "15 minutes ago"
+        push nRead false
+        push nWho "Emma Davis"
+        push nWhat "shared New component library"
+        push nWhen "45 minutes ago"
+        push nRead false
+        push nWho "James Wilson"
+        push nWhat "assigned you to API integration"
+        push nWhen "4 hours ago"
+        push nRead true
+        this.rebuild()
+    }
+
+    ; --- lookups ----------------------------------------------------------------
+
+    fn engine:EVGTextEngine () {
+        return (measurer.getTextEngine())
+    }
+
+    fn pops:[PopoverCtl] () {
+        def a:[PopoverCtl]
+        push a dim
+        push a notif
+        push a info
+        push a top
+        push a right
+        push a bottom
+        push a left
+        return a
+    }
+
+    ; The open popover's tid ("pv-dim", "pv-top", …) or "".
+    fn openWhich:string () {
+        def all:[PopoverCtl] (this.pops())
+        def i:int 0
+        while (i < (array_length all)) {
+            def p:PopoverCtl (itemAt all i)
+            if p.open {
+                return p.tid
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    fn popFor:PopoverCtl (tid:string) {
+        def all:[PopoverCtl] (this.pops())
+        def i:int 0
+        while (i < (array_length all)) {
+            def p:PopoverCtl (itemAt all i)
+            if (p.tid == tid) {
+                return p
+            }
+            i = (i + 1)
+        }
+        return (new PopoverCtl())
+    }
+
+    ; The popover whose trigger this is, or an empty controller.
+    fn popOfTrigger:PopoverCtl (target:string) {
+        def all:[PopoverCtl] (this.pops())
+        def i:int 0
+        while (i < (array_length all)) {
+            def p:PopoverCtl (itemAt all i)
+            if ((p.triggerTid()) == target) {
+                return p
+            }
+            i = (i + 1)
+        }
+        return (new PopoverCtl())
+    }
+
+    fn isTrigger:boolean (target:string) {
+        def p:PopoverCtl (this.popOfTrigger(target))
+        return ((strlen p.tid) > 0)
+    }
+
+    fn unread:int () {
+        def n:int 0
+        def i:int 0
+        while (i < (array_length nRead)) {
+            if ((itemAt nRead i) == false) {
+                n = (n + 1)
+            }
+            i = (i + 1)
+        }
+        return n
+    }
+
+    ; Only the open popover's fields: a field that is not drawn has no box.
+    fn inputs:[InputCtl] () {
+        def a:[InputCtl]
+        if dim.open {
+            push a width
+            push a maxWidth
+            push a height
+            push a maxHeight
+        }
+        return a
+    }
+
+    fn inputFor:InputCtl (tid:string) {
+        def all:[InputCtl] (this.inputs())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:InputCtl (itemAt all i)
+            if (c.tid == tid) {
+                return c
+            }
+            i = (i + 1)
+        }
+        return (new InputCtl())
+    }
+
+    fn hasInput:boolean (tid:string) {
+        if ((strlen tid) == 0) {
+            return false
+        }
+        def c:InputCtl (this.inputFor(tid))
+        return (c.tid == tid)
+    }
+
+    sfn byId:EVGElement (el:EVGElement tid:string) {
+        if (el.id == tid) {
+            return el
+        }
+        def i:int 0
+        while (i < (el.getChildCount())) {
+            def kid:EVGElement (PopoverDemo.byId((el.getChild(i)) tid))
+            if (kid.id == tid) {
+                return kid
+            }
+            i = (i + 1)
+        }
+        return el
+    }
+
+    ; The tab stops inside the open popover, in order. A popover with nothing
+    ; to tab to (the text ones) has none: its content takes the focus on open
+    ; and is not a stop, as Radix's content is not.
+    fn innerStops:[string] (p:PopoverCtl) {
+        def r:[string]
+        if (p.tid == dim.tid) {
+            push r "pv-width"
+            push r "pv-maxwidth"
+            push r "pv-height"
+            push r "pv-maxheight"
+        }
+        if (p.tid == notif.tid) {
+            push r "pv-notif-markall"
+            def i:int 0
+            while (i < (array_length nRead)) {
+                push r ("pv-notif-item-" + (to_string i))
+                i = (i + 1)
+            }
+        }
+        return r
+    }
+
+    ; Is this id the open popover's content or anything inside it?
+    fn inContent:boolean (target:string) {
+        def w:string (this.openWhich())
+        if (((strlen w) == 0) || ((strlen target) == 0)) {
+            return false
+        }
+        def p:PopoverCtl (this.popFor(w))
+        def r:EVGElement (unwrap root)
+        def c:EVGElement (PopoverDemo.byId(r (p.contentTid())))
+        if (c.id != (p.contentTid())) {
+            return false
+        }
+        def hit:EVGElement (PopoverDemo.byId(c target))
+        return (hit.id == target)
+    }
+
+    ; --- the pieces -------------------------------------------------------------
+
+    fn trigger:EVGElement (p:PopoverCtl label:string cls:string) {
+        def el (tree Pv
+            (Trigger (props (id (p.triggerTid())) (a11yLabel label))
+                (BtnTx label)))
+        el.className = cls
+        this.markExpanded(el p)
+        return el
+    }
+
+    fn markExpanded:void (el:EVGElement p:PopoverCtl) {
+        if p.open {
+            el.a11yExpanded = (EVGA11yTri.yes())
+            el.a11yControls = (p.contentTid())
+        } {
+            el.a11yExpanded = (EVGA11yTri.no())
+        }
+        UiTree.anchor(el)
+    }
+
+    fn iconTrigger:EVGElement (p:PopoverCtl label:string path:string) {
+        def el (tree Pv
+            (Trigger (props (id (p.triggerTid())) (a11yLabel label) (className "pv-btn pv-btn-outline pv-btn-icon"))
+                (Icon (props (svgPath path)))))
+        this.markExpanded(el p)
+        return el
+    }
+
+    ; The trigger and, while it is open, its content — siblings, which is how
+    ; the overlay pass finds the anchor.
+    fn slot:EVGElement (trig:EVGElement p:PopoverCtl) {
+        def s (tree Pv (Slot (child trig)))
+        if p.open {
+            s.addChild((this.contentOf(p)))
+        }
+        return s
+    }
+
+    fn contentEl:EVGElement (p:PopoverCtl cls:string) {
+        def c (tree Pv (Content (props (id (p.contentTid())))))
+        c.className = cls
+        c.a11yLabel = p.title
+        UiTree.surface(c p.side p.align)
+        if (p.initialFocus == (p.contentTid())) {
+            c.a11yFocusable = true
+        }
+        return c
+    }
+
+    fn contentOf:EVGElement (p:PopoverCtl) {
+        if (p.tid == dim.tid) {
+            return (this.dimContent())
+        }
+        if (p.tid == notif.tid) {
+            return (this.notifContent())
+        }
+        if (p.tid == info.tid) {
+            def c:EVGElement (this.contentEl(p "pv-content pv-content-text"))
+            c.a11yDescribedBy = "pv-info-text"
+            c.addChild((tree Pv (Para (props (id "pv-info-text"))
+                "A popover is a non-modal dialog pinned to the button that opened it. Press Escape, or anywhere outside it, to close it.")))
+            return c
+        }
+        def c2:EVGElement (this.contentEl(p "pv-content pv-content-side"))
+        def titleTid:string (p.tid + "-title")
+        def descTid:string (p.tid + "-text")
+        c2.a11yLabelledBy = titleTid
+        c2.a11yDescribedBy = descTid
+        c2.addChild((tree Pv (Title (props (id titleTid) (className "pv-title pv-mono")) p.title)))
+        c2.addChild((tree Pv (Para (props (id descTid))
+            ("Opens " + (this.sideWords(p.side)) + ", 4px from its trigger, and flips or slides to stay inside the demo."))))
+        return c2
+    }
+
+    fn sideWords:string (s:string) {
+        if (s == "top") {
+            return "above"
+        }
+        if (s == "bottom") {
+            return "below"
+        }
+        if (s == "left") {
+            return "to the left"
+        }
+        return "to the right"
+    }
+
+    fn header:EVGElement (p:PopoverCtl) {
+        def h (tree Pv (Header (Title (props (id (p.tid + "-title"))) p.title)))
+        if ((strlen p.description) > 0) {
+            h.addChild((tree Pv (Desc (props (id (p.tid + "-description"))) p.description)))
+        }
+        return h
+    }
+
+    ; One text box: the band under the glyphs, the text, and a caret while it
+    ; has the focus.
+    fn boxFor:EVGElement (c:InputCtl) {
+        def box (tree Pv (Box (props (id c.tid) (a11yLabel c.name))))
+        box.a11yValue = c.value
+        box.a11yFocusable = true
+        def eng:EVGTextEngine (this.engine())
+        if ((focused == c.tid) && (c.hasSelection())) {
+            def s:double (c.caretXAt(eng (c.selStart())))
+            def e:double (c.caretXAt(eng (c.selEnd())))
+            def band (tree Pv (Band))
+            band.left = (EVGUnit.px((s - c.scrollX)))
+            band.width = (EVGUnit.px((e - s)))
+            box.addChild(band)
+        }
+        box.addChild((tree Pv (Text (props (id (c.tid + "-text"))) (c.glyphText()))))
+        if (focused == c.tid) {
+            def cx:double (c.caretXAt(eng c.caret))
+            def car (tree Pv (Caret))
+            car.left = (EVGUnit.px((cx - c.scrollX)))
+            box.addChild(car)
+        }
+        return box
+    }
+
+    fn rowFor:EVGElement (c:InputCtl) {
+        def r (tree Pv (Row (Label c.name)))
+        r.addChild((this.boxFor(c)))
+        return r
+    }
+
+    fn dimContent:EVGElement () {
+        def p:PopoverCtl dim
+        def c:EVGElement (this.contentEl(p "pv-content pv-content-dim"))
+        c.a11yLabelledBy = (p.tid + "-title")
+        c.a11yDescribedBy = (p.tid + "-description")
+        c.addChild((this.header(p)))
+        def rows (tree Pv (Rows))
+        rows.addChild((this.rowFor(width)))
+        rows.addChild((this.rowFor(maxWidth)))
+        rows.addChild((this.rowFor(height)))
+        rows.addChild((this.rowFor(maxHeight)))
+        c.addChild(rows)
+        return c
+    }
+
+    fn notifContent:EVGElement () {
+        def p:PopoverCtl notif
+        def c:EVGElement (this.contentEl(p "pv-content pv-content-flush"))
+        c.a11yLabelledBy = (p.tid + "-title")
+        def head (tree Pv (NHead (Title (props (id (p.tid + "-title"))) p.title)))
+        def mark (tree Pv
+            (Link (props (id "pv-notif-markall") (a11yLabel "Mark all as read"))
+                (LinkTx "Mark all as read")))
+        head.addChild(mark)
+        c.addChild(head)
+        c.addChild((tree Pv (Rule)))
+        def list (tree Pv (List (props (id "pv-notif-list"))))
+        def i:int 0
+        while (i < (array_length nRead)) {
+            def read:boolean (itemAt nRead i)
+            def who:string (itemAt nWho i)
+            def what:string (itemAt nWhat i)
+            def when:string (itemAt nWhen i)
+            def tid:string ("pv-notif-item-" + (to_string i))
+            def label:string (who + " " + what + ", " + when)
+            if (read == false) {
+                label = (label + ", unread")
+            }
+            def it (tree Pv (Item (props (id tid) (a11yLabel label))))
+            def dot (tree Pv (Dot))
+            if read {
+                dot.className = "pv-dot pv-dot-read"
+            }
+            it.addChild(dot)
+            def body (tree Pv (ItemBody
+                (ItemTx (props (id (tid + "-text"))) (who + " " + what))
+                (ItemTime (props (id (tid + "-time"))) when)))
+            it.addChild(body)
+            list.addChild(it)
+            i = (i + 1)
+        }
+        c.addChild(list)
+        return c
+    }
+
+    fn card:EVGElement (key:string caption:string) {
+        return (tree Pv
+            (Card (props (id ("pv-card-" + key)) (className ("pv-card pv-card-" + key)))
+                (Caption caption)))
+    }
+
+    fn dimStatus:string () {
+        return ("Layer: " + width.value + " × " + height.value + " (max " + maxWidth.value + " × " + maxHeight.value + ")")
+    }
+
+    fn pageBody:EVGElement () {
+        def pg (tree Pv (Page (props (id "pv-page"))))
+
+        def c1:EVGElement (this.card("dim" "Default"))
+        def st1 (tree Pv (Stage))
+        st1.addChild((this.slot((this.trigger(dim "Open popover" "pv-btn pv-btn-outline")) dim)))
+        st1.addChild((tree Pv (Status (props (id "pv-status-dim")) (this.dimStatus()))))
+        c1.addChild(st1)
+        pg.addChild(c1)
+
+        def c3:EVGElement (this.card("place" "Placement"))
+        def st3 (tree Pv (Stage (props (className "pv-stage pv-stage-place"))))
+        def line (tree Pv (Line (LineTx "What is a popover?")))
+        line.addChild((this.slot((this.iconTrigger(info "About popovers" "M12 16 L12 11 M12 7.5 L12 8 M2 12 A10 10 0 1 0 22 12 A10 10 0 1 0 2 12")) info)))
+        st3.addChild(line)
+        def grid (tree Pv (Grid))
+        def r1 (tree Pv (GridRow))
+        r1.addChild((this.slot((this.trigger(top "Top" "pv-btn pv-btn-outline pv-btn-side")) top)))
+        r1.addChild((this.slot((this.trigger(bottom "Bottom" "pv-btn pv-btn-outline pv-btn-side")) bottom)))
+        grid.addChild(r1)
+        def r2 (tree Pv (GridRow))
+        r2.addChild((this.slot((this.trigger(left "Left" "pv-btn pv-btn-outline pv-btn-side")) left)))
+        r2.addChild((this.slot((this.trigger(right "Right" "pv-btn pv-btn-outline pv-btn-side")) right)))
+        grid.addChild(r2)
+        st3.addChild(grid)
+        c3.addChild(st3)
+        pg.addChild(c3)
+        def c2:EVGElement (this.card("notif" "Notifications"))
+        def st2 (tree Pv (Stage))
+        def n:int (this.unread())
+        def bellLabel:string "Notifications"
+        if (n > 0) {
+            bellLabel = ("Notifications, " + (to_string n) + " unread")
+        }
+        def bell:EVGElement (this.iconTrigger(notif bellLabel "M6 8 A6 6 0 0 1 18 8 C18 15 21 17 21 17 L3 17 C3 17 6 15 6 8 M10.3 21 A1.94 1.94 0 0 0 13.7 21"))
+        if (n > 0) {
+            def nTx:string (to_string n)
+            bell.addChild((tree Pv (Badge (BadgeTx nTx))))
+        }
+        st2.addChild((this.slot(bell notif)))
+        def said:string "All caught up."
+        if (n > 0) {
+            said = ((to_string n) + " unread")
+        }
+        st2.addChild((tree Pv (Status (props (id "pv-status-notif")) said)))
+        c2.addChild(st2)
+        pg.addChild(c2)
+
+        return pg
+    }
+
+    fn rebuild:void () {
+        root = (this.pageBody())
+    }
+
+    ; --- layout -----------------------------------------------------------------
+
+    fn markStates:void (el:EVGElement) {
+        el.isHovered = ((strlen hovered) > 0) && (el.id == hovered)
+        el.isFocused = ((strlen focused) > 0) && (el.id == focused)
+        el.isPressed = ((strlen pressed) > 0) && (el.id == pressed)
+        def i:int 0
+        while (i < (el.getChildCount())) {
+            this.markStates((el.getChild(i)))
+            i = (i + 1)
+        }
+    }
+
+    fn laidOut:EVGLayout () {
+        def r:EVGElement (unwrap root)
+        def s:EVGStyleSheet (unwrap sheet)
+        this.markStates(r)
+        s.setViewport(pageW pageH false)
+        s.applyTree(r "")
+        def lay (new EVGLayout())
+        lay.setPageSize(pageW pageH)
+        lay.layout(r)
+        layout = lay
+        return lay
+    }
+
+    ; --- opening and closing ------------------------------------------------------
+
+    fn openPop:boolean (p:PopoverCtl) {
+        def next:string (p.activate((p.triggerTid())))
+        if ((strlen next) == 0) {
+            return false
+        }
+        if (p.tid == dim.tid) {
+            def c:InputCtl width
+            c.caret = (strlen c.value)
+            c.anchor = 0
+        }
+        focused = next
+        dragField = ""
+        this.rebuild()
+        return true
+    }
+
+    ; Close whichever is open. `restore`: the focus goes back to its trigger
+    ; (Escape, a press outside); otherwise it stays wherever it went.
+    fn closeOpen:void (restore:boolean) {
+        def w:string (this.openWhich())
+        if ((strlen w) == 0) {
+            return
+        }
+        def p:PopoverCtl (this.popFor(w))
+        def back:string (p.dismiss())
+        if restore {
+            focused = back
+        }
+        dragField = ""
+        this.rebuild()
+    }
+
+    fn markRead:void (i:int) {
+        def out:[boolean]
+        def j:int 0
+        while (j < (array_length nRead)) {
+            if ((j == i) || (i < 0)) {
+                push out true
+            } {
+                push out (itemAt nRead j)
+            }
+            j = (j + 1)
+        }
+        nRead = out
+    }
+
+    fn itemIndex:int (target:string) {
+        def i:int 0
+        while (i < (array_length nRead)) {
+            def tid:string ("pv-notif-item-" + (to_string i))
+            if ((target == tid) || (target == (tid + "-text")) || (target == (tid + "-time"))) {
+                return i
+            }
+            i = (i + 1)
+        }
+        return -1
+    }
+
+    ; --- the Tab ring ---------------------------------------------------------------
+
+    ; Every trigger, with the open popover's stops right after its own: the
+    ; content reads as if it followed its trigger, which is where a reader
+    ; expects it.
+    fn ring:[string] () {
+        def r:[string]
+        def order:[PopoverCtl]
+        push order dim
+        push order info
+        push order top
+        push order bottom
+        push order left
+        push order right
+        push order notif
+        def i:int 0
+        while (i < (array_length order)) {
+            def p:PopoverCtl (itemAt order i)
+            push r (p.triggerTid())
+            if p.open {
+                def inner:[string] (this.innerStops(p))
+                def j:int 0
+                while (j < (array_length inner)) {
+                    push r (itemAt inner j)
+                    j = (j + 1)
+                }
+            }
+            i = (i + 1)
+        }
+        return r
+    }
+
+    fn indexIn:int (r:[string] id:string) {
+        def i:int 0
+        while (i < (array_length r)) {
+            if ((itemAt r i) == id) {
+                return i
+            }
+            i = (i + 1)
+        }
+        return -1
+    }
+
+    ; Not trapped: past either end the Tab is the page's. A focus that lands
+    ; outside the open popover (and not on its trigger) closes it — Radix's
+    ; non-modal content dismisses on focus outside.
+    fn tab:boolean (back:boolean) {
+        def r:[string] (this.ring())
+        def n:int (array_length r)
+        def at:int (this.indexIn(r focused))
+        def next:int (at + 1)
+        if back {
+            next = (at - 1)
+        }
+        if (at < 0) {
+            ; The content itself has the focus (a text popover): it sits
+            ; right after its trigger.
+            def w:string (this.openWhich())
+            def p:PopoverCtl (this.popFor(w))
+            if (((strlen w) > 0) && (focused == (p.contentTid()))) {
+                def ti:int (this.indexIn(r (p.triggerTid())))
+                next = (ti + 1)
+                if back {
+                    next = ti
+                }
+            } {
+                next = 0
+                if back {
+                    next = (n - 1)
+                }
+            }
+        }
+        if ((next < 0) || (next >= n)) {
+            focused = ""
+            this.closeOpen(false)
+            this.rebuild()
+            return false
+        }
+        this.moveFocus((itemAt r next))
+        return true
+    }
+
+    ; Focus to `id`; the open popover closes if the focus left it. A field
+    ; reached this way has its text selected, as a Tab into an <input> does.
+    fn moveFocus:void (id:string) {
+        def w:string (this.openWhich())
+        if ((strlen w) > 0) {
+            def p:PopoverCtl (this.popFor(w))
+            if ((id != (p.triggerTid())) && ((this.inContent(id)) == false)) {
+                this.closeOpen(false)
+            }
+        }
+        if ((this.hasInput(id)) && (id != focused)) {
+            def c:InputCtl (this.inputFor(id))
+            c.caret = (strlen c.value)
+            c.anchor = 0
+        }
+        focused = id
+        this.rebuild()
+    }
+
+    ; A press on the page outside the demo's canvas: outside every popover.
+    ; It closes the open one and the focus stays where the press put it.
+    fn dismissOutside:boolean () {
+        if ((strlen (this.openWhich())) == 0) {
+            return false
+        }
+        focused = ""
+        this.closeOpen(false)
+        return true
+    }
+
+    ; --- input ------------------------------------------------------------------
+
+    fn press:boolean (target:string) {
+        def w:string (this.openWhich())
+        if ((strlen w) > 0) {
+            def p:PopoverCtl (this.popFor(w))
+            if (target == (p.triggerTid())) {
+                ; The trigger toggles: closes, focus stays on it.
+                focused = (p.activate(target))
+                dragField = ""
+                this.rebuild()
+                return true
+            }
+            if (this.inContent(target)) {
+                return (this.pressInside(p target))
+            }
+            ; Outside: close, and the focus goes back to the trigger — unless
+            ; the press was on another trigger, which then opens its own.
+            this.closeOpen(true)
+            if (this.isTrigger(target)) {
+                return (this.openPop((this.popOfTrigger(target))))
+            }
+            return true
+        }
+        if (this.isTrigger(target)) {
+            return (this.openPop((this.popOfTrigger(target))))
+        }
+        if (focused != "") {
+            focused = ""
+            this.rebuild()
+            return true
+        }
+        return false
+    }
+
+    fn pressInside:boolean (p:PopoverCtl target:string) {
+        if (this.hasInput(target)) {
+            focused = target
+            this.rebuild()
+            return true
+        }
+        if (target == "pv-notif-markall") {
+            this.markRead(-1)
+            focused = target
+            this.rebuild()
+            return true
+        }
+        def i:int (this.itemIndex(target))
+        if (i >= 0) {
+            this.markRead(i)
+            focused = ("pv-notif-item-" + (to_string i))
+            this.rebuild()
+            return true
+        }
+        ; Anything else inside is text: the press stays in the popover.
+        return false
+    }
+
+    fn key:boolean (k:string) {
+        return (this.keyWith(k false false))
+    }
+
+    fn ownsKey:boolean (k:string) {
+        return false
+    }
+
+    fn keyWith:boolean (k:string shift:boolean ctrl:boolean) {
+        if (k == "Tab") {
+            return (this.tab(shift))
+        }
+        def w:string (this.openWhich())
+        if (k == "Escape") {
+            if ((strlen w) == 0) {
+                return false
+            }
+            ; Escape is the controller's: it closes and names the trigger.
+            def p:PopoverCtl (this.popFor(w))
+            focused = (p.keyDown(focused k))
+            dragField = ""
+            this.rebuild()
+            return true
+        }
+        if (this.hasInput(focused)) {
+            if (k == "Enter") {
+                return false
+            }
+            def c:InputCtl (this.inputFor(focused))
+            c.keyDownWith(focused k shift ctrl)
+            c.ensureCaretVisible((this.engine()))
+            this.rebuild()
+            return true
+        }
+        if (UiCtl.activatesOn(k)) {
+            if ((strlen focused) > 0) {
+                return (this.press(focused))
+            }
+        }
+        return false
+    }
+
+    fn type:boolean (ch:string) {
+        if ((this.hasInput(focused)) == false) {
+            return false
+        }
+        def c:InputCtl (this.inputFor(focused))
+        def took:boolean (c.typeChar(focused ch))
+        if took {
+            c.ensureCaretVisible((this.engine()))
+            this.rebuild()
+        }
+        return took
+    }
+
+    ; --- the pointer in a field -------------------------------------------------
+
+    fn fieldOwning:string (target:string) {
+        def n:int (strlen target)
+        if (n > 5) {
+            if ((substring target (n - 5) n) == "-text") {
+                def base:string (substring target 0 (n - 5))
+                if (this.hasInput(base)) {
+                    return base
+                }
+            }
+        }
+        return target
+    }
+
+    fn fieldBoxOf:EVGElement (target:string) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        return (PopoverDemo.byId(r target))
+    }
+
+    fn indexAt:int (target:string px:double) {
+        def c:InputCtl (this.inputFor(target))
+        def box:EVGElement (this.fieldBoxOf(target))
+        if (box.id != target) {
+            return -1
+        }
+        return (InputCtl.indexAtPageX((this.engine()) c box px))
+    }
+
+    fn beginSelection:boolean (rawTarget:string px:double extend:boolean) {
+        def target:string (this.fieldOwning(rawTarget))
+        def took:boolean (this.press(target))
+        def c:InputCtl (this.inputFor(target))
+        if (c.tid != target) {
+            dragField = ""
+            return took
+        }
+        def idx:int (this.indexAt(target px))
+        if (idx < 0) {
+            dragField = ""
+            return true
+        }
+        c.placeCaret(idx extend)
+        dragField = target
+        this.rebuild()
+        return true
+    }
+
+    fn extendSelection:boolean (px:double) {
+        if (dragField == "") {
+            return false
+        }
+        def c:InputCtl (this.inputFor(dragField))
+        if (c.tid != dragField) {
+            return false
+        }
+        def idx:int (this.indexAt(dragField px))
+        if ((idx < 0) || (idx == c.caret)) {
+            return false
+        }
+        c.placeCaret(idx true)
+        c.ensureCaretVisible((this.engine()))
+        this.rebuild()
+        return true
+    }
+
+    fn endSelection:boolean () {
+        dragField = ""
+        return false
+    }
+
+    fn selectWordAt:boolean (rawTarget:string px:double) {
+        def target:string (this.fieldOwning(rawTarget))
+        def c:InputCtl (this.inputFor(target))
+        if (c.tid != target) {
+            return false
+        }
+        def idx:int (this.indexAt(target px))
+        if ((idx < 0) || ((strlen c.value) == 0)) {
+            return false
+        }
+        def at:int idx
+        if (at >= (strlen c.value)) {
+            at = ((strlen c.value) - 1)
+        }
+        c.selectWordAt(at)
+        this.rebuild()
+        return true
+    }
+
+    fn cursorAt:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def all:[InputCtl] (this.inputs())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:InputCtl (itemAt all i)
+            def box:EVGElement (PopoverDemo.byId(r c.tid))
+            if (box.id == c.tid) {
+                def x0:double (box.calculatedX)
+                def y0:double (box.calculatedY)
+                if ((px >= x0) && (px <= (x0 + (box.calculatedWidth)))) {
+                    if ((py >= y0) && (py <= (y0 + (box.calculatedHeight)))) {
+                        return "text"
+                    }
+                }
+            }
+            i = (i + 1)
+        }
+        def hit (new EVGHitTest())
+        return (hit.cursorAt(r px py))
+    }
+
+    ; --- the platform text-input session ----------------------------------------
+
+    fn focusedField:string () {
+        if (this.hasInput(focused)) {
+            return focused
+        }
+        return ""
+    }
+
+    fn fieldStateJson:string (tid:string) {
+        def c:InputCtl (this.inputFor(tid))
+        if (c.tid != tid) {
+            return "null"
+        }
+        def box:EVGElement (this.fieldBoxOf(tid))
+        def out:string "{"
+        out = (out + "\"tid\":" + (EVGA11yTree.jsonString(c.tid)))
+        out = (out + ",\"value\":" + (EVGA11yTree.jsonString(c.value)))
+        out = (out + ",\"selStart\":" + (to_string (c.selStart())))
+        out = (out + ",\"selEnd\":" + (to_string (c.selEnd())))
+        out = (out + ",\"kind\":" + (EVGA11yTree.jsonString(c.kind)))
+        out = (out + ",\"maxLength\":" + (to_string c.maxLength))
+        out = (out + ",\"placeholder\":" + (EVGA11yTree.jsonString(c.placeholder)))
+        if (box.id == tid) {
+            out = (out + ",\"box\":{\"x\":" + (to_string (to_int (box.calculatedX))))
+            out = (out + ",\"y\":" + (to_string (to_int (box.calculatedY))))
+            out = (out + ",\"w\":" + (to_string (to_int (box.calculatedWidth))))
+            out = (out + ",\"h\":" + (to_string (to_int (box.calculatedHeight))) + "}")
+        }
+        return (out + "}")
+    }
+
+    fn applyEdit:boolean (tid:string v:string selStart:int selEnd:int) {
+        def c:InputCtl (this.inputFor(tid))
+        if (c.tid != tid) {
+            return false
+        }
+        c.applyEdit(v selStart selEnd)
+        c.ensureCaretVisible((this.engine()))
+        this.rebuild()
+        return true
+    }
+
+    fn setHover:void (id:string) {
+        hovered = id
+        this.rebuild()
+    }
+
+    fn setPressed:void (id:string) {
+        pressed = id
+    }
+
+    ; Focus arriving from the page (a Tab into the mirror, a reader), or ""
+    ; when it left the demo — which closes an open popover (focus outside).
+    fn setFocus:void (id:string) {
+        if ((strlen id) == 0) {
+            focused = ""
+            this.closeOpen(false)
+            this.rebuild()
+            return
+        }
+        def r:[string] (this.ring())
+        if (((this.indexIn(r id)) >= 0) || (this.inContent(id))) {
+            this.moveFocus(id)
+        }
+    }
+
+    ; --- what the page asks for -------------------------------------------------
+
+    fn displayListJson:string () {
+        def lay:EVGLayout (this.laidOut())
+        def r:EVGElement (unwrap root)
+        def dl (new EVGDisplayList())
+        dl.setTextEngine((lay.getTextEngine()))
+        dl.build(r)
+        return (dl.toJson())
+    }
+
+    fn hitId:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def hit (new EVGHitTest())
+        return (hit.idAt(r px py))
+    }
+
+    ; Where the open popover ended up: "side|align|x|y|w|h", or "".
+    fn placed:string () {
+        def w:string (this.openWhich())
+        if ((strlen w) == 0) {
+            return ""
+        }
+        this.laidOut()
+        def p:PopoverCtl (this.popFor(w))
+        def r:EVGElement (unwrap root)
+        def c:EVGElement (PopoverDemo.byId(r (p.contentTid())))
+        if (c.id != (p.contentTid())) {
+            return ""
+        }
+        return (c.overlayPlacedSide + "|" + c.overlayPlacedAlign + "|" + (to_string c.calculatedX) + "|" + (to_string c.calculatedY) + "|" + (to_string c.calculatedWidth) + "|" + (to_string c.calculatedHeight))
+    }
+
+    fn a11yJson:string (generation:int focusId:string) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Popover demo" generation focusId))
+        return (t.toJson())
+    }
+
+    fn a11yProblems:[string] () {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Popover demo" 1 ""))
+        return (t.lint())
+    }
+
+    fn styleErrorCount:int () {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (s.getErrorCount())
+    }
+
+    fn styleErrorAt:string (i:int) {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (s.getError(i))
+    }
+
+    fn widthPx:double () {
+        return pageW
+    }
+
+    fn heightPx:double () {
+        return pageH
+    }
+
+    fn summary:string () {
+        def w:string (this.openWhich())
+        if (w == "") {
+            w = "closed"
+        }
+        return (w + "|" + focused + "|" + width.value + "|" + maxWidth.value + "|" + height.value + "|" + maxHeight.value + "|" + (to_string (this.unread())))
+    }
+}
