@@ -700,6 +700,22 @@
               rules grow with them.
             </p>
           </section>
+          <section data-for="tabs">
+            <h2>what to try</h2>
+            <p class="hint">
+              Click <em>Password</em>, or Tab onto the strip and use
+              <strong>&larr;</strong> / <strong>&rarr;</strong>,
+              <strong>Home</strong> and <strong>End</strong>: the panel follows
+              the focus (automatic activation, as Radix does). The strip is one
+              Tab stop; the next Tab goes into the card&rsquo;s fields.
+            </p>
+            <p class="hint">
+              Edit a field and press <strong>Save</strong> (or Enter in the
+              field): &ldquo;Saved&rdquo; appears in a <code>role=status</code>
+              region. The vertical card below moves with
+              <strong>&uarr;</strong> / <strong>&darr;</strong> instead.
+            </p>
+          </section>
           <section data-for="metadata">
             <h2>what to try</h2>
             <p class="hint">
@@ -1266,6 +1282,12 @@
   "src": "SeparatorDemo",
   "caption": "SeparatorCtl · Radix Separator semantics, shadcn / ReUI's look",
   "desc": "ReUI's six Separator patterns, one card each: content sections, inline links, menu groups, list rows, a labelled rule and an order summary. SeparatorCtl gives each rule its role and aria-orientation, or takes a decorative one out of the accessible tree, following Radix's Separator; there is no interaction to measure, so the look is specified from shadcn's source, not measured."
+ },
+ "tabs": {
+  "title": "Tabs",
+  "src": "TabsDemo",
+  "caption": "TabsCtl · measured against @radix-ui/react-tabs",
+  "desc": "shadcn's Account | Password tabs over a card with real text fields. Which tab is active, the roving focus, the arrows, Home and End are TabsCtl's, which three conformance specs measure against @radix-ui/react-tabs; the fields are InputCtls on the page's text session, and Save announces through a status region."
  },
  "effects": {
   "title": "Surface Effects",

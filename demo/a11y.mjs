@@ -60,6 +60,7 @@ const { MessageDemo } = require(path.join(ROOT, "gallery/evgui/bin/MessageDemo.c
 const { ControlsDemo } = require(path.join(ROOT, "gallery/evgui/bin/ControlsDemo.cjs"));
 const { AccordionDemo } = require(path.join(ROOT, "gallery/evgui/bin/AccordionDemo.cjs"));
 const { SeparatorDemo } = require(path.join(ROOT, "gallery/evgui/bin/SeparatorDemo.cjs"));
+const { TabsDemo } = require(path.join(ROOT, "gallery/evgui/bin/TabsDemo.cjs"));
 const MENUBAR_CSS = fs.readFileSync(path.join(HERE, "menubar.css"), "utf8");
 const TOOLBAR_CSS = fs.readFileSync(path.join(HERE, "toolbar.css"), "utf8");
 const SORTABLE_CSS = fs.readFileSync(path.join(HERE, "sortable.css"), "utf8");
@@ -97,6 +98,12 @@ const accordion = atRest(AccordionDemo, "accordion.css");
 const accordionOpen = atRest(AccordionDemo, "accordion.css");
 for (const id of ["acb-integrations-trigger", "acs-item-3-trigger", "acm-shipping-trigger", "acm-returns-trigger"]) accordionOpen.press(id);
 const separator = atRest(SeparatorDemo, "separator.css");
+const tabs = atRest(TabsDemo, "tabs.css");
+// And on its other tab, with a save announced: the second panel, the masked
+// fields and a status region with something in it.
+const tabsPw = atRest(TabsDemo, "tabs.css");
+tabsPw.press("tb-tab-password");
+tabsPw.press("tb-save-password");
 const sizeOf = (d) => [typeof d.widthPx === "function" ? d.widthPx() : 900, d.heightPx()];
 const REST = [
   ["profile — a label-left form", profile, 40],
@@ -110,6 +117,8 @@ const REST = [
   ["accordion — three lists, first items open", accordion, 48],
   ["accordion — other items open, multiple list all open", accordionOpen, 49],
   ["separator — six rules, some semantic and some decorative", separator, 50],
+  ["tabs — Account panel", tabs, 51],
+  ["tabs — Password panel, saved", tabsPw, 52],
 ].map(([name, d, gen]) => ({
   name,
   size: sizeOf(d),

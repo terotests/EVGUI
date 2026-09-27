@@ -30,7 +30,7 @@ import { createTextInputBridge } from "../../../lib/evg/gl/evg-textinput.js";
 // asked for it with `?inspect=1`, so a demo that nobody is inspecting pays
 // one import and no work at all.
 import { attach as attachInspector } from "../../../lib/evg/inspect/evg-inspect.js";
-import { MenubarDemo, ToolbarDemo, SortableDemo, MotionDemo, TableDemo, DropdownDemo, DialogDemo, TreeDemo, TimelineDemo, ResizeDemo, FormDemo, ProfileDemo, DashboardDemo, CalendarDemo, FilterDemo, EventCalDemo, MessageDemo, ControlsDemo, OtpDemo, MetadataDemo, EffectsDemo, SeparatorDemo, MODULES } from "./generated-host.js";
+import { MenubarDemo, ToolbarDemo, SortableDemo, MotionDemo, TableDemo, DropdownDemo, DialogDemo, TreeDemo, TimelineDemo, ResizeDemo, FormDemo, ProfileDemo, DashboardDemo, CalendarDemo, FilterDemo, EventCalDemo, MessageDemo, ControlsDemo, OtpDemo, MetadataDemo, EffectsDemo, SeparatorDemo, TabsDemo, MODULES } from "./generated-host.js";
 // The effect driver: what turns a press on the canvas into the events a
 // surface effect reads. It is per HOST and not per demo, because a press is a
 // browser event and the box it landed in is already in the display list.
@@ -51,7 +51,7 @@ const fontMeasure = installCanvasMeasurer(MODULES);
 window.__fontMeasure = fontMeasure;
 import { AccordionDemo } from "./generated-host.js";
 import { ACCORDION_CSS } from "./generated.js";
-import { MENUBAR_CSS, TOOLBAR_CSS, SORTABLE_CSS, MOTION_CSS, TABLE_CSS, DROPDOWN_CSS, DIALOG_CSS, TREE_CSS, TIMELINE_CSS, RESIZE_CSS, FORM_CSS, PROFILE_CSS, DASHBOARD_CSS, CALENDAR_CSS, FILTERS_CSS, EVENTCAL_CSS, MESSAGE_CSS, CONTROLS_CSS, OTP_CSS, METADATA_CSS, EFFECTS_CSS, SEPARATOR_CSS, EFFECT_PRESETS_CSS } from "./generated.js";
+import { MENUBAR_CSS, TOOLBAR_CSS, SORTABLE_CSS, MOTION_CSS, TABLE_CSS, DROPDOWN_CSS, DIALOG_CSS, TREE_CSS, TIMELINE_CSS, RESIZE_CSS, FORM_CSS, PROFILE_CSS, DASHBOARD_CSS, CALENDAR_CSS, FILTERS_CSS, EVENTCAL_CSS, MESSAGE_CSS, CONTROLS_CSS, OTP_CSS, METADATA_CSS, EFFECTS_CSS, SEPARATOR_CSS, TABS_CSS, EFFECT_PRESETS_CSS } from "./generated.js";
 
 // The default stage width. A demo wider than this says so — the dashboard
 // grew to 1336 when its sidebar arrived, and a stage that stays 1240 does not
@@ -423,6 +423,11 @@ dashboard.init(DASHBOARD_CSS);
 // textarea — the same reason `form`, `profile` and `otp` are.
 let effects = new EffectsDemo();
 effects.init(EFFECTS_CSS);
+// Tabs: TabsCtl (measured against @radix-ui/react-tabs) owns the strip; the
+// fields are InputCtls on the page's text session, like the form's.
+let tabs = new TabsDemo();
+tabs.init(TABS_CSS);
+let lastTabsHover = "";
 // ONE DRIVER FOR THE PAGE. It reads the effect instances off whatever display
 // list is being painted, so it works for any demo whose stylesheet declares an
 // effect and costs nothing on the nineteen that do not.
@@ -1277,6 +1282,44 @@ const DEMOS = {
     drag: dragSortable,
     drop: dropSortable,
   },
+
+  // Tabs. No `ownsTab`: the page's generic Tab walk makes the tab list one
+  // stop (its selected tab) and then the panel's fields and its button.
+  tabs: {
+    height: () => tabs.heightPx(),
+    list: () => tabs.displayListJson(),
+    hit: (x, y) => tabs.hitId(x, y),
+    a11y: (gen, focus) => tabs.a11yJson(gen, focus),
+    cursorAt: (x, y) => tabs.cursorAt(x, y),
+    textSession: {
+      focused: () => tabs.focusedField(),
+      state: (tid) => JSON.parse(tabs.fieldStateJson(tid)),
+      apply: (tid, v, a, b) => tabs.applyEdit(tid, v, a, b),
+    },
+    press: (id, x, y, ev) => tabs.beginSelection(id, x, !!(ev && ev.shiftKey)),
+    drag: (id, ev) => tabs.extendSelection(ev.offsetX),
+    drop: () => tabs.endSelection(),
+    dblclick: (id, x) => tabs.selectWordAt(id, x),
+    hover: (id) => {
+      if (id === lastTabsHover) return false;
+      lastTabsHover = id;
+      tabs.setHover(id);
+      return true;
+    },
+    keyWith: (k, shift, ctrl) => tabs.keyWith(k, shift, ctrl),
+    key: (k) => tabs.key(k),
+    ownsKey: (k) => tabs.ownsKey(k),
+    host: () => ({
+      setHover: (id) => {
+        if (id === lastTabsHover) return false;
+        lastTabsHover = id;
+        tabs.setHover(id);
+        return true;
+      },
+      setPressed: (id) => tabs.setPressed(id),
+      root: () => null,
+    }),
+  },
 };
 
 /**
@@ -1541,6 +1584,7 @@ const INSTANCE = {
   motion: () => motion,
   effects: () => effects,
   separator: () => separator,
+  tabs: () => tabs,
 };
 
 /** The demo showing now, or null for one of the three kept trees. */
@@ -1659,6 +1703,7 @@ const NARROW = {
   motion: { min: 320, h: "auto" },
   effects: { min: 320, h: "auto" },
   separator: { min: 320, h: "auto" },
+  tabs: { min: 320, h: "auto" },
 };
 const NARROW_AT = 600;
 const naturalSize = {};
@@ -2377,7 +2422,7 @@ function syncPanels() {
 // `?demo=dashboard` lands on one directly. A page with eighteen demos and one
 // entry point makes every link to it a click instruction; a check that wants
 // the dashboard should not have to press a radio to get there.
-const DEMO_NAMES = ["menubar", "toolbar", "sortable", "table", "tree", "timeline", "resizable", "form", "calendar", "filters", "eventcal", "message", "controls", "otp", "metadata", "profile", "dashboard", "dropdown", "dialog", "motion", "effects", "accordion", "separator"];
+const DEMO_NAMES = ["menubar", "toolbar", "sortable", "table", "tree", "timeline", "resizable", "form", "calendar", "filters", "eventcal", "message", "controls", "otp", "metadata", "profile", "dashboard", "dropdown", "dialog", "motion", "effects", "accordion", "separator", "tabs"];
 const wanted = new URLSearchParams(location.search).get("demo");
 if (wanted && DEMO_NAMES.includes(wanted)) state.which = wanted;
 
@@ -3060,6 +3105,7 @@ window.__resetDemo = (name) => {
   else if (name === "otp") { otp = new OtpDemo(); otp.init(OTP_CSS); lastOtpHover = ""; }
   else if (name === "metadata") { metadata = new MetadataDemo(); metadata.init(METADATA_CSS); lastMetadataHover = ""; }
   else if (name === "message") { message = new MessageDemo(); message.init(MESSAGE_CSS); lastMessageHover = ""; }
+  else if (name === "tabs") { tabs = new TabsDemo(); tabs.init(TABS_CSS); lastTabsHover = ""; }
   else if (name === "dialog") {
     dialog = new DialogDemo(); dialog.init(DIALOG_CSS); dialog.openWindow(); dialog.openModal();
     lastDialogHover = ""; dialogDragAt = null;

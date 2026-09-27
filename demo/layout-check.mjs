@@ -87,6 +87,7 @@ const DEMOS = [
   ["TimelineDemo", "timeline.css"],
   ["ToolbarDemo", "toolbar.css"],
   ["TreeDemo", "tree.css"],
+  ["TabsDemo", "tabs.css"],
 ];
 
 const rect = (e) => ({
