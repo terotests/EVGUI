@@ -51,6 +51,8 @@ const fontMeasure = installCanvasMeasurer(MODULES);
 window.__fontMeasure = fontMeasure;
 import { AccordionDemo } from "./generated-host.js";
 import { ACCORDION_CSS } from "./generated.js";
+import { PopoverDemo } from "./generated-host.js";
+import { POPOVER_CSS } from "./generated.js";
 import { MENUBAR_CSS, TOOLBAR_CSS, SORTABLE_CSS, MOTION_CSS, TABLE_CSS, DROPDOWN_CSS, DIALOG_CSS, TREE_CSS, TIMELINE_CSS, RESIZE_CSS, FORM_CSS, PROFILE_CSS, DASHBOARD_CSS, CALENDAR_CSS, FILTERS_CSS, EVENTCAL_CSS, MESSAGE_CSS, CONTROLS_CSS, OTP_CSS, METADATA_CSS, EFFECTS_CSS, SEPARATOR_CSS, TABS_CSS, EFFECT_PRESETS_CSS } from "./generated.js";
 
 // The default stage width. A demo wider than this says so — the dashboard
@@ -417,6 +419,12 @@ effects.init(EFFECTS_CSS);
 let tabs = new TabsDemo();
 tabs.init(TABS_CSS);
 let lastTabsHover = "";
+// Popover: every popover is a PopoverCtl (measured against
+// @radix-ui/react-popover); the Dimensions fields are InputCtls on the text
+// session. Non-modal: no trap, and the focus leaving a popover closes it.
+let popover = new PopoverDemo();
+popover.init(POPOVER_CSS);
+let lastPopoverHover = "";
 // ONE DRIVER FOR THE PAGE. It reads the effect instances off whatever display
 // list is being painted, so it works for any demo whose stylesheet declares an
 // effect and costs nothing on the nineteen that do not.
@@ -1301,6 +1309,45 @@ const DEMOS = {
   },
 };
 
+// Popover: the demo owns its Tab ring — the triggers, with the open
+// popover's own stops right after its trigger — and lets go at either end.
+DEMOS.popover = {
+  height: () => popover.heightPx(),
+  list: () => popover.displayListJson(),
+  hit: (x, y) => popover.hitId(x, y),
+  a11y: (gen, focus) => popover.a11yJson(gen, focus),
+  cursorAt: (x, y) => popover.cursorAt(x, y),
+  textSession: {
+    focused: () => popover.focusedField(),
+    state: (tid) => JSON.parse(popover.fieldStateJson(tid)),
+    apply: (tid, v, a, b) => popover.applyEdit(tid, v, a, b),
+  },
+  press: (id, x, y, ev) => popover.beginSelection(id, x, !!(ev && ev.shiftKey)),
+  drag: (id, ev) => popover.extendSelection(ev.offsetX),
+  drop: () => popover.endSelection(),
+  dblclick: (id, x) => popover.selectWordAt(id, x),
+  hover: (id) => {
+    if (id === lastPopoverHover) return false;
+    lastPopoverHover = id;
+    popover.setHover(id);
+    return true;
+  },
+  keyWith: (k, shift, ctrl) => popover.keyWith(k, shift, ctrl),
+  ownsTab: true,
+  key: (k) => popover.key(k),
+  ownsKey: (k) => popover.ownsKey(k),
+  host: () => ({
+    setHover: (id) => {
+      if (id === lastPopoverHover) return false;
+      lastPopoverHover = id;
+      popover.setHover(id);
+      return true;
+    },
+    setPressed: (id) => popover.setPressed(id),
+    root: () => null,
+  }),
+};
+
 /**
  * Put the floating copy under the pointer, by mutating the element rather than
  * rebuilding the tree around it.
@@ -1577,6 +1624,16 @@ const INSTANCE = {
   separator: () => separator,
   tabs: () => tabs,
 };
+INSTANCE.popover = () => popover;
+// A press on the page outside the canvas is outside the popover too, and
+// Radix dismisses on a pointer down outside wherever it lands.
+window.addEventListener("pointerdown", (ev) => {
+  if (state.which !== "popover" || stage.contains(ev.target)) return;
+  if (popover.dismissOutside()) {
+    paint();
+    syncTextSession();
+  }
+}, true);
 
 /** The demo showing now, or null for one of the three kept trees. */
 function instance() {
@@ -1697,6 +1754,8 @@ const NARROW = {
   separator: { min: 320, h: "auto" },
   tabs: { min: 320, h: "auto" },
 };
+// `keep`: the popovers open inside the page and need the room it has.
+NARROW.popover = { min: 320, h: "auto", keep: true };
 const NARROW_AT = 600;
 const naturalSize = {};
 const fittedHeight = new Map();
@@ -2415,6 +2474,7 @@ function syncPanels() {
 // entry point makes every link to it a click instruction; a check that wants
 // the dashboard should not have to press a radio to get there.
 const DEMO_NAMES = ["menubar", "toolbar", "sortable", "table", "tree", "timeline", "resizable", "form", "calendar", "filters", "eventcal", "message", "controls", "otp", "metadata", "profile", "dashboard", "dropdown", "dialog", "motion", "effects", "accordion", "separator", "tabs"];
+DEMO_NAMES.push("popover");
 const wanted = new URLSearchParams(location.search).get("demo");
 if (wanted && DEMO_NAMES.includes(wanted)) state.which = wanted;
 
@@ -3099,6 +3159,7 @@ window.__resetDemo = (name) => {
   else if (name === "message") { message = new MessageDemo(); message.init(MESSAGE_CSS); lastMessageHover = ""; }
   else if (name === "tabs") { tabs = new TabsDemo(); tabs.init(TABS_CSS); lastTabsHover = ""; }
   else if (name === "dialog") { dialog = new DialogDemo(); dialog.init(DIALOG_CSS); lastDialogHover = ""; }
+  else if (name === "popover") { popover = new PopoverDemo(); popover.init(POPOVER_CSS); lastPopoverHover = ""; }
   else return false;
   held = false;
   textInput.blurField();

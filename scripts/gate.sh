@@ -50,6 +50,7 @@ SUITES=(
   ui:separator:check
   ui:tabs:check
   ui:dialog:check
+  ui:popover:check
   ui:semantics:check
   ui:input:bench
   ui:layout:check

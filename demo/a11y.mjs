@@ -436,6 +436,34 @@ const STATES = [
 
 STATES.push(...REST);
 
+// The popover demo: closed, then each kind of popover open — the Dimensions
+// panel (a labelled, described dialog with four textboxes), the notifications
+// list and a text-only popover whose content takes the focus itself. Reached
+// by pressing the triggers, as the page does. Non-modal: nothing behind an
+// open popover may be hidden.
+{
+  const { PopoverDemo } = require(path.join(ROOT, "gallery/evgui/bin/PopoverDemo.cjs"));
+  const popover = atRest(PopoverDemo, "popover.css");
+  const openOn = (trigger) => () => {
+    popover.keyWith("Escape", false, false);
+    if (trigger) popover.press(trigger);
+    return popover.a11yProblems();
+  };
+  for (const [name, trigger, gen] of [
+    ["popover — closed", "", 60],
+    ["popover — Dimensions open (four fields)", "pv-dim-trigger", 61],
+    ["popover — notifications open", "pv-notif-trigger", 62],
+    ["popover — text popover open on the right", "pv-right-trigger", 63],
+  ]) {
+    STATES.push({
+      name,
+      size: [900, 470],
+      lint: openOn(trigger),
+      tree: () => popover.a11yJson(gen, popover.focused || ""),
+    });
+  }
+}
+
 const AXE = fs.readFileSync(domRequire.resolve("axe-core"), "utf8");
 
 const html = `<!doctype html><meta charset="utf-8">
