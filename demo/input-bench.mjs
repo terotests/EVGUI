@@ -130,10 +130,11 @@ async function load(demoName) {
 }
 
 // A field that only exists once something else has been opened. The dialog's
-// two inputs are in the tree while the dialog is shut, with no box to click.
+// fields are not in the tree at all while it is shut (Radix unmounts the
+// content), so the Edit profile dialog is opened first: Name and Username.
 const PREP = {
   dialog: async () => {
-    const r = await mirrorRect("dlg-trigger");
+    const r = await mirrorRect("dlg-profile-trigger");
     if (r) { await page.mouse.click(r.x + r.w / 2, r.y + r.h / 2); await page.waitForTimeout(250); }
   },
 };

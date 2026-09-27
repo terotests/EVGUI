@@ -307,25 +307,14 @@ dropdown.init(DROPDOWN_CSS);
 let lastDropdownHover = "";
 
 /**
- * The dialog and the window — the same class twice, with one flag different.
- *
- * This is the demo with a gesture the others do not have: the window's title
- * bar is DRAGGED, and a drag is not a click. The pointer handlers below ask
- * the controller whether a press starts one, and while it has, every move is
- * a delta rather than a position — which is what lets the window be picked up
- * anywhere along its bar and not jump.
- *
- * Both windows start open, because a page whose demo is two closed triggers
- * shows nothing.
+ * The dialog patterns: shadcn / ReUI's Dialog, three ways, and an alert
+ * dialog. Open/closed, the focus on open, Escape, the overlay press and the
+ * focus back to the trigger are DialogCtl's and AlertDialogCtl's; the fields
+ * are InputCtls behind the page's text session, like the form's.
  */
 let dialog = new DialogDemo();
 dialog.init(DIALOG_CSS);
-dialog.openWindow();
-dialog.openModal();
 let lastDialogHover = "";
-// Where the pointer was when the drag began, in page pixels. The controller
-// only ever hears "this much further", so the subtracting happens here.
-let dialogDragAt = null;
 
 /**
  * The tree. Every arrow, Home, End, Enter and Space on this page is answered
@@ -1100,54 +1089,45 @@ const DEMOS = {
   },
 
   dialog: {
-    cursorAt: (x, y) => dialog.cursorAt(x, y),
     height: () => dialog.heightPx(),
     list: () => dialog.displayListJson(),
     hit: (x, y) => dialog.hitId(x, y),
     a11y: (gen, focus) => dialog.a11yJson(gen, focus),
-    // The page's gesture protocol: `press` picks something up and says so,
-    // `drag` carries it, `drop` puts it down. The sortable uses the same three.
-    //
-    // A press that is NOT the window's title bar has to do the ordinary thing
-    // instead, and do it here: once a demo has a `drag`, the page stops calling
-    // its plain click path and this is the only handler a button will get.
-    press: (id) => {
-      if (dialog.beginDrag(id)) {
-        // `grabPointer` is set by the pointerdown handler just before this
-        // runs, so the press point is already recorded and needs no argument.
-        dialogDragAt = { x: grabPointer.x, y: grabPointer.y };
-        return true;
-      }
-      dialog.press(id);
-      return false;
+    cursorAt: (x, y) => dialog.cursorAt(x, y),
+    textSession: {
+      focused: () => dialog.focusedField(),
+      state: (tid) => JSON.parse(dialog.fieldStateJson(tid)),
+      apply: (tid, v, a, b) => dialog.applyEdit(tid, v, a, b),
     },
-    // Deltas, not positions. The controller never learns where it was picked
-    // up, so a window grabbed by the right end of its bar does not jump left.
-    drag: (id, ev) => {
-      if (!dialogDragAt) return false;
-      dialog.dragBy(ev.offsetX - dialogDragAt.x, ev.offsetY - dialogDragAt.y);
-      dialogDragAt = { x: ev.offsetX, y: ev.offsetY };
-      return true;
+    // A press may be Copy, and a canvas cannot write to the clipboard: the
+    // demo says what it wants copied and the page does the writing.
+    press: (id, x, y, ev) => {
+      const took = dialog.beginSelection(id, x, !!(ev && ev.shiftKey));
+      dialogCopy();
+      return took;
     },
-    drop: () => {
-      dialogDragAt = null;
-      dialog.endDrag();
-      return true;
-    },
+    drag: (id, ev) => dialog.extendSelection(ev.offsetX),
+    drop: () => dialog.endSelection(),
+    dblclick: (id, x) => dialog.selectWordAt(id, x),
+    // The wheel over the scrollable dialog's body.
+    scroll: (dy) => dialog.scrollBy(dy),
     hover: (id) => {
       if (id === lastDialogHover) return false;
       lastDialogHover = id;
       dialog.setHover(id);
       return true;
     },
-    key: (k) => dialog.key(k),
-    // Tab is the demo's: the modal traps it (Close, the two fields, Cancel,
-    // Save) and without it the roving mirror sent Tab from Close to <body>.
-    keyWith: (k, shift, ctrl) => dialog.keyWith(k, shift, ctrl),
+    keyWith: (k, shift, ctrl) => {
+      const took = dialog.keyWith(k, shift, ctrl);
+      dialogCopy();
+      return took;
+    },
+    // The demo owns its Tab ring: the triggers while nothing is open, and a
+    // TRAPPED ring inside an open dialog (Radix's FocusScope).
     ownsTab: true,
+    key: (k) => dialog.key(k),
+    ownsKey: (k) => dialog.ownsKey(k),
     host: () => ({
-      tick: (dt) => dialog.tick(dt),
-      busy: () => dialog.busyNow(),
       setHover: (id) => {
         if (id === lastDialogHover) return false;
         lastDialogHover = id;
@@ -1157,7 +1137,6 @@ const DEMOS = {
       setPressed: (id) => dialog.setPressed(id),
       root: () => null,
     }),
-    animated: true,
   },
 
   motion: {
@@ -1242,8 +1221,20 @@ window.__mbState = () => ({ open: state.open, focus: state.focus, which: state.w
 // the page: what is open, where focus is, and how deep the submenu stack goes.
 window.__dlgState = () => ({
   summary: dialog.summary(),
-  dragging: dialog.isDragging(),
+  open: dialog.openWhich(),
+  focus: dialog.focused,
+  copied: window.__dlgCopied || "",
 });
+// Copy's other half: the text the dialog asked for, onto the real clipboard.
+// Recorded as well, because a check cannot always read the clipboard back.
+function dialogCopy() {
+  const text = dialog.takeCopy();
+  if (!text) return;
+  window.__dlgCopied = text;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).catch(() => {});
+  } catch (e) { /* no clipboard here: the demo still says Copied */ }
+}
 window.__ddState = () => ({
   open: dropdown.model.open,
   focus: dropdown.focused,
@@ -1595,6 +1586,7 @@ const NARROW = {
   metadata: { min: 320, h: "auto", keep: true },
   profile: { min: 320, h: "own" },
   dropdown: { min: 320, h: "auto", keep: true },
+  dialog: { min: 320, h: "auto", keep: true },
   motion: { min: 320, h: "auto" },
   effects: { min: 320, h: "auto" },
 };
@@ -2998,10 +2990,8 @@ window.__resetDemo = (name) => {
   else if (name === "otp") { otp = new OtpDemo(); otp.init(OTP_CSS); lastOtpHover = ""; }
   else if (name === "metadata") { metadata = new MetadataDemo(); metadata.init(METADATA_CSS); lastMetadataHover = ""; }
   else if (name === "message") { message = new MessageDemo(); message.init(MESSAGE_CSS); lastMessageHover = ""; }
-  else if (name === "dialog") {
-    dialog = new DialogDemo(); dialog.init(DIALOG_CSS); dialog.openWindow(); dialog.openModal();
-    lastDialogHover = ""; dialogDragAt = null;
-  } else return false;
+  else if (name === "dialog") { dialog = new DialogDemo(); dialog.init(DIALOG_CSS); lastDialogHover = ""; }
+  else return false;
   held = false;
   textInput.blurField();
   canvas.focus({ preventScroll: true });

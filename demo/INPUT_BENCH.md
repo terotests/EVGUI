@@ -198,9 +198,10 @@ place the fault was:
 
 **Rows that are red because the field is a picture.** `cd-box` on the
 calendar (since replaced by the date field above, and gone from the matrix),
-`cx-num` on the controls page, `dlg-input-name` and
-`dlg-input-username` in the dialog: each is published as a textbox, and none
-opens an editing session. A click does not focus, typing goes nowhere, and
+`cx-num` on the controls page, and until the Dialog demo was rebuilt on
+`DialogCtl` its two fields as well (now `dlg-name` and `dlg-username`, real
+`InputCtl`s behind the text session): each is published as a textbox, and
+none opens an editing session. A click does not focus, typing goes nowhere, and
 there is no selection to report — including the `ring` column: the box's
 border cannot change with focus if focus never arrives. `cx-num` is the
 closest to real — its `NumberCtl` is measured against Base UI and its `−`/`+`
