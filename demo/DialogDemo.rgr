@@ -1,102 +1,155 @@
 ; SPDX-License-Identifier: AGPL-3.0-or-later
 
 ; =============================================================================
-; DialogDemo — the same window twice: once modal, once movable
+; DialogDemo — ReUI / shadcn's Dialog patterns, one card each
 ; =============================================================================
-; The reference for the modal is ReUI's dialog
-; (https://reui.io/components/dialog): a card over a softened page, a title, a
-; line of explanation, two fields, and Cancel / Save changes at the bottom.
+; Four cards, as on https://reui.io/components/dialog and
+; https://ui.shadcn.com/docs/components/dialog: each is a preview with a
+; trigger button, and pressing it opens the dialog over the whole demo with a
+; dimmed backdrop.
 ;
-; The point of the page, though, is the OTHER one. A modal dialog covers the
-; thing you opened it to look at, and cannot be pushed aside; a movable window
-; can. Both are `WindowCtl` with one flag different, and the demo shows them
-; side by side so the difference is a flag rather than a rewrite.
+;   Edit profile     shadcn's default: title, description, Name and Username
+;                    (real fields), Cancel / Save changes, × top-right
+;   Share link       a read-only link field, Copy (to the clipboard, through
+;                    the page) and Close
+;   Scrollable       a long body that scrolls INSIDE the dialog while the
+;                    header and the footer stay where they are
+;   Alert dialog     "Are you absolutely sure?" — Cancel / Continue
 ;
-; WHAT GOES INSIDE IS THE WHOLE POINT. `WindowCtl` owns a frame — a title bar,
-; a close button, a description — and `bodyEl` is an ordinary EVGElement the
-; caller fills. This file fills the modal's with a form and the window's with a
-; small table, from two unrelated tree literals, and the window class knows
-; about neither. The older `EVGWindow` could not hold either of them: its
-; vocabulary is label, button, radio, checkbox and one rectangle whose pixels
-; the owner paints by hand.
+; THE BEHAVIOUR IS THE CONTROLLERS'. The three dialogs are `DialogCtl` and the
+; alert is `AlertDialogCtl`, both measured against Radix (`@radix-ui/react-
+; dialog`, `@radix-ui/react-alert-dialog`) by the conformance specs. Whether a
+; dialog is open, where the focus goes when it opens (the first field for a
+; dialog, Cancel for the alert), what Escape does, what a press on the overlay
+; does (a dialog closes, an alert dialog does NOT) and where the focus goes
+; back to (the trigger) are all theirs. This file draws shadcn's tree from the
+; controllers' ids and reads `open` — the split the dropdown demo makes with
+; MenuCtl and the tabs demo with TabsCtl.
 ;
-; The scrim is where `backdrop-filter: blur()` earns its place. `dialog.css`
-; asks for a blur and a dim; the WebGL painter copies what is behind the scrim,
-; runs the three-box kernel the browser uses, and puts it back. On a backend
-; that cannot, the dim remains and only the softening is lost — which is why
-; the blur is a property of the surface and not a command of its own.
+; What the controllers cannot know, the page owns: the Tab ring. While a
+; dialog is open Tab wraps inside it (Radix's FocusScope `trapped`); while none
+; is, the four triggers are the ring and Tab leaves the canvas at its ends.
 ;
-; The tree is KEPT between frames, like the motion, table and dropdown demos:
-; hover is a flag on an element, and a rebuilt tree has no memory of it.
+; The fields are `InputCtl`s wired to the page's text session exactly as the
+; form, profile and tabs demos are: the page parks a real <input> over the
+; focused box and hands every edit back through `applyEdit`, so caret,
+; selection, clipboard and IME are the platform's. The share link is the same
+; field with `readOnly` — selectable, not editable, as a readonly <input> is.
 ; =============================================================================
 
-Import "../src/WindowCtl.rgr"
+Import "../src/DialogCtl.rgr"
+Import "../src/AlertDialogCtl.rgr"
+Import "../src/InputCtl.rgr"
 Import "../src/UiCtl.rgr"
+Import "../src/UiTree.rgr"
 Import "pkg:evg/EVGElement.rgr"
 Import "pkg:evg/EVGUnit.rgr"
 Import "pkg:evg/EVGLayout.rgr"
 Import "pkg:evg/EVGDisplayList.rgr"
 Import "pkg:evg/EVGStyleSheet.rgr"
-Import "pkg:evg/EVGTransition.rgr"
 Import "pkg:evg/EVGA11yTree.rgr"
 Import "pkg:evg/EVGA11yFromTree.rgr"
 Import "pkg:evg/EVGHitTest.rgr"
+Import "pkg:evg/EVGTextEngine.rgr"
 
-treefactory Dlg {
+treefactory Dg {
     child addChild
     text  textContent
 
     tag Page     EVGElement (props (className "dg-page"))
-    ; The two triggers, in a row of their own above the sheet. They used to be
-    ; loose children of the page and drew as bare text under the card.
-    tag Actions  EVGElement (props (className "dg-actions"))
-    ; What the dialog covers, so there is something to see softened. Not
-    ; decoration: a scrim over a blank page proves nothing about a blur.
-    tag Sheet    EVGElement (props (className "dg-sheet"))
-    tag SheetHd  EVGElement (props (className "dg-sheet-head") (elementType 1))
-    tag SheetRow EVGElement (props (className "dg-sheet-row"))
-    tag SheetCel EVGElement (props (className "dg-sheet-cell") (elementType 1))
-    tag Swatch   EVGElement (props (className "dg-swatch"))
+    tag Card     EVGElement (props (className "dg-card"))
+    tag Caption  EVGElement (props (className "dg-caption") (elementType 1))
+    tag Stage    EVGElement (props (className "dg-stage"))
+    tag Trigger  EVGElement (props (className "dg-btn dg-btn-outline") (role "button") (a11yFocusable true) (a11yHasPopup "dialog"))
+    tag BtnTx    EVGElement (props (className "dg-btn-text") (elementType 1))
+    tag Status   EVGElement (props (className "dg-status") (elementType 1) (role "status"))
 
-    ; --- the form inside the modal ---
-    tag Form     EVGElement (props (className "dg-form"))
+    ; --- the dialog ---
+    tag Overlay  EVGElement (props (className "dg-overlay"))
+    tag Content  EVGElement (props (className "dg-content"))
+    tag Header   EVGElement (props (className "dg-header"))
+    tag Title    EVGElement (props (className "dg-title") (elementType 1) (role "heading") (a11yLevel 2))
+    tag Desc     EVGElement (props (className "dg-desc") (elementType 1) (role "text"))
+    tag Body     EVGElement (props (className "dg-body"))
+    tag Footer   EVGElement (props (className "dg-footer"))
+    tag Button   EVGElement (props (className "dg-btn") (role "button") (a11yFocusable true))
+    tag Rule     EVGElement (props (className "dg-rule") (a11yHidden true))
+    tag Close    EVGElement (props (className "dg-close") (role "button") (a11yFocusable true) (a11yLabel "Close"))
+    tag Icon     EVGElement (props (className "dg-icon") (tagName "path") (elementType 3) (viewBox "0 0 24 24") (a11yHidden true))
+
+    ; --- fields ---
     tag Field    EVGElement (props (className "dg-field"))
-    tag Label    EVGElement (props (className "dg-label") (elementType 1))
-    ; A text field EVG cannot yet type into — the value is the demo's, and the
-    ; box is a box. Marked as a textbox all the same, because what a reader is
-    ; told about it should not depend on how finished it is.
-    tag Input    EVGElement (props (className "dg-input") (role "textbox") (a11yFocusable true))
-    tag InputTx  EVGElement (props (className "dg-input-text") (elementType 1))
-    tag Foot     EVGElement (props (className "dg-foot"))
-    tag Ghost    EVGElement (props (className "dg-button dg-button-ghost") (role "button") (a11yFocusable true))
-    tag Solid    EVGElement (props (className "dg-button dg-button-solid") (role "button") (a11yFocusable true))
-    tag BtnText  EVGElement (props (className "dg-button-text") (elementType 1))
+    tag Label    EVGElement (props (className "dg-label") (elementType 1) (a11yHidden true))
+    tag Box      EVGElement (props (className "dg-box") (role "textbox"))
+    tag Text     EVGElement (props (className "dg-text") (elementType 1))
+    tag Caret    EVGElement (props (className "dg-caret") (a11yHidden true))
+    tag Band     EVGElement (props (className "dg-band") (a11yHidden true))
+    tag Row      EVGElement (props (className "dg-row"))
+    tag Note     EVGElement (props (className "dg-note") (elementType 1) (role "status"))
 
-    ; --- the table inside the movable window ---
-    tag Mini     EVGElement (props (className "dg-mini") (role "table") (a11yLabel "Filters"))
-    tag MiniRow  EVGElement (props (className "dg-mini-row") (role "row"))
-    tag MiniCel  EVGElement (props (className "dg-mini-cell") (role "cell") (elementType 1))
-    tag Chip     EVGElement (props (className "dg-chip") (elementType 1))
-    tag Hint     EVGElement (props (className "dg-hint") (elementType 1))
+    ; --- the scrollable body ---
+    tag Scroll   EVGElement (props (className "dg-scroll") (role "region") (a11yFocusable true))
+    tag Para     EVGElement (props (className "dg-para") (elementType 1))
+    tag Head3    EVGElement (props (className "dg-h3") (elementType 1) (role "heading") (a11yLevel 3))
 }
 
 class DialogDemo {
 
-    def modal:WindowCtl (new WindowCtl())
-    def window:WindowCtl (new WindowCtl())
+    def profileDlg:DialogCtl (new DialogCtl())
+    def shareDlg:DialogCtl (new DialogCtl())
+    def termsDlg:DialogCtl (new DialogCtl())
+    def alertDlg:AlertDialogCtl (new AlertDialogCtl())
+
+    def name:InputCtl (new InputCtl())
+    def username:InputCtl (new InputCtl())
+    def link:InputCtl (new InputCtl())
+
     def root@(optional):EVGElement
     def sheet@(optional):EVGStyleSheet
-    def transitions:EVGTransition (new EVGTransition())
-    ; Kept across frames so a paint-only change can reuse the positions.
     def layout@(optional):EVGLayout
+    def measurer:EVGLayout (new EVGLayout())
+
     def hovered:string ""
     def pressed:string ""
     def focused:string ""
-    def dragFrom:string ""
+    def dragField:string ""
+
+    ; What was saved, and what each card says under its trigger.
+    def savedName:string "Pedro Duarte"
+    def savedUser:string "@peduarte"
+    def profileStatus:string ""
+    def termsStatus:string ""
+    def alertStatus:string ""
+    def saves:int 0
+    ; The share dialog's Copy: whether it has been pressed since the dialog
+    ; opened, and the text the page still owes the clipboard.
+    def copied:boolean false
+    def copies:int 0
+    def pendingCopy:string ""
+
+    ; The scrollable body's offset, and how far it can go (from the layout).
+    def termsScroll:double 0.0
+    def termsMax:double 0.0
+    ; Where the dialog sits on a narrow page — see `laidOut`.
+    def narrowY:double 16.0
+
     def pageW:double 900.0
-    def pageH:double 560.0
+    def pageH:double 540.0
+    def boxFont:string "Arial"
+    def boxFontSize:double 14.0
 
     Constructor () {
+    }
+
+    fn dress:void (c:InputCtl tid:string label:string value:string) {
+        c.tid = tid
+        c.name = label
+        c.fontFamily = boxFont
+        c.fontSize = boxFontSize
+        c.boxWidth = 250.0
+        c.value = value
+        c.caret = (strlen value)
+        c.anchor = (strlen value)
     }
 
     fn init:void (css:string) {
@@ -104,163 +157,608 @@ class DialogDemo {
         s.parse(css)
         sheet = s
 
-        modal.tid = "dlg"
-        modal.name = "Edit profile"
-        modal.title = "Edit profile"
-        modal.description = "Make changes to your profile here. Click save when you're done."
-        modal.isModal = true
-        modal.pageW = pageW
-        modal.pageH = pageH
-        def modalBody:EVGElement (unwrap modal.bodyEl)
-        modalBody.className = "dg-body"
-        modalBody.addChild((this.form()))
-        modal.build()
+        profileDlg.tid = "dlg-profile"
+        profileDlg.name = "Edit profile"
+        profileDlg.title = "Edit profile"
+        profileDlg.description = "Make changes to your profile here. Click save when you're done."
+        profileDlg.initialFocus = "dlg-name"
 
-        window.tid = "win"
-        window.name = "Filters"
-        window.title = "Filters"
-        window.isModal = false
-        window.pageW = pageW
-        window.pageH = pageH
-        ; Clear of the modal on the vertical axis, so nothing important is
-        ; hidden on first sight. The overlap is meant to be created by DRAGGING
-        ; it over the dialog, which is the point being made — not to be there
-        ; already, covering the Save button.
-        window.x = 578.0
-        window.y = 26.0
-        def winBody:EVGElement (unwrap window.bodyEl)
-        winBody.className = "dg-body"
-        winBody.addChild((this.miniTable()))
-        window.build()
+        shareDlg.tid = "dlg-share"
+        shareDlg.name = "Share"
+        shareDlg.title = "Share link"
+        shareDlg.description = "Anyone who has this link will be able to view this."
+        shareDlg.initialFocus = "dlg-link"
 
-        root = (this.page())
+        termsDlg.tid = "dlg-terms"
+        termsDlg.name = "Terms of service"
+        termsDlg.title = "Terms of service"
+        termsDlg.description = "Please read the terms below. The text scrolls; the header and the buttons stay put."
+        termsDlg.initialFocus = "dlg-terms-body"
+
+        alertDlg.tid = "dlg-alert"
+        alertDlg.name = "Delete account"
+        alertDlg.title = "Are you absolutely sure?"
+        alertDlg.bodyText = "This action cannot be undone. This will permanently delete your account and remove your data from our servers."
+        alertDlg.cancelLabel = "Cancel"
+        alertDlg.actionLabel = "Continue"
+
+        this.dress(name "dlg-name" "Name" savedName)
+        this.dress(username "dlg-username" "Username" savedUser)
+        this.dress(link "dlg-link" "Link" "https://ui.shadcn.com/docs/installation")
+        link.readOnly = true
+        ; A readonly <input> reports its caret at the END before a pointer
+        ; has touched it — the `input_readonly` spec's finding.
+        this.rebuild()
     }
 
-    ; --- what goes INSIDE, which neither window class knows anything about ------
+    ; --- lookups ----------------------------------------------------------------
 
-    fn field:EVGElement (key:string label:string value:string) {
-        return (tree Dlg
-            (Field
-                (Label label)
-                (Input (props (id ("dlg-input-" + key)) (a11yLabel label))
-                    (InputTx value))))
+    fn engine:EVGTextEngine () {
+        return (measurer.getTextEngine())
     }
 
-    fn form:EVGElement () {
-        def f (tree Dlg (Form (props (id "dlg-form"))))
-        f.addChild((this.field("name" "Name" "Albert Einstein")))
-        f.addChild((this.field("username" "Username" "@albert")))
-        f.addChild((tree Dlg
-            (Foot
-                (Ghost (props (id "dlg-cancel") (a11yLabel "Cancel"))
-                    (BtnText "Cancel"))
-                (Solid (props (id "dlg-save") (a11yLabel "Save changes"))
-                    ; Its own class: EVGStyleSheet matches one class token per
-                    ; selector, so `.dg-button-solid .dg-button-text` is not a
-                    ; rule it can express — the ink goes on the text itself.
-                    (BtnText (props (className "dg-button-text dg-button-text-on-solid")) "Save changes")))))
+    ; Which dialog is showing: "profile", "share", "terms", "alert" or "".
+    fn openWhich:string () {
+        if profileDlg.open {
+            return "profile"
+        }
+        if shareDlg.open {
+            return "share"
+        }
+        if termsDlg.open {
+            return "terms"
+        }
+        if alertDlg.open {
+            return "alert"
+        }
+        return ""
+    }
+
+    fn isNarrow:boolean () {
+        return (pageW < 600.0)
+    }
+
+    ; Only the open dialog's fields: a field that is not drawn has no box.
+    fn inputs:[InputCtl] () {
+        def a:[InputCtl]
+        def w:string (this.openWhich())
+        if (w == "profile") {
+            push a name
+            push a username
+        }
+        if (w == "share") {
+            push a link
+        }
+        return a
+    }
+
+    fn inputFor:InputCtl (tid:string) {
+        def all:[InputCtl] (this.inputs())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:InputCtl (itemAt all i)
+            if (c.tid == tid) {
+                return c
+            }
+            i = (i + 1)
+        }
+        return (new InputCtl())
+    }
+
+    fn hasInput:boolean (tid:string) {
+        if ((strlen tid) == 0) {
+            return false
+        }
+        def c:InputCtl (this.inputFor(tid))
+        return (c.tid == tid)
+    }
+
+    sfn byId:EVGElement (el:EVGElement tid:string) {
+        if (el.id == tid) {
+            return el
+        }
+        def i:int 0
+        while (i < (el.getChildCount())) {
+            def kid:EVGElement (DialogDemo.byId((el.getChild(i)) tid))
+            if (kid.id == tid) {
+                return kid
+            }
+            i = (i + 1)
+        }
+        return el
+    }
+
+    ; --- the pieces -------------------------------------------------------------
+
+    fn button:EVGElement (id:string label:string variant:string) {
+        def txCls:string "dg-btn-text"
+        if ((variant == "primary") || (variant == "destructive")) {
+            txCls = "dg-btn-text dg-btn-text-on"
+        }
+        return (tree Dg
+            (Button (props (id id) (className ("dg-btn dg-btn-" + variant)) (a11yLabel label))
+                (BtnTx (props (className txCls)) label)))
+    }
+
+    fn trigger:EVGElement (id:string label:string isOpen:boolean) {
+        def el (tree Dg
+            (Trigger (props (id id) (a11yLabel label))
+                (BtnTx label)))
+        if isOpen {
+            el.a11yExpanded = (EVGA11yTri.yes())
+        } {
+            el.a11yExpanded = (EVGA11yTri.no())
+        }
+        return el
+    }
+
+    fn card:EVGElement (key:string caption:string trig:EVGElement status:string) {
+        def c (tree Dg
+            (Card (props (id ("dg-card-" + key)))
+                (Caption caption)))
+        def st (tree Dg (Stage (child trig)))
+        st.addChild((tree Dg (Status (props (id ("dg-status-" + key))) status)))
+        c.addChild(st)
+        return c
+    }
+
+    ; One text box: the band under the glyphs, the text, and a caret while it
+    ; has the focus and can be typed in.
+    fn boxFor:EVGElement (c:InputCtl) {
+        def box (tree Dg (Box (props (id c.tid) (a11yLabel c.name))))
+        box.a11yValue = c.value
+        box.a11yFocusable = true
+        if c.readOnly {
+            box.a11yReadOnly = "true"
+            box.className = "dg-box dg-box-readonly"
+        }
+        def eng:EVGTextEngine (this.engine())
+        if ((focused == c.tid) && (c.hasSelection())) {
+            def s:double (c.caretXAt(eng (c.selStart())))
+            def e:double (c.caretXAt(eng (c.selEnd())))
+            def band (tree Dg (Band))
+            band.left = (EVGUnit.px((s - c.scrollX)))
+            band.width = (EVGUnit.px((e - s)))
+            box.addChild(band)
+        }
+        box.addChild((tree Dg (Text (props (id (c.tid + "-text"))) (c.glyphText()))))
+        if ((focused == c.tid) && (c.readOnly == false)) {
+            def cx:double (c.caretXAt(eng c.caret))
+            def car (tree Dg (Caret))
+            car.left = (EVGUnit.px((cx - c.scrollX)))
+            box.addChild(car)
+        }
+        return box
+    }
+
+    fn fieldEl:EVGElement (c:InputCtl) {
+        def f (tree Dg (Field (Label c.name)))
+        f.addChild((this.boxFor(c)))
         return f
     }
 
-    ; A different tree entirely, from the same window class.
-    fn miniTable:EVGElement () {
-        def t (tree Dlg (Mini (props (id "win-table"))))
-        t.addChild((this.miniRow("status" "Status" "active")))
-        t.addChild((this.miniRow("plan" "Plan" "Pro")))
-        t.addChild((this.miniRow("seats" "Seats" "12")))
-        t.addChild((tree Dlg (Hint "Drag the title bar to move me.")))
+    fn closeX:EVGElement (id:string) {
+        return (tree Dg
+            (Close (props (id id))
+                (Icon (props (svgPath "M18 6 L6 18 M6 6 L18 18")))))
+    }
+
+    ; The dialog surface: role, modality and labelling on the content, and
+    ; its position — centred on the page, or placed by `laidOut` when narrow.
+    fn contentEl:EVGElement (tid:string role:string title:string titleTid:string descTid:string desc:string) {
+        def c (tree Dg (Content (props (id tid))))
+        c.role = role
+        c.a11yModal = true
+        c.a11yLabel = title
+        c.a11yLabelledBy = titleTid
+        c.a11yDescribedBy = descTid
+        c.a11yDescription = desc
+        def w:double 425.0
+        if (this.isNarrow()) {
+            w = (pageW - 32.0)
+            UiTree.surface(c "free" "start")
+            c.overlayX = 16.0
+            c.overlayY = narrowY
+        } {
+            UiTree.surface(c "center" "center")
+        }
+        c.width = (EVGUnit.px(w))
+        return c
+    }
+
+    fn overlayEl:EVGElement (tid:string) {
+        def o (tree Dg (Overlay (props (id tid))))
+        UiTree.backdrop(o)
+        return o
+    }
+
+    fn headerEl:EVGElement (titleTid:string title:string descTid:string desc:string) {
+        return (tree Dg
+            (Header
+                (Title (props (id titleTid)) title)
+                (Desc (props (id descTid)) desc)))
+    }
+
+    fn profileContent:EVGElement () {
+        def d:DialogCtl profileDlg
+        def descTid:string (d.tid + "-description")
+        def c:EVGElement (this.contentEl((d.contentTid()) "dialog" d.title (d.titleTid()) descTid d.description))
+        c.addChild((this.headerEl((d.titleTid()) d.title descTid d.description)))
+        def body (tree Dg (Body))
+        body.addChild((this.fieldEl(name)))
+        body.addChild((this.fieldEl(username)))
+        c.addChild(body)
+        def foot (tree Dg (Footer))
+        foot.addChild((this.button("dlg-profile-cancel" "Cancel" "outline")))
+        foot.addChild((this.button("dlg-profile-save" "Save changes" "primary")))
+        c.addChild(foot)
+        ; Last, as shadcn renders it: the × is after the content in the DOM,
+        ; so it is the last Tab stop and not the first.
+        c.addChild((this.closeX((d.closeTid()))))
+        return c
+    }
+
+    fn shareContent:EVGElement () {
+        def d:DialogCtl shareDlg
+        def descTid:string (d.tid + "-description")
+        def c:EVGElement (this.contentEl((d.contentTid()) "dialog" d.title (d.titleTid()) descTid d.description))
+        c.addChild((this.headerEl((d.titleTid()) d.title descTid d.description)))
+        def row (tree Dg (Row))
+        row.addChild((this.boxFor(link)))
+        def copyLabel:string "Copy"
+        if copied {
+            copyLabel = "Copied"
+        }
+        def copyBtn:EVGElement (this.button("dlg-share-copy" copyLabel "primary"))
+        copyBtn.a11yLabel = copyLabel
+        row.addChild(copyBtn)
+        c.addChild(row)
+        def note:string ""
+        if copied {
+            note = "Link copied to the clipboard."
+        }
+        c.addChild((tree Dg (Note (props (id "dlg-share-note")) note)))
+        def foot (tree Dg (Footer (props (className "dg-footer dg-footer-start"))))
+        foot.addChild((this.button("dlg-share-done" "Close" "secondary")))
+        c.addChild(foot)
+        c.addChild((this.closeX((d.closeTid()))))
+        return c
+    }
+
+    fn termsText:[string] () {
+        def t:[string]
+        push t "1. Acceptance of terms"
+        push t "By opening this dialog you agree to read a little further than you meant to. Nothing here is binding: it is filler, long enough that the body has to scroll inside the dialog while the title and the buttons stay where they are."
+        push t "2. What the demo does"
+        push t "The body is a box with overflow hidden and a scroll offset. The wheel over it, the arrow keys, Page Up and Page Down, Home and End move that offset; the header and the footer are siblings of the box, so they never move."
+        push t "3. Your content"
+        push t "You keep whatever you typed into the other dialogs. It lives in the page for as long as the page does and goes nowhere else. Reload and it is gone, which is the only data policy a demo should have."
+        push t "4. Changes to these terms"
+        push t "These terms may change whenever the demo does. The version you read is the one drawn on your screen, which is the one that counts."
+        push t "5. Contact"
+        push t "Questions about the dialog go to the repository's issue tracker. Questions about terms of service in general go to a lawyer, who will have a longer body than this one and a much better reason to scroll it."
         return t
     }
 
-    fn miniRow:EVGElement (key:string label:string value:string) {
-        return (tree Dlg
-            (MiniRow (props (id ("win-row-" + key)))
-                (MiniCel label)
-                (Chip value)))
-    }
-
-    ; --- the page under it all ---------------------------------------------------
-    ; Something worth softening. A scrim over an empty page says nothing about
-    ; whether the blur works.
-
-    fn sheetBlock:EVGElement () {
-        def s (tree Dlg (Sheet (props (id "dg-sheet"))))
-        s.addChild((tree Dlg (SheetHd "Team")))
-        def names:[string]
-        push names "Ada Lovelace"
-        push names "Grace Hopper"
-        push names "Alan Turing"
-        push names "Edsger Dijkstra"
-        push names "Barbara McClintock"
-        def roles:[string]
-        push roles "Owner"
-        push roles "Admin"
-        push roles "Member"
-        push roles "Member"
-        push roles "Member"
+    fn termsContent:EVGElement () {
+        def d:DialogCtl termsDlg
+        def descTid:string (d.tid + "-description")
+        def c:EVGElement (this.contentEl((d.contentTid()) "dialog" d.title (d.titleTid()) descTid d.description))
+        c.className = "dg-content dg-content-flush"
+        def head:EVGElement (this.headerEl((d.titleTid()) d.title descTid d.description))
+        head.className = "dg-header dg-header-bar"
+        c.addChild(head)
+        c.addChild((tree Dg (Rule)))
+        def sc (tree Dg (Scroll (props (id "dlg-terms-body") (a11yLabel "Terms"))))
+        sc.scrollTop = termsScroll
+        def paras:[string] (this.termsText())
         def i:int 0
-        while (i < (array_length names)) {
-            ; Bound first: a computed expression cannot be a text child of a
-            ; tree literal directly.
-            def who:string (itemAt names i)
-            def role:string (itemAt roles i)
-            def row (tree Dlg
-                (SheetRow
-                    (Swatch)
-                    (SheetCel who)
-                    (SheetCel (props (className "dg-sheet-cell dg-sheet-role")) role)))
-            s.addChild(row)
+        while (i < (array_length paras)) {
+            def p:string (itemAt paras i)
+            if ((i % 2) == 0) {
+                sc.addChild((tree Dg (Head3 (props (id ("dlg-terms-h" + (to_string i)))) p)))
+            } {
+                sc.addChild((tree Dg (Para (props (id ("dlg-terms-p" + (to_string i)))) p)))
+            }
             i = (i + 1)
         }
-        return s
+        c.addChild(sc)
+        c.addChild((tree Dg (Rule)))
+        def foot (tree Dg (Footer (props (className "dg-footer dg-footer-bar"))))
+        foot.addChild((this.button("dlg-terms-cancel" "Cancel" "outline")))
+        foot.addChild((this.button("dlg-terms-accept" "I agree" "primary")))
+        c.addChild(foot)
+        def x:EVGElement (this.closeX((d.closeTid())))
+        x.className = "dg-close dg-close-flush"
+        c.addChild(x)
+        return c
     }
 
-    ; THE WINDOW'S ROOT GOES FIRST. Overlay surfaces paint in the order the
-    ; tree reaches them, so with the modal first the movable window drew over
-    ; the modal's scrim and card and covered its description — a modal that
-    ; is not on top is not modal. The sheet places the window's trigger to
-    ; the right, so the row still reads "Edit profile, Filters".
-    fn page:EVGElement () {
-        def p (tree Dlg (Page (props (id "page"))))
-        def acts (tree Dlg (Actions (props (id "dg-actions"))))
-        acts.addChild((unwrap window.rootEl))
-        acts.addChild((unwrap modal.rootEl))
-        p.addChild(acts)
-        p.addChild((this.sheetBlock()))
+    fn alertContent:EVGElement () {
+        def d:AlertDialogCtl alertDlg
+        def c:EVGElement (this.contentEl((d.contentTid()) "alertdialog" d.title (d.titleTid()) (d.descTid()) d.bodyText))
+        def head:EVGElement (this.headerEl((d.titleTid()) d.title (d.descTid()) d.bodyText))
+        head.className = "dg-header dg-header-full"
+        c.addChild(head)
+        def foot (tree Dg (Footer))
+        foot.addChild((this.button((d.cancelTid()) d.cancelLabel "outline")))
+        foot.addChild((this.button((d.actionTid()) d.actionLabel "destructive")))
+        c.addChild(foot)
+        return c
+    }
+
+    fn pageBody:EVGElement () {
+        def p (tree Dg (Page (props (id "dg-page"))))
+        p.addChild((this.card("profile" "Dialog with a form"
+            (this.trigger((profileDlg.triggerTid()) profileDlg.name profileDlg.open)) profileStatus)))
+        p.addChild((this.card("share" "Share link with a copy button"
+            (this.trigger((shareDlg.triggerTid()) "Share" shareDlg.open)) "")))
+        p.addChild((this.card("terms" "Scrollable content"
+            (this.trigger((termsDlg.triggerTid()) termsDlg.name termsDlg.open)) termsStatus)))
+        def alertTrig:EVGElement (this.trigger((alertDlg.triggerTid()) alertDlg.name alertDlg.open))
+        alertTrig.className = "dg-btn dg-btn-danger-outline"
+        p.addChild((this.card("alert" "Alert dialog" alertTrig alertStatus)))
+
+        ; The open dialog, last: overlays paint in tree order, so the scrim
+        ; is over every card and the content over the scrim.
+        def w:string (this.openWhich())
+        if (w == "profile") {
+            p.addChild((this.overlayEl((profileDlg.overlayTid()))))
+            p.addChild((this.profileContent()))
+        }
+        if (w == "share") {
+            p.addChild((this.overlayEl((shareDlg.overlayTid()))))
+            p.addChild((this.shareContent()))
+        }
+        if (w == "terms") {
+            p.addChild((this.overlayEl((termsDlg.overlayTid()))))
+            p.addChild((this.termsContent()))
+        }
+        if (w == "alert") {
+            p.addChild((this.overlayEl((alertDlg.overlayTid()))))
+            p.addChild((this.alertContent()))
+        }
         return p
     }
 
-    ; --- the keyboard ------------------------------------------------------------
-    ;
-    ; The page gives the demo its own Tab (`ownsTab`), because the mirror is a
-    ; roving tabindex — one tab stop for the whole canvas — and without a ring
-    ; here Tab from the close button left the dialog for the document body and
-    ; the two fields could not be reached at all.
+    fn rebuild:void () {
+        root = (this.pageBody())
+    }
 
-    ; While the modal is open this IS the ring, and Tab wraps inside it: the
-    ; focus trap a modal owes. Otherwise the triggers and the open window.
-    fn tabRing:[string] () {
+    ; --- layout -----------------------------------------------------------------
+
+    fn markStates:void (el:EVGElement) {
+        el.isHovered = ((strlen hovered) > 0) && (el.id == hovered)
+        el.isFocused = ((strlen focused) > 0) && (el.id == focused)
+        el.isPressed = ((strlen pressed) > 0) && (el.id == pressed)
+        def i:int 0
+        while (i < (el.getChildCount())) {
+            this.markStates((el.getChild(i)))
+            i = (i + 1)
+        }
+    }
+
+    ; Laid out afresh on every ask, like the tabs and form demos. Two things
+    ; are only known AFTER a layout, and each may take a second pass:
+    ;
+    ;   the scrollable body's range — how tall its text came out at this
+    ;   width — so the offset can be clamped to it;
+    ;   on a narrow page, where the dialog goes. Centred on a page four cards
+    ;   tall it would open below the fold, so it is placed over the card
+    ;   whose trigger opened it, kept inside the page.
+    fn laidOut:EVGLayout () {
+        def r:EVGElement (unwrap root)
+        def s:EVGStyleSheet (unwrap sheet)
+        this.markStates(r)
+        s.setViewport(pageW pageH false)
+        s.applyTree(r "")
+        def lay (new EVGLayout())
+        lay.setPageSize(pageW pageH)
+        lay.layout(r)
+        layout = lay
+        def again:boolean false
+        def w:string (this.openWhich())
+        if (w == "terms") {
+            def vp:EVGElement (DialogDemo.byId(r "dlg-terms-body"))
+            if (vp.id == "dlg-terms-body") {
+                def mx:double (vp.scrollHeight - (vp.clientHeight()))
+                if (mx < 0.0) {
+                    mx = 0.0
+                }
+                termsMax = mx
+                if (termsScroll > mx) {
+                    termsScroll = mx
+                }
+                if (vp.scrollTop != termsScroll) {
+                    vp.scrollTop = termsScroll
+                    again = true
+                }
+            }
+        }
+        if ((this.isNarrow()) && ((strlen w) > 0)) {
+            def cardEl:EVGElement (DialogDemo.byId(r ("dg-card-" + w)))
+            def cid:string (this.contentTidOf(w))
+            def ct:EVGElement (DialogDemo.byId(r cid))
+            if ((cardEl.id == ("dg-card-" + w)) && (ct.id == cid)) {
+                def h:double ct.calculatedHeight
+                def y:double ((cardEl.calculatedY + (cardEl.calculatedHeight / 2.0)) - (h / 2.0))
+                if ((y + h) > (pageH - 16.0)) {
+                    y = ((pageH - 16.0) - h)
+                }
+                if (y < 16.0) {
+                    y = 16.0
+                }
+                def dy:double (y - ct.overlayY)
+                if ((dy > 0.5) || (dy < -0.5)) {
+                    narrowY = y
+                    ct.overlayY = y
+                    again = true
+                }
+            }
+        }
+        if again {
+            lay.layout(r)
+        }
+        return lay
+    }
+
+    fn contentTidOf:string (w:string) {
+        if (w == "profile") {
+            return (profileDlg.contentTid())
+        }
+        if (w == "share") {
+            return (shareDlg.contentTid())
+        }
+        if (w == "terms") {
+            return (termsDlg.contentTid())
+        }
+        return (alertDlg.contentTid())
+    }
+
+    ; --- opening and closing ------------------------------------------------------
+
+    ; What each dialog starts from when it opens. shadcn's fields are
+    ; uncontrolled with a `defaultValue`, so Cancel throws an edit away and the
+    ; next open shows what was last SAVED.
+    fn prepare:void (w:string) {
+        if (w == "profile") {
+            this.dress(name "dlg-name" "Name" savedName)
+            this.dress(username "dlg-username" "Username" savedUser)
+            profileStatus = ""
+        }
+        if (w == "share") {
+            copied = false
+            def v:string link.value
+            link.caret = (strlen v)
+            link.anchor = (strlen v)
+        }
+        if (w == "terms") {
+            termsScroll = 0.0
+            termsStatus = ""
+        }
+        if (w == "alert") {
+            alertStatus = ""
+        }
+    }
+
+    fn openFrom:boolean (target:string) {
+        def next:string ""
+        if (target == (profileDlg.triggerTid())) {
+            this.prepare("profile")
+            next = (profileDlg.activate(target))
+        }
+        if (target == (shareDlg.triggerTid())) {
+            this.prepare("share")
+            next = (shareDlg.activate(target))
+        }
+        if (target == (termsDlg.triggerTid())) {
+            this.prepare("terms")
+            next = (termsDlg.activate(target))
+        }
+        if (target == (alertDlg.triggerTid())) {
+            this.prepare("alert")
+            next = (alertDlg.activate(target))
+        }
+        if ((strlen next) == 0) {
+            return false
+        }
+        focused = next
+        this.rebuild()
+        return true
+    }
+
+    ; Close whichever is open, the way its own close button would.
+    fn closeOpen:void () {
+        def w:string (this.openWhich())
+        if (w == "profile") {
+            focused = (profileDlg.closeAndRestore())
+        }
+        if (w == "share") {
+            focused = (shareDlg.closeAndRestore())
+        }
+        if (w == "terms") {
+            focused = (termsDlg.closeAndRestore())
+        }
+        if (w == "alert") {
+            focused = (alertDlg.closeAndRestore())
+        }
+        dragField = ""
+        this.rebuild()
+    }
+
+    fn save:boolean () {
+        savedName = name.value
+        savedUser = username.value
+        saves = (saves + 1)
+        this.closeOpen()
+        profileStatus = ("Saved: " + savedName + " (" + savedUser + ")")
+        this.rebuild()
+        return true
+    }
+
+    fn copyLink:boolean () {
+        copied = true
+        copies = (copies + 1)
+        pendingCopy = link.value
+        this.rebuild()
+        return true
+    }
+
+    ; The text the page should put on the clipboard, once. A canvas cannot
+    ; write to the clipboard; the page that hosts it can, and asks here after
+    ; every press.
+    fn takeCopy:string () {
+        def t:string pendingCopy
+        pendingCopy = ""
+        return t
+    }
+
+    ; --- the Tab ring ---------------------------------------------------------------
+
+    fn ring:[string] () {
         def r:[string]
-        if modal.open {
-            push r "dlg-close"
-            push r "dlg-input-name"
-            push r "dlg-input-username"
-            push r "dlg-cancel"
-            push r "dlg-save"
+        def w:string (this.openWhich())
+        if (w == "profile") {
+            push r "dlg-name"
+            push r "dlg-username"
+            push r "dlg-profile-cancel"
+            push r "dlg-profile-save"
+            push r (profileDlg.closeTid())
             return r
         }
-        push r "dlg-trigger"
-        push r "win-trigger"
-        if window.open {
-            push r "win-titlebar"
-            push r "win-close"
+        if (w == "share") {
+            push r "dlg-link"
+            push r "dlg-share-copy"
+            push r "dlg-share-done"
+            push r (shareDlg.closeTid())
+            return r
         }
+        if (w == "terms") {
+            push r "dlg-terms-body"
+            push r "dlg-terms-cancel"
+            push r "dlg-terms-accept"
+            push r (termsDlg.closeTid())
+            return r
+        }
+        if (w == "alert") {
+            push r (alertDlg.cancelTid())
+            push r (alertDlg.actionTid())
+            return r
+        }
+        push r (profileDlg.triggerTid())
+        push r (shareDlg.triggerTid())
+        push r (termsDlg.triggerTid())
+        push r (alertDlg.triggerTid())
         return r
     }
 
+    ; Trapped while a dialog is open: past either end comes round to the other
+    ; (Radix's FocusScope with `loop` and `trapped`). Otherwise past either end
+    ; the Tab is the page's, and the focus leaves the demo.
     fn tab:boolean (back:boolean) {
-        def r:[string] (this.tabRing())
+        def r:[string] (this.ring())
         def n:int (array_length r)
+        def trapped:boolean ((strlen (this.openWhich())) > 0)
         def at:int -1
         def i:int 0
         while (i < n) {
@@ -269,261 +767,456 @@ class DialogDemo {
             }
             i = (i + 1)
         }
+        def next:int (at + 1)
+        if back {
+            next = (at - 1)
+        }
         if (at < 0) {
+            next = 0
             if back {
-                focused = (itemAt r (n - 1))
-            } {
-                focused = (itemAt r 0)
+                next = (n - 1)
             }
+        }
+        if trapped {
+            if (next < 0) {
+                next = (n - 1)
+            }
+            if (next >= n) {
+                next = 0
+            }
+        }
+        if ((next < 0) || (next >= n)) {
+            focused = ""
+            dragField = ""
+            this.rebuild()
+            return false
+        }
+        focused = (itemAt r next)
+        this.rebuild()
+        return true
+    }
+
+    ; --- input ------------------------------------------------------------------
+
+    fn press:boolean (target:string) {
+        def w:string (this.openWhich())
+        if (w == "") {
+            if (this.openFrom(target)) {
+                return true
+            }
+            ; A press on the page takes the focus off whatever had it.
+            if (focused != "") {
+                focused = ""
+                this.rebuild()
+                return true
+            }
+            return false
+        }
+        if (this.hasInput(target)) {
+            focused = target
+            this.rebuild()
             return true
         }
-        if back {
-            at = (at - 1)
-        } {
-            at = (at + 1)
+        if (w == "profile") {
+            if ((target == "dlg-profile-cancel") || (target == (profileDlg.closeTid()))) {
+                this.closeOpen()
+                return true
+            }
+            if (target == "dlg-profile-save") {
+                return (this.save())
+            }
+            def back:string (profileDlg.activate(target))
+            if ((strlen back) > 0) {
+                focused = back
+                dragField = ""
+                this.rebuild()
+                return true
+            }
+            return false
         }
-        if modal.open {
-            ; Trapped: past either end comes round to the other.
-            if (at < 0) {
-                at = (n - 1)
+        if (w == "share") {
+            if (target == "dlg-share-copy") {
+                focused = target
+                return (this.copyLink())
             }
-            if (at >= n) {
-                at = 0
+            if ((target == "dlg-share-done") || (target == (shareDlg.closeTid()))) {
+                this.closeOpen()
+                return true
             }
-        } {
-            ; Not trapped: past either end, the browser takes the Tab and the
-            ; focus leaves the demo the way it came in.
-            if ((at < 0) || (at >= n)) {
-                return false
+            def back2:string (shareDlg.activate(target))
+            if ((strlen back2) > 0) {
+                focused = back2
+                dragField = ""
+                this.rebuild()
+                return true
             }
+            return false
         }
-        focused = (itemAt r at)
+        if (w == "terms") {
+            if (target == "dlg-terms-accept") {
+                this.closeOpen()
+                termsStatus = "Terms accepted."
+                this.rebuild()
+                return true
+            }
+            if ((target == "dlg-terms-cancel") || (target == (termsDlg.closeTid()))) {
+                this.closeOpen()
+                return true
+            }
+            if (this.inTermsBody(target)) {
+                focused = "dlg-terms-body"
+                this.rebuild()
+                return true
+            }
+            def back3:string (termsDlg.activate(target))
+            if ((strlen back3) > 0) {
+                focused = back3
+                this.rebuild()
+                return true
+            }
+            return false
+        }
+        ; The alert dialog. Its overlay is not in `activate` at all: a press
+        ; outside an AlertDialog does nothing, which is Radix's rule and the
+        ; component's point.
+        def was:boolean alertDlg.open
+        def back4:string (alertDlg.activate(target))
+        if ((strlen back4) > 0) {
+            focused = back4
+            if (was && (target == (alertDlg.actionTid()))) {
+                alertStatus = "Continue pressed. Nothing was deleted: this is a demo."
+            }
+            this.rebuild()
+            return true
+        }
+        return false
+    }
+
+    fn inTermsBody:boolean (target:string) {
+        if (target == "dlg-terms-body") {
+            return true
+        }
+        if ((strlen target) > 11) {
+            return ((substring target 0 11) == "dlg-terms-p") || ((substring target 0 11) == "dlg-terms-h")
+        }
+        return false
+    }
+
+    fn key:boolean (k:string) {
+        return (this.keyWith(k false false))
+    }
+
+    fn ownsKey:boolean (k:string) {
+        return false
+    }
+
+    fn scrollTerms:boolean (to:double) {
+        def v:double to
+        if (v > termsMax) {
+            v = termsMax
+        }
+        if (v < 0.0) {
+            v = 0.0
+        }
+        if (v == termsScroll) {
+            return false
+        }
+        termsScroll = v
+        this.rebuild()
         return true
     }
 
     fn keyWith:boolean (k:string shift:boolean ctrl:boolean) {
         if (k == "Tab") {
-            if (this.tab(shift)) {
-                root = (this.page())
-                return true
+            return (this.tab(shift))
+        }
+        def w:string (this.openWhich())
+        if (k == "Escape") {
+            if (w == "") {
+                return false
+            }
+            ; Escape is the controller's: it closes and names the trigger.
+            def back:string ""
+            if (w == "profile") {
+                back = (profileDlg.keyDown(focused k))
+            }
+            if (w == "share") {
+                back = (shareDlg.keyDown(focused k))
+            }
+            if (w == "terms") {
+                back = (termsDlg.keyDown(focused k))
+            }
+            if (w == "alert") {
+                back = (alertDlg.keyDown(focused k))
+            }
+            focused = back
+            dragField = ""
+            this.rebuild()
+            return true
+        }
+        if (this.hasInput(focused)) {
+            ; Enter in the profile form submits it, as Enter in a <form> does.
+            if ((k == "Enter") && (w == "profile")) {
+                return (this.save())
+            }
+            if (k == "Enter") {
+                return false
+            }
+            def c:InputCtl (this.inputFor(focused))
+            c.keyDownWith(focused k shift ctrl)
+            c.ensureCaretVisible((this.engine()))
+            this.rebuild()
+            return true
+        }
+        if (focused == "dlg-terms-body") {
+            def page:double 200.0
+            if (k == "ArrowDown") {
+                return (this.scrollTerms((termsScroll + 40.0)))
+            }
+            if (k == "ArrowUp") {
+                return (this.scrollTerms((termsScroll - 40.0)))
+            }
+            if ((k == "PageDown") || (k == " ")) {
+                return (this.scrollTerms((termsScroll + page)))
+            }
+            if (k == "PageUp") {
+                return (this.scrollTerms((termsScroll - page)))
+            }
+            if (k == "Home") {
+                return (this.scrollTerms(0.0))
+            }
+            if (k == "End") {
+                return (this.scrollTerms(termsMax))
             }
             return false
         }
-        return (this.key(k))
+        if (UiCtl.activatesOn(k)) {
+            if ((strlen focused) > 0) {
+                return (this.press(focused))
+            }
+        }
+        return false
     }
 
-    ; --- the host ---------------------------------------------------------------
+    fn type:boolean (ch:string) {
+        if ((this.hasInput(focused)) == false) {
+            return false
+        }
+        def c:InputCtl (this.inputFor(focused))
+        def took:boolean (c.typeChar(focused ch))
+        if took {
+            c.ensureCaretVisible((this.engine()))
+            this.rebuild()
+        }
+        return took
+    }
 
-    fn press:boolean (target:string) {
-        def next:string (modal.activate(target))
-        if ((strlen next) > 0) {
-            focused = next
+    ; The wheel: the terms body while that dialog is open. False otherwise,
+    ; and false at an end, so the page gets the gesture back.
+    fn scrollBy:boolean (dy:double) {
+        if (termsDlg.open == false) {
+            return false
         }
-        def next2:string (window.activate(target))
-        if ((strlen next2) > 0) {
-            focused = next2
+        return (this.scrollTerms((termsScroll + dy)))
+    }
+
+    ; --- the pointer in a field -------------------------------------------------
+
+    fn fieldOwning:string (target:string) {
+        def n:int (strlen target)
+        if (n > 5) {
+            if ((substring target (n - 5) n) == "-text") {
+                def base:string (substring target 0 (n - 5))
+                if (this.hasInput(base)) {
+                    return base
+                }
+            }
         }
-        ; The form's own buttons close the modal, which is what Cancel and
-        ; Save both do — the demo saves nothing, and pretending otherwise
-        ; would be a lie in a picture.
-        if (target == "dlg-cancel") {
-            focused = (modal.closeWindow())
+        return target
+    }
+
+    fn fieldBoxOf:EVGElement (target:string) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        return (DialogDemo.byId(r target))
+    }
+
+    fn indexAt:int (target:string px:double) {
+        def c:InputCtl (this.inputFor(target))
+        def box:EVGElement (this.fieldBoxOf(target))
+        if (box.id != target) {
+            return -1
         }
-        if (target == "dlg-save") {
-            focused = (modal.closeWindow())
+        return (InputCtl.indexAtPageX((this.engine()) c box px))
+    }
+
+    fn beginSelection:boolean (rawTarget:string px:double extend:boolean) {
+        def target:string (this.fieldOwning(rawTarget))
+        def took:boolean (this.press(target))
+        def c:InputCtl (this.inputFor(target))
+        if (c.tid != target) {
+            dragField = ""
+            return took
         }
-        ; A click in a field puts the keyboard there.
-        if ((target == "dlg-input-name") || (target == "dlg-input-username")) {
-            focused = target
+        def idx:int (this.indexAt(target px))
+        if (idx < 0) {
+            dragField = ""
+            return true
         }
-        root = (this.page())
+        c.placeCaret(idx extend)
+        dragField = target
+        this.rebuild()
         return true
     }
 
-    fn ownedByModal:boolean (id:string) {
-        if ((strlen id) < 3) {
+    fn extendSelection:boolean (px:double) {
+        if (dragField == "") {
             return false
         }
-        return ((substring id 0 3) == "dlg")
-    }
-
-    fn ownedByWindow:boolean (id:string) {
-        if ((strlen id) < 3) {
+        def c:InputCtl (this.inputFor(dragField))
+        if (c.tid != dragField) {
             return false
         }
-        return ((substring id 0 3) == "win")
+        def idx:int (this.indexAt(dragField px))
+        if ((idx < 0) || (idx == c.caret)) {
+            return false
+        }
+        c.placeCaret(idx true)
+        c.ensureCaretVisible((this.engine()))
+        this.rebuild()
+        return true
     }
 
-    fn key:boolean (k:string) {
-        ; ESCAPE CLOSES THE TOPMOST, and only that. Both controllers used to be
-        ; handed every key, so one Escape closed the modal AND the window, and
-        ; the focus went to whichever answered last — the window's trigger.
-        if (k == "Escape") {
-            if modal.open {
-                focused = (modal.closeWindow())
-            } {
-                if window.open {
-                    focused = (window.closeWindow())
-                } {
-                    return false
+    fn endSelection:boolean () {
+        dragField = ""
+        return false
+    }
+
+    fn selectWordAt:boolean (rawTarget:string px:double) {
+        def target:string (this.fieldOwning(rawTarget))
+        def c:InputCtl (this.inputFor(target))
+        if (c.tid != target) {
+            return false
+        }
+        def idx:int (this.indexAt(target px))
+        if ((idx < 0) || ((strlen c.value) == 0)) {
+            return false
+        }
+        def at:int idx
+        if (at >= (strlen c.value)) {
+            at = ((strlen c.value) - 1)
+        }
+        c.selectWordAt(at)
+        this.rebuild()
+        return true
+    }
+
+    fn cursorAt:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def all:[InputCtl] (this.inputs())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:InputCtl (itemAt all i)
+            def box:EVGElement (DialogDemo.byId(r c.tid))
+            if (box.id == c.tid) {
+                def x0:double (box.calculatedX)
+                def y0:double (box.calculatedY)
+                if ((px >= x0) && (px <= (x0 + (box.calculatedWidth)))) {
+                    if ((py >= y0) && (py <= (y0 + (box.calculatedHeight)))) {
+                        return "text"
+                    }
                 }
             }
-            root = (this.page())
-            return true
+            i = (i + 1)
         }
-        ; Every other key goes to the controller that owns the focus. With the
-        ; modal open that can only be the modal: everything else is inert.
-        if (this.ownedByModal(focused)) {
-            if ((UiCtl.activatesOn(k)) && ((focused == "dlg-cancel") || (focused == "dlg-save"))) {
-                return (this.press(focused))
-            }
-            def next:string (modal.keyDown(focused k))
-            if ((strlen next) > 0) {
-                focused = next
-                root = (this.page())
-                return true
-            }
+        def hit (new EVGHitTest())
+        return (hit.cursorAt(r px py))
+    }
+
+    ; --- the platform text-input session ----------------------------------------
+
+    fn focusedField:string () {
+        if (this.hasInput(focused)) {
+            return focused
+        }
+        return ""
+    }
+
+    fn fieldStateJson:string (tid:string) {
+        def c:InputCtl (this.inputFor(tid))
+        if (c.tid != tid) {
+            return "null"
+        }
+        def box:EVGElement (this.fieldBoxOf(tid))
+        def out:string "{"
+        out = (out + "\"tid\":" + (EVGA11yTree.jsonString(c.tid)))
+        out = (out + ",\"value\":" + (EVGA11yTree.jsonString(c.value)))
+        out = (out + ",\"selStart\":" + (to_string (c.selStart())))
+        out = (out + ",\"selEnd\":" + (to_string (c.selEnd())))
+        out = (out + ",\"kind\":" + (EVGA11yTree.jsonString(c.kind)))
+        out = (out + ",\"maxLength\":" + (to_string c.maxLength))
+        out = (out + ",\"placeholder\":" + (EVGA11yTree.jsonString(c.placeholder)))
+        if c.readOnly {
+            out = (out + ",\"readOnly\":true")
+        }
+        if (box.id == tid) {
+            out = (out + ",\"box\":{\"x\":" + (to_string (to_int (box.calculatedX))))
+            out = (out + ",\"y\":" + (to_string (to_int (box.calculatedY))))
+            out = (out + ",\"w\":" + (to_string (to_int (box.calculatedWidth))))
+            out = (out + ",\"h\":" + (to_string (to_int (box.calculatedHeight))) + "}")
+        }
+        return (out + "}")
+    }
+
+    fn applyEdit:boolean (tid:string v:string selStart:int selEnd:int) {
+        def c:InputCtl (this.inputFor(tid))
+        if (c.tid != tid) {
             return false
         }
-        if modal.open {
-            return false
-        }
-        if (this.ownedByWindow(focused)) {
-            def next2:string (window.keyDown(focused k))
-            if ((strlen next2) > 0) {
-                focused = next2
-                root = (this.page())
-                return true
-            }
-        }
-        return false
-    }
-
-    ; --- moving the window -------------------------------------------------------
-
-    fn beginDrag:boolean (target:string) {
-        def next:string (window.press(target))
-        if ((strlen next) > 0) {
-            focused = next
-            root = (this.page())
-            return true
-        }
-        return false
-    }
-
-    ; MOVE, AND SAY SO. `beginDrag` and `endDrag` both rebuild; this one did
-    ; not, and the window's x and y live on the controller while the tree is
-    ; built from them. So the picture kept the position it was built with and
-    ; the window did not budge until the release rebuilt it — a drag that ends
-    ; in a jump rather than one you can steer.
-    fn dragBy:void (dx:double dy:double) {
-        window.dragBy(dx dy)
-        root = (this.page())
-    }
-
-    fn endDrag:void () {
-        window.release()
-        root = (this.page())
-    }
-
-    fn isDragging:boolean () {
-        return window.dragging
+        c.applyEdit(v selStart selEnd)
+        c.ensureCaretVisible((this.engine()))
+        this.rebuild()
+        return true
     }
 
     fn setHover:void (id:string) {
         hovered = id
+        this.rebuild()
     }
 
     fn setPressed:void (id:string) {
         pressed = id
     }
 
+    ; Focus arriving from the page (a reader, a Tab into the mirror). While a
+    ; dialog is open only its own controls may take it: the page behind is
+    ; inert.
     fn setFocus:void (id:string) {
-        focused = id
-    }
-
-    fn openModal:void () {
-        focused = (modal.openWindow())
-        root = (this.page())
-    }
-
-    fn openWindow:void () {
-        focused = (window.openWindow())
-        root = (this.page())
-    }
-
-    fn markStates:void (el:EVGElement) {
-        el.isHovered = false
-        el.isPressed = false
-        el.isFocused = false
-        if ((strlen el.id) > 0) {
-            if (el.id == hovered) {
-                el.isHovered = true
-            }
-            if (el.id == pressed) {
-                el.isPressed = true
-            }
-            if (el.id == focused) {
-                el.isFocused = true
-            }
+        if ((strlen id) == 0) {
+            focused = ""
+            return
         }
+        def r:[string] (this.ring())
         def i:int 0
-        while (i < (array_length el.children)) {
-            this.markStates((itemAt el.children i))
+        while (i < (array_length r)) {
+            if ((itemAt r i) == id) {
+                focused = id
+                return
+            }
             i = (i + 1)
         }
     }
 
-    fn laidOut:EVGLayout () {
-        def r:EVGElement (unwrap root)
-        def s:EVGStyleSheet (unwrap sheet)
-        s.setViewport(pageW pageH false)
-        this.markStates(r)
-        s.applyTree(r "")
-        def t:EVGTransition transitions
-        t.reconcileTree(r)
-        ; The layout is KEPT, and re-run only when the sheet says something it
-        ; wrote could have moved a box. A hover, a press, a focus ring and a
-        ; transform are all paint-only, and on this page that is most frames.
-        ; `EVGInvalidateTest` is what says the skip is allowed to mean that.
-        ;
-        ; There is no check for "is this the same tree as last time". A tree
-        ; that has just been built has no element the sheet has ever written
-        ; to, and a tree that has just been reconciled has had every element
-        ; overwritten by `adoptFrom` — both report themselves layout-dirty on
-        ; the first pass, so a replaced root lays out without being asked to.
-        if layout {
-            def lay:EVGLayout (unwrap layout)
-            if ((s.layoutClean()) == false) {
-                lay.layout(r)
-            }
-            return lay
-        }
-        def fresh (new EVGLayout())
-        fresh.setPageSize(pageW pageH)
-        layout = fresh
-        fresh.layout(r)
-        return fresh
-    }
-
-    fn tick:boolean (dtMs:double) {
-        def r:EVGElement (unwrap root)
-        def t:EVGTransition transitions
-        t.advanceTree(r dtMs)
-        return (t.busy(r))
-    }
-
-    fn busyNow:boolean () {
-        def r:EVGElement (unwrap root)
-        def t:EVGTransition transitions
-        return (t.busy(r))
-    }
+    ; --- what the page asks for -------------------------------------------------
 
     fn displayListJson:string () {
         def lay:EVGLayout (this.laidOut())
         def r:EVGElement (unwrap root)
         def dl (new EVGDisplayList())
         dl.setTextEngine((lay.getTextEngine()))
+        ; The scrollable body shows a thin thumb, so it looks like what it is.
+        dl.setScrollbars(true)
         dl.build(r)
         return (dl.toJson())
     }
@@ -533,15 +1226,6 @@ class DialogDemo {
         def r:EVGElement (unwrap root)
         def hit (new EVGHitTest())
         return (hit.idAt(r px py))
-    }
-
-    ; What the pointer should look like here. The stylesheet says it — the
-    ; title bar carries `cursor: move` — and the page only has to ask.
-    fn cursorAt:string (px:double py:double) {
-        this.laidOut()
-        def r:EVGElement (unwrap root)
-        def hit (new EVGHitTest())
-        return (hit.cursorAt(r px py))
     }
 
     fn a11yJson:string (generation:int focusId:string) {
@@ -570,20 +1254,19 @@ class DialogDemo {
         return (s.getError(i))
     }
 
+    fn widthPx:double () {
+        return pageW
+    }
+
     fn heightPx:double () {
         return pageH
     }
 
     fn summary:string () {
-        def a:string "closed"
-        if modal.open {
-            a = "open"
+        def w:string (this.openWhich())
+        if (w == "") {
+            w = "closed"
         }
-        def b:string "closed"
-        if window.open {
-            b = "open"
-        }
-        return (((((("modal " + a) + ", window ") + b) + " at ")
-            + (to_string window.x)) + "," + (to_string window.y))
+        return (w + "|" + focused + "|" + name.value + "|" + username.value + "|" + profileStatus)
     }
 }

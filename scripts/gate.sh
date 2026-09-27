@@ -49,6 +49,7 @@ SUITES=(
   ui:accordion:check
   ui:separator:check
   ui:tabs:check
+  ui:dialog:check
   ui:semantics:check
   ui:input:bench
   ui:layout:check

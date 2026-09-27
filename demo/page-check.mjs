@@ -882,63 +882,109 @@ console.log("--- the controls demo, and the modifier the page nearly dropped ---
   }
 }
 
-console.log("--- the window follows the pointer ---");
+console.log("--- the dialog opens, takes typing, and gives the focus back ---");
 {
-  // Reported: the window only jumped at the end of a drag. `dragBy` moved the
-  // controller and was the only one of the three gesture methods that did not
-  // rebuild the tree, so the painted position stayed where it was built until
-  // the release rebuilt it.
+  // The Node check (`ui:dialog:check`) drives DialogCtl through the demo; this
+  // is the same thing through the PAGE: a real click on the drawn trigger, a
+  // real keyboard into the text session, Escape through the bridge, and Copy
+  // reaching the clipboard — the doors a Node check never opens.
   await page.click('#demos input[value="dialog"]');
   await page.waitForTimeout(300);
-  // The modal opens over the window and its scrim takes every press, as a
-  // modal's should, so it is closed first. (The window used to draw OVER the
-  // modal, which is why this test could drag it with the modal open.)
-  {
-    const cancel = await page.getByRole("button", { name: "Cancel", exact: true }).boundingBox();
-    ok("the modal is open, and on top", !!cancel);
-    if (cancel) await page.mouse.click(cancel.x + cancel.width / 2, cancel.y + cancel.height / 2);
+  const centreOf = (id) => page.evaluate((x) => {
+    const el = document.querySelector(`[data-a11y-id="${x}"]`);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  }, id);
+  const st = () => page.evaluate(() => window.__dlgState());
+  const trig = await centreOf("dlg-profile-trigger");
+  ok("the Edit profile trigger is on the page", !!trig);
+  if (trig) {
+    await page.mouse.click(trig.x, trig.y);
     await page.waitForTimeout(200);
+    let s = await st();
+    ok("clicking it opens the dialog with the focus in Name", s.open === "profile" && s.focus === "dlg-name", JSON.stringify(s));
+    const modal = await page.evaluate(() => {
+      const el = document.querySelector('[data-a11y-id="dlg-profile-content"]');
+      const lab = el && document.getElementById(el.getAttribute("aria-labelledby"));
+      const desc = el && document.getElementById(el.getAttribute("aria-describedby"));
+      const behind = document.querySelector('[data-a11y-id="dlg-share-trigger"]');
+      return el ? [el.getAttribute("role"), el.getAttribute("aria-modal"), lab && lab.textContent,
+        desc && desc.textContent, !behind || !!behind.closest("[aria-hidden=true]") || behind.inert].join("|") : null;
+    });
+    ok("the mirror says dialog, modal, labelled, described, and hides the page behind",
+      modal === "dialog|true|Edit profile|Make changes to your profile here. Click save when you're done.|true", modal);
+    await page.keyboard.press("End");
+    await page.keyboard.type(" Jr");
+    await page.waitForTimeout(150);
+    const val = await page.evaluate(() => window.__fieldState("dlg-name").value);
+    ok("typing reaches Name", val === "Pedro Duarte Jr", val);
+    await page.keyboard.press("Tab");
+    await page.waitForTimeout(120);
+    s = await st();
+    ok("Tab from Name goes to Username", s.focus === "dlg-username", s.focus);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(150);
+    s = await st();
+    ok("Escape from inside a field closes it and returns the focus to the trigger",
+      s.open === "" && s.focus === "dlg-profile-trigger", JSON.stringify(s));
   }
-  const box = await (await page.$("#stage canvas")).boundingBox();
-  const at = () => page.evaluate(() => {
-    const l = JSON.parse(window.__lastList || "{}");
-    const c = (l.cmds || []).find((x) => Math.abs(x.w - 300) < 2 && Math.abs(x.h - 194) < 2);
-    return c ? [c.x, c.y] : null;
-  });
-  await page.mouse.move(box.x + 700, box.y + 45);
-  await page.waitForTimeout(120);
-  const cursor = await page.evaluate(() => document.querySelector("#stage canvas").style.cursor);
-  ok("the title bar says it can be moved", cursor === "move", cursor);
-
-  const start = await at();
-  await page.mouse.down();
-  const seen = [];
-  for (const d of [20, 40, 60]) {
-    await page.mouse.move(box.x + 700 + d, box.y + 45);
-    await page.waitForTimeout(60);
-    seen.push((await at())[0]);
+  const share = await centreOf("dlg-share-trigger");
+  if (share) {
+    await page.mouse.click(share.x, share.y);
+    await page.waitForTimeout(200);
+    const copy = await centreOf("dlg-share-copy");
+    ok("Share opens with a Copy button", !!copy);
+    if (copy) {
+      await page.mouse.click(copy.x, copy.y);
+      await page.waitForTimeout(200);
+      const s = await st();
+      const clip = await page.evaluate(() => navigator.clipboard.readText().catch(() => ""));
+      ok("Copy puts the link on the clipboard", s.copied === "https://ui.shadcn.com/docs/installation" && clip === s.copied,
+        `${s.copied} / ${clip}`);
+    }
+    // A click on the backdrop, well outside the card.
+    const box0 = await (await page.$("#stage canvas")).boundingBox();
+    await page.mouse.click(box0.x + 12, box0.y + 12);
+    await page.waitForTimeout(150);
+    ok("a click on the backdrop closes it", (await st()).open === "");
   }
-  await page.mouse.up();
-  // EVERY step moves it, not just the last: three distinct positions, each
-  // one further along than the one before.
-  ok("it moves at every step of the drag",
-    seen.length === 3 && seen[0] > start[0] && seen[1] > seen[0] && seen[2] > seen[1],
-    `${start[0]} -> ${seen.join(" -> ")}`);
+  const alertT = await centreOf("dlg-alert-trigger");
+  if (alertT) {
+    await page.mouse.click(alertT.x, alertT.y);
+    await page.waitForTimeout(200);
+    const box0 = await (await page.$("#stage canvas")).boundingBox();
+    await page.mouse.click(box0.x + 12, box0.y + 12);
+    await page.waitForTimeout(150);
+    ok("the alert dialog stays open on a backdrop click", (await st()).open === "alert");
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(150);
+    ok("and Escape closes it", (await st()).open === "");
+  }
 }
 
-console.log("--- the title bar is rounded only at the top ---");
+console.log("--- the scrollable dialog's footer is rounded only at the bottom ---");
 {
-  // `border-radius: 11px 11px 0 0` — the declaration that makes a strip sit
-  // flush against what is under it, and which could not be written at all
-  // while a box had one radius.
+  // Four radii, drawn: `border-radius: 0 0 9px 9px` — a strip flush against
+  // what is above it. (This was checked on the movable window's title bar,
+  // which left the page with the window.)
+  const t = await page.evaluate(() => {
+    const el = document.querySelector('[data-a11y-id="dlg-terms-trigger"]');
+    const r = el.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  });
+  await page.mouse.click(t.x, t.y);
+  await page.waitForTimeout(200);
   const rc = await page.evaluate(() => {
     const l = JSON.parse(window.__lastList || "{}");
-    const c = (l.cmds || []).find((x) => Math.abs(x.w - 298) < 2 && Math.abs(x.h - 40) < 2);
+    const c = (l.cmds || []).find((x) => Array.isArray(x.rc) && x.rc[0] === 0 && x.rc[1] === 0 && x.rc[2] > 0);
     return c ? c.rc : null;
   });
   ok("the bar carries four corners", Array.isArray(rc), JSON.stringify(rc));
-  ok("rounded at the top, square at the bottom",
-    rc && rc[0] > 0 && rc[1] > 0 && rc[2] === 0 && rc[3] === 0, JSON.stringify(rc));
+  ok("square at the top, rounded at the bottom",
+    rc && rc[0] === 0 && rc[1] === 0 && rc[2] > 0 && rc[3] > 0, JSON.stringify(rc));
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(100);
 }
 
 console.log("--- the effects demo has a switch per effect ---");

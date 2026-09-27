@@ -26,6 +26,15 @@ class DialogCtl extends UiCtl {
     def open:boolean false
     def title:string ""
     def closeLabel:string "Close"
+    ; `Dialog.Description`, which Radix wires to the content with
+    ; `aria-describedby`. Empty publishes nothing, as an absent Description
+    ; does.
+    def description:string ""
+    ; Where the focus lands on open. Radix moves it to the FIRST focusable
+    ; thing in the content; in the conformance host that is the close button,
+    ; which is the default here. A host whose content has fields before the
+    ; close button (shadcn draws × last) names its first one.
+    def initialFocus:string ""
     def triggerEl:EVGElement
     def overlayEl:EVGElement
     def contentEl:EVGElement
@@ -130,6 +139,9 @@ class DialogCtl extends UiCtl {
     fn openAndFocus:string () {
         open = true
         this.build()
+        if ((strlen initialFocus) > 0) {
+            return initialFocus
+        }
         return (this.closeTid())
     }
 
@@ -150,6 +162,14 @@ class DialogCtl extends UiCtl {
             return ""
         }
         if (target == (this.closeTid())) {
+            if open {
+                return (this.closeAndRestore())
+            }
+        }
+        ; A press on the overlay is a press outside the content, and a modal
+        ; Radix Dialog dismisses on that (`onPointerDownOutside`). The alert
+        ; dialog is the one that does not — see AlertDialogCtl.
+        if (target == (this.overlayTid())) {
             if open {
                 return (this.closeAndRestore())
             }
@@ -244,6 +264,7 @@ class DialogCtl extends UiCtl {
         def contentRow:UiRow (UiRow.of((this.contentTid()) (EVGA11yRole.dialog()) ""))
         contentRow.state = word
         contentRow.modal = true
+        contentRow.description = description
         push out contentRow
 
         def titleRow:UiRow (UiRow.of((this.titleTid()) (EVGA11yRole.none()) ""))

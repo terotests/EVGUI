@@ -967,28 +967,28 @@
           <section data-for="dialog">
             <h2>what to try</h2>
             <p class="hint">
-              <strong>Drag the Filters window by its title bar.</strong> It is the
-              same class as the dialog beside it with one flag different — and it
-              is the one you can push aside to see what is underneath, which is
-              the thing a modal cannot do.
+              <strong>Edit profile</strong>, then type: Name and Username are real
+              fields (the browser does the editing, as on the form demos). Tab
+              stays inside the dialog &mdash; the fields, Cancel, Save changes,
+              &times; &mdash; and <strong>Escape</strong>, &times;, Cancel or a click
+              on the dimmed page closes it and hands the focus back to the trigger.
+              Save closes it and says what was saved; Cancel throws the edit away.
             </p>
             <p class="hint">
-              <strong>Escape closes the topmost one only.</strong> The modal is
-              on top while it is open, and Tab stays inside it &mdash; Close, the
-              two fields, Cancel, Save &mdash; until it closes and hands the focus
-              back to <em>Edit profile</em>. Escape again closes the window.
+              <strong>Share</strong> &rarr; <strong>Copy</strong> puts the link on
+              your clipboard and says <em>Copied</em>. The link field is read-only:
+              you can select it, not change it.
             </p>
             <p class="hint">
-              Then drag the window, or Tab to its title bar and use the
-              <strong>arrow keys</strong>: a gesture only a pointer can make is a
-              gesture a keyboard cannot make, so the window moves 16&nbsp;px a
-              press.
+              <strong>Terms of service</strong> scrolls <em>inside</em> the dialog
+              &mdash; wheel, arrow keys, Page Up/Down, Home, End &mdash; while its
+              title and buttons stay put.
             </p>
             <p class="hint">
-              The page behind the dialog is <strong>blurred, not just dimmed</strong>
-              — <code>backdrop-filter: blur(10px)</code>, painted by copying what
-              is behind the scrim and running the same three-box kernel a browser
-              uses. Both are declared, so a backend without the blur still dims.
+              <strong>Delete account</strong> opens an alert dialog: the focus
+              starts on Cancel, not on the destructive button, and a click on the
+              backdrop does <em>not</em> dismiss it (Escape does), as in Radix&rsquo;s
+              AlertDialog. Continue deletes nothing.
             </p>
           </section>
           <section data-for="message">
@@ -1079,14 +1079,14 @@
             animation, which EVG&rsquo;s transitions do not cover.
           </p>
           <p class="note" data-for="dialog">
-            <strong>Anything can go inside.</strong> <code>WindowCtl</code> owns a
-            frame and a title bar; <code>bodyEl</code> is an ordinary
-            <code>EVGElement</code> the caller fills, and <code>build()</code>
-            re-makes the chrome around it without touching it. Here one holds a
-            form and the other a small table, from two unrelated tree literals.
-            The older <code>EVGWindow</code> could hold neither: its vocabulary is
-            label, button, radio, checkbox, and one rectangle whose pixels the
-            owner paints by hand.
+            <strong>The behaviour is the controllers&rsquo;.</strong> Open and
+            closed, where the focus goes on open, Escape, the overlay press and the
+            focus back to the trigger are <code>DialogCtl</code>&rsquo;s and
+            <code>AlertDialogCtl</code>&rsquo;s (<code>src/</code>), which the
+            conformance specs measure against <code>@radix-ui/react-dialog</code>
+            and <code>@radix-ui/react-alert-dialog</code>. The page adds the trapped
+            Tab ring and the clipboard write; the look is shadcn&rsquo;s, read from
+            its source.
           </p>
           <p class="note" data-for="motion">
             <strong>Hover the cards at the bottom.</strong> Nothing in
@@ -1268,8 +1268,8 @@
  "dialog": {
   "title": "Dialog",
   "src": "DialogDemo",
-  "caption": "WindowCtl · modal and movable, one flag apart",
-  "desc": "ReUI's dialog over a movable window. Both are WindowCtl with one flag different: the modal blurs the page behind it and keeps the focus until Escape closes it; the other can be dragged aside by its title bar or moved with the arrow keys."
+  "caption": "DialogCtl, AlertDialogCtl · measured against Radix Dialog and AlertDialog",
+  "desc": "ReUI's dialog patterns, one card each: an Edit profile form with real fields, a Share link with Copy, a dialog whose body scrolls, and an alert dialog. DialogCtl and AlertDialogCtl own open/close, the focus in and back, Escape and the overlay press, following Radix's Dialog and AlertDialog; the page traps Tab inside the open one."
  },
  "motion": {
   "title": "Motion",

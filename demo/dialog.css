@@ -1,400 +1,356 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * The dialog and the window, as an EVG stylesheet.
+ * Dialog, as an EVG stylesheet: shadcn / ReUI's look — zinc greys, a white
+ * card with a soft shadow over a dimmed page, 36px buttons.
  *
- * Class-first: every class here is one DialogDemo.rgr or WindowCtl.rgr writes,
- * and neither carries appearance of its own. `ui-dialog-*` is the modal's
- * chrome and `ui-window-*` the movable one's — the same class writes both, and
- * the sheet is where they stop looking alike.
- *
- * EVGStyleSheet matches ONE class token per selector, so a variant is its own
- * token on the same element rather than a compound rule.
+ * Every class here is one DialogDemo.rgr writes (`dg-*`); DialogCtl and
+ * AlertDialogCtl own the behaviour and none of the look. Class-first, one
+ * token per selector, no descendant selectors: a variant is its own token on
+ * the same element.
  */
+
+/* --- the page: one card per pattern ------------------------------------------- */
 
 .dg-page {
   display: flex;
-  flex-direction: column;
-  background-color: #f4f4f5;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
   padding: 24px;
   width: 900px;
-  height: 560px;
+  height: 540px;
+  background-color: #ffffff;
 }
 
-/* --- the triggers -----------------------------------------------------------------
-   A row of their own above the sheet. Without a rule they were bare text under
-   the card. The WINDOW's root comes first in the tree, so that the modal —
-   reached later — paints over it; it is placed at the right of "Edit profile"
-   by hand so the row still reads "Edit profile, Filters". (`row-reverse` would
-   say that in one word; EVG lays these out in tree order regardless.) */
-.dg-actions {
-  position: relative;
+.dg-card {
   display: flex;
-  flex-direction: row;
-  height: 36px;
-  margin-bottom: 14px;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  width: 418px;
+  height: 222px;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  background-color: #ffffff;
 }
 
-.ui-dialog { display: flex; flex-direction: row; }
-
-.ui-window {
-  position: absolute;
-  left: 122px;
-  top: 0px;
-  display: flex;
-  flex-direction: row;
+.dg-caption {
+  height: 40px;
+  line-height: 40px;
+  padding: 0 16px;
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 500;
+  border-bottom: 1px solid #f4f4f5;
 }
 
-.ui-dialog-trigger, .ui-window-trigger {
+.dg-stage {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: center;
-  border: 1px solid #e4e4e7;
-  border-radius: 8px;
-  background-color: #ffffff;
-  color: #18181b;
-  font-size: 14px;
+  gap: 10px;
+  flex-grow: 1;
+  padding: 16px 24px;
+}
+
+/* What happened last, under the trigger: "Saved: …". A live region, so a
+ * reader hears it too. */
+.dg-status {
+  color: #15803d;
+  font-size: 12px;
+  font-weight: 500;
+  height: 16px;
+  line-height: 16px;
   text-align: center;
-  line-height: 34px;
-  width: 112px;
+}
+
+/* --- buttons ------------------------------------------------------------------ */
+
+.dg-btn {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
   height: 36px;
+  padding: 0 16px;
+  border: 1px solid #18181b;
+  border-radius: 8px;
+  background-color: #18181b;
   cursor: pointer;
   transition: background-color 120ms ease-out, border-color 120ms ease-out;
 }
 
-.ui-dialog-trigger:hover, .ui-window-trigger:hover { background-color: #f4f4f5; }
-.ui-dialog-trigger:focus, .ui-window-trigger:focus { border-color: #18181b; }
-
-/* --- the page underneath -------------------------------------------------------
-   Something worth softening. A scrim over a blank page proves nothing about a
-   blur, so there is a list of names under it with hard edges and colour. */
-.dg-sheet {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border: 1px solid #e4e4e7;
-  border-radius: 12px;
-  background-color: #ffffff;
-  padding: 18px 20px;
-  width: 810px;
-}
-
-.dg-sheet-head {
-  color: #18181b;
-  font-size: 16px;
-  font-weight: bold;
-  height: 24px;
-}
-
-.dg-sheet-row {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 12px;
-  height: 34px;
-}
-
-.dg-swatch {
-  border-radius: 999px;
-  background-color: #a78bfa;
-  width: 22px;
-  height: 22px;
-}
-
-.dg-sheet-cell { color: #18181b; font-size: 14px; width: 240px; height: 20px; }
-.dg-sheet-role { color: #71717a; width: 120px; }
-
-/* --- the scrim -------------------------------------------------------------------
-   Both at once, and on purpose. The blur is what a backend may not have; the
-   dim is what it falls back to. Painted in that order, a target with no blur
-   still darkens the page instead of showing nothing at all. */
-.ui-dialog-scrim {
-  background-color: rgba(9, 9, 11, 0.45);
-  backdrop-filter: blur(10px);
-}
-
-/* --- the modal ---------------------------------------------------------------- */
-.ui-dialog-content {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  border-radius: 14px;
-  background-color: #ffffff;
-  padding: 22px 24px;
-  width: 420px;
-}
-
-.ui-dialog-titlebar {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  height: 30px;
-}
-
-/* A modal's handle is not one: it holds the title and answers nothing.
- * The card is 420 wide with 24px of padding, so the row has 372 to share
- * between this and the 28px close button — 336 + 28 leaves eight to spare.
- * At 380 the close button wrapped onto a second line and landed on top of
- * the description. */
-.ui-dialog-handle {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  width: 336px;
-  height: 30px;
-}
-
-.ui-dialog-title {
+.dg-btn-text {
   color: #09090b;
-  font-size: 19px;
-  font-weight: bold;
-  width: 330px;
-  height: 26px;
-}
-
-.ui-dialog-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  color: #52525b;
-  font-size: 17px;
-  width: 28px;
-  height: 28px;
+  font-size: 14px;
+  font-weight: 500;
+  height: 20px;
+  line-height: 20px;
   text-align: center;
-  transition: background-color 120ms ease-out;
+}
+.dg-btn-text-on { color: #fafafa; }
+.dg-btn-text-muted { color: #18181b; }
+
+.dg-btn-outline {
+  border-color: #e4e4e7;
+  background-color: #ffffff;
+  shadow-color: rgba(0, 0, 0, 0.05);
+  shadow-radius: 2px;
+  shadow-offset-y: 1px;
+}
+.dg-btn-outline:hover { background-color: #f4f4f5; }
+.dg-btn-outline:focus { border-color: #a1a1aa; }
+
+.dg-btn-danger-outline {
+  border-color: #e4e4e7;
+  background-color: #ffffff;
+  shadow-color: rgba(0, 0, 0, 0.05);
+  shadow-radius: 2px;
+  shadow-offset-y: 1px;
+}
+.dg-btn-danger-outline:hover { background-color: #fef2f2; border-color: #fecaca; }
+.dg-btn-danger-outline:focus { border-color: #f87171; }
+
+.dg-btn-primary:hover { background-color: #27272a; border-color: #27272a; }
+.dg-btn-primary:focus { border-color: #a1a1aa; }
+
+.dg-btn-secondary {
+  border-color: #f4f4f5;
+  background-color: #f4f4f5;
+}
+.dg-btn-secondary:hover { background-color: #e4e4e7; border-color: #e4e4e7; }
+.dg-btn-secondary:focus { border-color: #a1a1aa; }
+
+.dg-btn-destructive {
+  border-color: #dc2626;
+  background-color: #dc2626;
+}
+.dg-btn-destructive:hover { background-color: #b91c1c; border-color: #b91c1c; }
+.dg-btn-destructive:focus { border-color: #7f1d1d; }
+
+/* --- the dialog ---------------------------------------------------------------- */
+
+/* shadcn's `bg-black/50`: a dim, over the whole demo. */
+.dg-overlay {
+  background-color: rgba(0, 0, 0, 0.5);
 }
 
-.ui-dialog-close:hover { background-color: #f4f4f5; }
-.ui-dialog-close:focus { background-color: #e4e4e7; }
+/* `sm:max-w-[425px]`, `p-6`, `gap-4`, `rounded-lg`, `shadow-lg`. The width
+ * is written by the tree (425, or the page less 16px each side when narrow). */
+.dg-content {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  background-color: #ffffff;
+  shadow-color: rgba(0, 0, 0, 0.18);
+  shadow-radius: 16px;
+  shadow-offset-y: 8px;
+}
 
-.ui-dialog-description {
+/* The scrollable one: header and footer are bars of their own, and the body
+ * between them runs edge to edge. */
+.dg-content-flush {
+  gap: 0px;
+  padding: 0px;
+}
+
+.dg-header {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 8px;
+  padding: 0 24px 0 0;
+}
+
+/* No × to keep clear of: the alert dialog. */
+.dg-header-full { padding: 0px; }
+
+.dg-header-bar {
+  padding: 24px 48px 16px 24px;
+}
+
+/* The lines above and below the scrolling body. Elements rather than
+ * one-sided borders, so each is a plain 1px strip whatever the box does. */
+.dg-rule { height: 1px; background-color: #e4e4e7; }
+
+.dg-title {
+  color: #09090b;
+  font-size: 18px;
+  font-weight: 600;
+  height: 24px;
+  line-height: 24px;
+}
+
+.dg-desc {
   color: #71717a;
   font-size: 14px;
-  width: 372px;
-  height: 40px;
+  height: auto;
+  line-height: 20px;
 }
 
-.ui-dialog-body { display: flex; flex-direction: column; width: 372px; }
-
-/* --- the movable window ---------------------------------------------------------
-   A window is a dialog with a smaller frame and a title bar you can hold. The
-   shadow is heavier than the modal's: nothing dims behind it, so the shadow is
-   the only thing lifting it off the page. */
-.ui-window-content {
+.dg-body {
   display: flex;
   flex-direction: column;
-  border: 1px solid #d4d4d8;
-  border-radius: 12px;
-  background-color: #ffffff;
-  width: 300px;
+  flex-wrap: nowrap;
+  gap: 16px;
+  padding: 8px 0;
 }
 
-/* The handle. It looks like one — a strip with its own fill and its own
- * cursor-worth of affordance — because a title bar that looks like a heading
- * is a title bar nobody tries to drag. */
-/* The strip across the top: a container, and not itself a control. The HANDLE
- * inside it is the button, and the close button is its sibling — a button may
- * not contain another one, which axe calls `nested-interactive` and which is
- * what the first version of this was. */
-.ui-window-titlebar {
+.dg-footer {
   display: flex;
   flex-direction: row;
-  align-items: center;
-  /* TOP CORNERS ONLY. It was 11px on all four, so the strip curved away from
-   * the body underneath it and left two little notches in the middle of the
-   * window — a bar that is flush at the bottom cannot be written with one
-   * radius, which is why EVG has four now. */
-  border-radius: 11px 11px 0 0;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.dg-footer-start { justify-content: flex-start; }
+
+/* The bar at the bottom of the scrollable dialog: muted, and rounded only at
+ * the BOTTOM so it sits flush under the border above it — four radii, which
+ * a strip against a straight edge needs. */
+.dg-footer-bar {
+  padding: 16px 24px;
+  border-radius: 0 0 9px 9px;
   background-color: #fafafa;
-  padding: 0 8px 0 0;
-  height: 40px;
 }
 
-/* Everything left of the close button, so the whole bar is grabbable. The
- * window is 300 wide with a 1px border, so the head has 298; its own 8px of
- * right padding leaves 290, and the close button takes 26 of those. 264 is
- * the rest, exactly — at 258 there was a six-pixel dead strip in the middle
- * of the title bar that looked like a gap and grabbed nothing. */
-.ui-window-handle {
+/* The × in the corner: `absolute top-4 right-4`, lucide's X at 70%. An
+ * absolute box is placed from its parent's CONTENT corner here, inside the
+ * 24px padding, so 14px from the card's edge is -10px. The flush (scrollable)
+ * dialog has no padding and says 14px. */
+.dg-close {
+  position: absolute;
+  top: -10px;
+  right: -10px;
   display: flex;
   flex-direction: row;
-  align-items: center;
-  border-radius: 11px 0 0 0;
-  /* The affordance the comment above the bar has been claiming all along.
-   * `cursor` is a real inherited property in EVG now, so the title on the bar
-   * does not have to repeat it. */
-  cursor: move;
-  padding: 0 0 0 14px;
-  width: 264px;
-  height: 40px;
-  transition: background-color 120ms ease-out;
-}
-
-.ui-window-handle:hover  { background-color: #f4f4f5; }
-.ui-window-handle:active { background-color: #e4e4e7; }
-.ui-window-handle:focus  { background-color: #ede9fe; }
-
-/* Held. Set by the controller rather than by `:active`, because a drag
- * continues while the pointer is outside the bar and `:active` does not. */
-.ui-window-handle-dragging { background-color: #ddd6fe; }
-
-.ui-window-title {
-  color: #18181b;
-  font-size: 14px;
-  font-weight: bold;
-  width: 246px;
-  height: 20px;
-}
-
-.ui-window-close {
-  display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
-  color: #52525b;
-  font-size: 16px;
-  width: 26px;
-  height: 26px;
-  text-align: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  cursor: pointer;
   transition: background-color 120ms ease-out;
 }
+.dg-close-flush { top: 14px; right: 14px; }
+.dg-close:hover { background-color: #f4f4f5; }
+.dg-close:focus { background-color: #e4e4e7; }
 
-.ui-window-close:hover { background-color: #e4e4e7; }
-.ui-window-close:focus { background-color: #d4d4d8; }
-
-/* 14px each side, the same indent the handle gives the title — so the rows
- * below line up with the window's name instead of starting at its border.
- * 298 inside the border less 28 of padding leaves 270. */
-.ui-window-body {
-  display: flex;
-  flex-direction: column;
-  padding: 12px 14px;
-  width: 270px;
+.dg-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: #71717a;
+  stroke-width: 2;
 }
 
-/* The demo's own body class, on both windows: what is inside is the caller's
- * business, and the frame does not style it. */
-.dg-body { display: flex; flex-direction: column; }
+/* --- fields -------------------------------------------------------------------- */
 
-/* --- the form ---------------------------------------------------------------------- */
-.dg-form { display: flex; flex-direction: column; gap: 14px; width: 372px; }
+.dg-field {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
 
-.dg-field { display: flex; flex-direction: column; gap: 6px; }
+.dg-label { color: #09090b; font-size: 14px; font-weight: 500; height: 16px; line-height: 16px; }
 
-.dg-label { color: #09090b; font-size: 14px; font-weight: bold; height: 20px; }
-
-/* `flex-direction: row` is load-bearing: EVG's flex default is COLUMN (as in
- * Yoga), not CSS's row, so without it `align-items: center` centred the value
- * sideways and left it stuck to the top of the 40px box. */
-.dg-input {
+.dg-box {
   display: flex;
   flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
-  border: 1px solid #e4e4e7;
+  position: relative;
   border-radius: 8px;
+  border: 1px solid #e4e4e7;
   background-color: #ffffff;
   padding: 0 12px;
-  width: 370px;
-  height: 40px;
+  height: 36px;
+  cursor: text;
   transition: border-color 120ms ease-out;
 }
+.dg-box:hover { border-color: #d4d4d8; }
+.dg-box:focus {
+  border-color: #a1a1aa;
+  shadow-color: rgba(161, 161, 170, 0.45);
+  shadow-radius: 3px;
+}
+.dg-box-readonly {
+  flex-grow: 1;
+  flex-basis: 0px;
+  min-width: 0px;
+  overflow: hidden;
+  background-color: #fafafa;
+}
 
-.dg-input:hover { border-color: #d4d4d8; }
-.dg-input:focus { border-color: #18181b; }
+.dg-text { color: #09090b; font-family: Arial; font-size: 14px; height: 20px; line-height: 20px; }
 
-.dg-input-text { color: #18181b; font-size: 14px; width: 340px; height: 20px; }
+.dg-caret {
+  position: absolute;
+  top: 8px;
+  width: 1px;
+  height: 20px;
+  background-color: #09090b;
+}
 
-.dg-foot {
+.dg-band {
+  position: absolute;
+  top: 8px;
+  height: 20px;
+  background-color: #bfdbfe;
+}
+
+/* The link and its Copy button, side by side. */
+.dg-row {
   display: flex;
   flex-direction: row;
-  justify-content: flex-end;
-  gap: 10px;
-  padding: 10px 0 0 0;
-  width: 372px;
-  height: 50px;
-}
-
-.dg-button {
-  display: flex;
+  flex-wrap: nowrap;
   align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  height: 40px;
-  transition: background-color 120ms ease-out, transform 120ms ease-out;
+  gap: 8px;
 }
 
-.dg-button:active { transform: scale(0.97); }
-
-.dg-button-ghost {
-  border: 1px solid #e4e4e7;
-  background-color: #ffffff;
-  width: 96px;
+.dg-note {
+  color: #15803d;
+  font-size: 12px;
+  font-weight: 500;
+  height: 16px;
+  line-height: 16px;
 }
 
-.dg-button-ghost:hover { background-color: #f4f4f5; }
-.dg-button-ghost:focus { border-color: #18181b; }
+/* --- the scrollable body ------------------------------------------------------- */
 
-.dg-button-solid {
-  background-color: #18181b;
-  width: 138px;
-}
-
-.dg-button-solid:hover { background-color: #3f3f46; }
-.dg-button-solid:focus { background-color: #3f3f46; }
-
-.dg-button-text {
-  color: #18181b;
-  font-size: 14px;
-  width: 130px;
-  height: 20px;
-  text-align: center;
-}
-
-/* On the dark button. A separate token rather than a descendant selector,
- * which EVGStyleSheet cannot express. */
-.dg-button-text-on-solid { color: #ffffff; }
-
-/* --- what is in the movable window ------------------------------------------------- */
-.dg-mini { display: flex; flex-direction: column; gap: 8px; width: 268px; }
-
-.dg-mini-row {
+.dg-scroll {
   display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 10px;
-  height: 28px;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 8px;
+  height: 240px;
+  overflow: hidden;
+  padding: 16px 24px;
 }
 
-.dg-mini-cell { color: #3f3f46; font-size: 13px; width: 170px; height: 20px; }
+.dg-h3 { color: #09090b; font-size: 14px; font-weight: 600; height: 20px; line-height: 20px; padding: 6px 0 0 0; }
+.dg-para { color: #52525b; font-size: 14px; height: auto; line-height: 22px; }
 
-.dg-chip {
-  border-radius: 999px;
-  background-color: #f4f4f5;
-  color: #3f3f46;
-  font-size: 12px;
-  padding: 2px 10px;
-  width: 74px;
-  height: 20px;
-  text-align: center;
+/* --- narrow -------------------------------------------------------------------- */
+
+@media (max-width: 600px) {
+  .dg-page { width: 100%; height: 100%; padding: 16px; gap: 12px; }
+  .dg-card { width: 100%; height: 190px; }
+  .dg-scroll { height: 300px; }
+  .dg-footer { flex-direction: column; justify-content: flex-start; }
+  .dg-footer-start { flex-direction: column; }
+  /* shadcn centres the header under `sm` (text-center sm:text-left). */
+  .dg-header { padding: 0 24px; }
+  .dg-header-full { padding: 0px; }
+  .dg-header-bar { padding: 24px 40px 16px 40px; }
+  .dg-title { width: 100%; text-align: center; }
+  .dg-desc { width: 100%; text-align: center; }
 }
-
-.dg-hint {
-  color: #a1a1aa;
-  font-size: 12px;
-  padding: 8px 0 2px 0;
-  width: 262px;
-  height: 20px;
-}
-
-/* Single-line text sits in the middle of its box: the line box is the box.
-   Without it a 22px box holding a 16px line puts the line at the top, which
-   with a face whose normal line is 18px drew every label 2px high. */
-.dg-sheet-head { line-height: 24px; }
-.dg-sheet-cell { line-height: 20px; }
-.ui-dialog-title { line-height: 26px; }
-.ui-window-title { line-height: 20px; }
-.dg-label { line-height: 20px; }
-.dg-input-text { line-height: 20px; }
-.dg-button-text { line-height: 20px; }
-.dg-mini-cell { line-height: 20px; }

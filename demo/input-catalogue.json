@@ -301,8 +301,8 @@
         {
           "variant": "text fields in a modal",
           "fields": [
-            "dialog/dlg-input-name",
-            "dialog/dlg-input-username"
+            "dialog/dlg-name",
+            "dialog/dlg-username"
           ]
         }
       ]

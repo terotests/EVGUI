@@ -147,9 +147,8 @@ table.init(TABLE_CSS);
 const dropdown = new DropdownDemo();
 dropdown.init(DROPDOWN_CSS);
 
-// The dialog and the window. Two dialogs on one page is the state worth
-// auditing: a modal and a non-modal one, side by side, each with its own name
-// — and a title bar that is a real control in one and a heading in the other.
+// The dialog patterns: three DialogCtl dialogs and an AlertDialogCtl one,
+// audited open one at a time below.
 const dialog = new DialogDemo();
 dialog.init(DIALOG_CSS);
 
@@ -311,30 +310,49 @@ const STATES = [
     tree: () => dropdown.a11yJson(13, "dd-item-status-item-available"),
   },
   {
-    // A modal and a movable window at once. Two things axe is good at and this
-    // is the only page with either: a dialog needs an accessible name, and a
-    // control whose whole affordance is "you can drag me" needs to say so in
-    // words — the bar carries a roledescription for exactly that reason.
-    name: "dialog — a modal and a window, both open",
-    size: [900, 560],
+    // Each dialog open in turn, reached by pressing its trigger the way the
+    // page does. A modal is the state axe has most to say about: a dialog
+    // needs a name, aria-modal has to hide the page behind it, and the
+    // labelledby / describedby references have to resolve.
+    name: "dialog — Edit profile open (two fields)",
+    size: [900, 540],
     lint: () => {
-      dialog.openModal();
-      dialog.openWindow();
+      dialog.press("dlg-profile-trigger");
       return dialog.a11yProblems();
     },
-    tree: () => dialog.a11yJson(14, "win-titlebar"),
+    tree: () => dialog.a11yJson(14, dialog.focused),
   },
   {
-    // The window alone. With the modal shut, nothing masks the page behind it
-    // — which is the whole difference between the two, and means everything
-    // under the window is audited as reachable rather than hidden.
-    name: "dialog — the window alone, page still reachable",
-    size: [900, 560],
+    name: "dialog — Share link open, copied",
+    size: [900, 540],
     lint: () => {
-      dialog.press("dlg-close");
+      dialog.keyWith("Escape", false, false);
+      dialog.press("dlg-share-trigger");
+      dialog.press("dlg-share-copy");
       return dialog.a11yProblems();
     },
-    tree: () => dialog.a11yJson(15, ""),
+    tree: () => dialog.a11yJson(15, dialog.focused),
+  },
+  {
+    name: "dialog — scrollable body open",
+    size: [900, 540],
+    lint: () => {
+      dialog.keyWith("Escape", false, false);
+      dialog.press("dlg-terms-trigger");
+      return dialog.a11yProblems();
+    },
+    tree: () => dialog.a11yJson(16, dialog.focused),
+  },
+  {
+    // The alertdialog role, and the only one with no ×.
+    name: "dialog — alert dialog open",
+    size: [900, 540],
+    lint: () => {
+      dialog.keyWith("Escape", false, false);
+      dialog.press("dlg-alert-trigger");
+      return dialog.a11yProblems();
+    },
+    tree: () => dialog.a11yJson(17, dialog.focused),
   },
   {
     // Two separators and a breadcrumb, with the trail collapsed — which is the
