@@ -61,6 +61,7 @@ const { ControlsDemo } = require(path.join(ROOT, "gallery/evgui/bin/ControlsDemo
 const { AccordionDemo } = require(path.join(ROOT, "gallery/evgui/bin/AccordionDemo.cjs"));
 const { SeparatorDemo } = require(path.join(ROOT, "gallery/evgui/bin/SeparatorDemo.cjs"));
 const { TabsDemo } = require(path.join(ROOT, "gallery/evgui/bin/TabsDemo.cjs"));
+const { AutocompleteDemo } = require(path.join(ROOT, "gallery/evgui/bin/AutocompleteDemo.cjs"));
 const MENUBAR_CSS = fs.readFileSync(path.join(HERE, "menubar.css"), "utf8");
 const TOOLBAR_CSS = fs.readFileSync(path.join(HERE, "toolbar.css"), "utf8");
 const SORTABLE_CSS = fs.readFileSync(path.join(HERE, "sortable.css"), "utf8");
@@ -463,6 +464,29 @@ STATES.push(...REST);
     });
   }
 }
+// The autocomplete at rest (six closed boxes, one holding "Canada"), and with
+// lists open: the grouped one filtered with its highlight on a row — sections
+// with role=group inside the listbox — and the limited one showing its rows
+// and the hidden "N more" line.
+const autocomplete = atRest(AutocompleteDemo, "autocomplete.css");
+const autocompleteOpen = atRest(AutocompleteDemo, "autocomplete.css");
+autocompleteOpen.press("au-groups-input");
+autocompleteOpen.applyEdit("au-groups-input", "r", 1, 1);
+autocompleteOpen.key("ArrowDown");
+const autocompleteLimit = atRest(AutocompleteDemo, "autocomplete.css");
+autocompleteLimit.press("au-limit-input");
+autocompleteLimit.applyEdit("au-limit-input", "a", 1, 1);
+autocompleteLimit.key("ArrowDown");
+STATES.push(...[
+  ["autocomplete — six boxes, closed", autocomplete, 53],
+  ["autocomplete — grouped list open, a row highlighted", autocompleteOpen, 54],
+  ["autocomplete — limited list open, a row highlighted", autocompleteLimit, 55],
+].map(([name, d, gen]) => ({
+  name,
+  size: [d.widthPx(), d.heightPx()],
+  lint: () => d.a11yProblems(),
+  tree: () => d.a11yJson(gen, d.focused || ""),
+})));
 
 const AXE = fs.readFileSync(domRequire.resolve("axe-core"), "utf8");
 

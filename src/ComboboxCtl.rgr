@@ -73,6 +73,32 @@
 ;   multiple pick clears the typed query (it does here — the measured Enter
 ;   with a query pending cleared it, and a pick is the same commitment). Each
 ;   is a rule the harness could not reach; none of them is a guess about ARIA.
+;
+; --- AUTOCOMPLETE MODE (`autocomplete` on) --------------------------------------
+;
+;   Base UI's Autocomplete (and ReUI's, built on it): the same input, list and
+;   keys, but the TEXT is the value and the list only offers to complete it.
+;   Written from Base UI's documented Autocomplete and the WAI-ARIA combobox
+;   pattern with list autocomplete; not yet a line in combobox.json.
+;
+;     * Nothing is ever "chosen": no revert on blur, no revert on an Enter with
+;       nothing highlighted, and `aria-selected` marks the highlighted row
+;       (the APG's listbox-autocomplete rule) rather than a selection.
+;     * A click in the box does not open the list (openOnInputClick is off);
+;       typing does, and ArrowDown / ArrowUp do. Emptying the box closes it.
+;     * Enter or a click on a row puts its label into the box and closes.
+;       Escape closes; Escape on a closed box with text clears it (as the
+;       single combobox above). Tab closes and accepts nothing.
+;     * `inlineComplete` (aria-autocomplete="both", Base UI mode="both"): a
+;       keystroke that GROWS the text highlights the first row whose label
+;       starts with it and writes that label's remaining letters after the
+;       caret, selected — the next letter types over them, Backspace removes
+;       them. The arrows show the highlighted row's whole label; Escape and
+;       Tab put back what was typed.
+;     * Optional: section headings (`addGroupedItem`, role=group rows labelled
+;       by their heading), a `limit` with a "N more" line, a `loading` state,
+;       the matching part of each label as its own run (`emphasis`), and no
+;       trigger or no clear button (`showTrigger`, `showClear`).
 ; =============================================================================
 
 Import "UiCtl.rgr"
@@ -103,6 +129,24 @@ class ComboboxCtl extends UiCtl {
     ; `aria-required` and `aria-invalid`, handed down from a Field.
     def required:boolean false
     def invalid:boolean false
+    ; --- autocomplete mode: see the header. All off by default. ---
+    def autocomplete:boolean false
+    def inlineComplete:boolean false
+    def showTrigger:boolean true
+    def showClear:boolean true
+    def emphasis:boolean false
+    ; At most this many rows (0: all), and a line saying how many more match.
+    def limit:int 0
+    def moreSuffix:string " more — keep typing to narrow"
+    def loading:boolean false
+    def loadingText:string "Loading…"
+    ; What the person TYPED — the query — apart from an inline completion
+    ; shown after it.
+    def typed:string ""
+    ; Each item's section heading, parallel to `items`; "" for none.
+    def itemGroups:[string]
+    def moreEl:EVGElement
+    def loadingEl:EVGElement
     ; The text box. Its caret, selection and word motion are InputCtl's nine
     ; specs; this class only decides what its text MEANS.
     def input:InputCtl
@@ -126,6 +170,10 @@ class ComboboxCtl extends UiCtl {
         items = empty
         def none:[string]
         values = none
+        def noGroups:[string]
+        itemGroups = noGroups
+        moreEl = (EVGElement.createDiv())
+        loadingEl = (EVGElement.createDiv())
     }
 
     fn addItem:void (itemValue:string itemName:string itemDisabled:boolean) {
@@ -134,6 +182,61 @@ class ComboboxCtl extends UiCtl {
         it.name = itemName
         it.disabled = itemDisabled
         push items it
+        push itemGroups ""
+    }
+
+    ; An item under a section heading. Items of one section are added together;
+    ; the heading is drawn above the first of them that the filter lets through.
+    fn addGroupedItem:void (itemValue:string itemName:string group:string) {
+        this.addItem(itemValue itemName false)
+        def last:int ((array_length itemGroups) - 1)
+        set itemGroups last group
+    }
+
+    ; Every item gone — a host that fetches its suggestions replaces them.
+    fn clearItems:void () {
+        def empty:[UiItem]
+        items = empty
+        def noGroups:[string]
+        itemGroups = noGroups
+        activeValue = ""
+    }
+
+    fn groupOf:string (v:string) {
+        def i:int (this.indexOfValue(v))
+        if ((i < 0) || (i >= (array_length itemGroups))) {
+            return ""
+        }
+        return (itemAt itemGroups i)
+    }
+
+    ; A section's id: its position among the sections, so a heading with
+    ; spaces in it makes a clean id.
+    fn sectionTid:string (group:string) {
+        def seen:[string]
+        def i:int 0
+        while (i < (array_length itemGroups)) {
+            def g:string (itemAt itemGroups i)
+            if ((strlen g) > 0) {
+                if ((indexOf seen g) < 0) {
+                    push seen g
+                }
+            }
+            i = (i + 1)
+        }
+        return (tid + "-section-" + (to_string (indexOf seen group)))
+    }
+
+    fn sectionLabelTid:string (group:string) {
+        return ((this.sectionTid(group)) + "-label")
+    }
+
+    fn moreTid:string () {
+        return (tid + "-more")
+    }
+
+    fn loadingTid:string () {
+        return (tid + "-loading")
     }
 
     ; --- ids ----------------------------------------------------------------------
@@ -211,6 +314,9 @@ class ComboboxCtl extends UiCtl {
     }
 
     fn isChosen:boolean (v:string) {
+        if autocomplete {
+            return false
+        }
         if multiple {
             return ((indexOf values v) >= 0)
         }
@@ -257,6 +363,9 @@ class ComboboxCtl extends UiCtl {
 
     ; The typed query, or "" when the box holds a label rather than a filter.
     fn query:string () {
+        if autocomplete {
+            return typed
+        }
         if filtering {
             return input.value
         }
@@ -276,8 +385,42 @@ class ComboboxCtl extends UiCtl {
         return ((indexOf hay needle) >= 0)
     }
 
-    ; The rows the list shows now: everything, or what the query lets through.
+    ; The rows the list shows now: what the query lets through, cut to
+    ; `limit`, and none while a fetch is pending.
     fn visibleItems:[UiItem] () {
+        def all:[UiItem] (this.matchedItems())
+        def out:[UiItem]
+        if (autocomplete && loading) {
+            return out
+        }
+        if ((limit <= 0) || ((array_length all) <= limit)) {
+            return all
+        }
+        def i:int 0
+        while (i < limit) {
+            push out (itemAt all i)
+            i = (i + 1)
+        }
+        return out
+    }
+
+    ; How many matching rows the limit left out.
+    fn hiddenCount:int () {
+        if (autocomplete && loading) {
+            return 0
+        }
+        if (limit <= 0) {
+            return 0
+        }
+        def n:int (array_length (this.matchedItems()))
+        if (n <= limit) {
+            return 0
+        }
+        return (n - limit)
+    }
+
+    ; Everything the query lets through.
+    fn matchedItems:[UiItem] () {
         def out:[UiItem]
         def q:string (this.query())
         def i:int 0
@@ -315,6 +458,9 @@ class ComboboxCtl extends UiCtl {
     ; been committed, and a half-typed query kept it. A multiple box never has
     ; one — its chips carry their own.
     fn showsClear:boolean () {
+        if autocomplete {
+            return (showClear && ((strlen input.value) > 0))
+        }
         if multiple {
             return false
         }
@@ -409,6 +555,12 @@ class ComboboxCtl extends UiCtl {
     ; Focus leaving the input with a query pending: revert or clear. Called by
     ; the host when focus goes to another controller, and by a Tab.
     fn commitBlur:void () {
+        if autocomplete {
+            if open {
+                this.autoClose()
+            }
+            return
+        }
         if (filtering == false) {
             return
         }
@@ -425,11 +577,228 @@ class ComboboxCtl extends UiCtl {
         this.build()
     }
 
+    ; --- autocomplete mode ------------------------------------------------------
+    ; See the header. The filtering, the highlight walk (`moveHighlight`,
+    ; `firstEnabled`) and the tree are shared with the combobox above; what
+    ; differs is that the text is the value.
+
+    fn autoClose:void () {
+        open = false
+        activeValue = ""
+        if (inlineComplete && (input.value != typed)) {
+            ; A completion that was only shown goes: what was typed stays.
+            this.putText(typed)
+        }
+        this.build()
+    }
+
+    ; The box shows `t` with the caret at its end.
+    fn putText:void (t:string) {
+        input.setValue(t)
+        input.caret = (strlen t)
+        input.anchor = input.caret
+    }
+
+    ; A suggestion taken: its label is the text now.
+    fn accept:string (v:string) {
+        def i:int (this.indexOfValue(v))
+        if (i < 0) {
+            return ""
+        }
+        def it:UiItem (itemAt items i)
+        if it.disabled {
+            return ""
+        }
+        typed = it.name
+        this.putText(it.name)
+        open = false
+        activeValue = ""
+        this.build()
+        return (this.inputTid())
+    }
+
+    fn autoActivate:string (target:string) {
+        if (target == (this.inputTid())) {
+            ; openOnInputClick is off: a click places the caret, no more.
+            return (this.inputTid())
+        }
+        if (target == (this.triggerTid())) {
+            if open {
+                this.autoClose()
+                return (this.inputTid())
+            }
+            open = true
+            activeValue = ""
+            this.build()
+            return (this.inputTid())
+        }
+        if (target == (this.clearTid())) {
+            typed = ""
+            this.putText("")
+            open = false
+            activeValue = ""
+            this.build()
+            return (this.inputTid())
+        }
+        def iv:string (this.itemValueOf(target))
+        if ((strlen iv) > 0) {
+            return (this.accept(iv))
+        }
+        return ""
+    }
+
+    ; The text changed (a key, or the platform's own edit). `was` is the query
+    ; before it. The list opens on any text and closes on none; the highlight
+    ; is dropped unless an inline completion puts it on the row it completes.
+    fn autoEdited:void (was:string) {
+        typed = input.value
+        activeValue = ""
+        open = ((strlen typed) > 0)
+        if (inlineComplete && open && ((strlen typed) > (strlen was)) && (input.caret == (strlen typed))) {
+            def vis:[UiItem] (this.visibleItems())
+            def low:string (to_lowercase typed)
+            def n:int (strlen typed)
+            def i:int 0
+            while (i < (array_length vis)) {
+                def it:UiItem (itemAt vis i)
+                if (it.disabled == false) {
+                    if ((strlen it.name) >= n) {
+                        if ((to_lowercase (substring it.name 0 n)) == low) {
+                            activeValue = it.value
+                            ; The typed letters as typed, the rest of the label
+                            ; after them, selected.
+                            input.setValue((typed + (substring it.name n (strlen it.name))))
+                            input.anchor = n
+                            input.caret = (strlen it.name)
+                            i = (array_length vis)
+                        }
+                    }
+                }
+                i = (i + 1)
+            }
+        }
+        this.build()
+    }
+
+    ; The caret or the selection moved and the text did not. With an inline
+    ; completion showing, moving off it keeps it: the shown text is the query.
+    fn autoCaretMoved:void () {
+        if (inlineComplete && (input.value != typed) && (input.hasSelection() == false)) {
+            ; Kept as the suggestion spells it, not as the first letters were
+            ; typed: "ty" completed and kept is "TypeScript".
+            if ((strlen activeValue) > 0) {
+                def lab:string (this.labelOf(activeValue))
+                if ((to_lowercase lab) == (to_lowercase input.value)) {
+                    input.setValue(lab)
+                }
+            }
+            typed = input.value
+        }
+        this.build()
+    }
+
+    ; After an arrow: an inline box shows the highlighted row's whole label.
+    fn showHighlighted:void () {
+        if (inlineComplete == false) {
+            return
+        }
+        if ((strlen activeValue) == 0) {
+            this.putText(typed)
+            return
+        }
+        this.putText((this.labelOf(activeValue)))
+    }
+
+    fn autoKey:string (key:string shift:boolean ctrl:boolean) {
+        if (key == "Escape") {
+            if open {
+                this.autoClose()
+                return (this.inputTid())
+            }
+            if ((strlen input.value) > 0) {
+                typed = ""
+                this.putText("")
+                this.build()
+            }
+            return (this.inputTid())
+        }
+        if (key == "Enter") {
+            if (open == false) {
+                return ""
+            }
+            if ((strlen activeValue) > 0) {
+                return (this.accept(activeValue))
+            }
+            ; Nothing highlighted: the list goes and the text stays.
+            this.autoClose()
+            return (this.inputTid())
+        }
+        if ((key == "ArrowDown") || (key == "ArrowUp")) {
+            def delta:int 1
+            if (key == "ArrowUp") {
+                delta = -1
+            }
+            if ((open == false) && ((array_length (this.visibleItems())) == 0)) {
+                ; Nothing to offer: an empty popup is not opened by an arrow.
+                return (this.inputTid())
+            }
+            this.moveHighlight(delta)
+            this.showHighlighted()
+            this.build()
+            return (this.inputTid())
+        }
+        if (key == "Tab") {
+            if open {
+                this.autoClose()
+            }
+            return ""
+        }
+        def before:string input.value
+        def was:string typed
+        input.keyDownWith((this.inputTid()) key shift ctrl)
+        if (input.value != before) {
+            this.autoEdited(was)
+        } {
+            this.autoCaretMoved()
+        }
+        return ""
+    }
+
+    ; The pointer over a row highlights it — and only that: an inline box's
+    ; text follows the keyboard, not the mouse.
+    fn hover:string (target:string) {
+        if (autocomplete == false) {
+            return ""
+        }
+        if (open == false) {
+            return ""
+        }
+        def iv:string (this.itemValueOf(target))
+        if ((strlen iv) == 0) {
+            return ""
+        }
+        if ((this.visibleIndexOf((this.visibleItems()) iv)) < 0) {
+            return ""
+        }
+        def it:UiItem (itemAt items (this.indexOfValue(iv)))
+        if it.disabled {
+            return ""
+        }
+        if (activeValue != iv) {
+            activeValue = iv
+            this.build()
+        }
+        return ""
+    }
+
     ; --- input ----------------------------------------------------------------------
 
     fn activate:string (target:string) {
         if disabled {
             return ""
+        }
+        if autocomplete {
+            return (this.autoActivate(target))
         }
         if (target == (this.inputTid())) {
             if open {
@@ -486,6 +855,12 @@ class ComboboxCtl extends UiCtl {
             return false
         }
         input.tid = (this.inputTid())
+        if autocomplete {
+            def was:string typed
+            input.insertText(ch)
+            this.autoEdited(was)
+            return true
+        }
         if (filtering == false) {
             ; The first key turns the label into a query. A resting single box
             ; holds its label with the caret at the end, so the typed letter
@@ -520,7 +895,16 @@ class ComboboxCtl extends UiCtl {
         }
         input.tid = (this.inputTid())
         def before:string input.value
+        def wasTyped:string typed
         input.applyEdit(v selStart selEnd)
+        if autocomplete {
+            if (input.value == before) {
+                this.autoCaretMoved()
+                return true
+            }
+            this.autoEdited(wasTyped)
+            return true
+        }
         if (input.value == before) {
             this.build()
             return true
@@ -543,6 +927,9 @@ class ComboboxCtl extends UiCtl {
         }
         if (target != (this.inputTid())) {
             return ""
+        }
+        if autocomplete {
+            return (this.autoKey(key shift ctrl))
         }
         if (key == "Escape") {
             if open {
@@ -837,6 +1224,14 @@ class ComboboxCtl extends UiCtl {
         input.build()
         def box:EVGElement (unwrap input.rootEl)
         UiTree.addClass(box "ui-combobox-input")
+        if autocomplete {
+            ; aria-controls on the box while its list is there — ARIA 1.2
+            ; requires it on an expanded combobox.
+            box.a11yControls = ""
+            if open {
+                box.a11yControls = (this.contentTid())
+            }
+        }
         ; A single box's input IS the box and a theme gives it the width; a
         ; multiple box's input shares the line with chips and stays narrow.
         ; Two tokens, because the sheet matches one class per selector.
@@ -859,12 +1254,14 @@ class ComboboxCtl extends UiCtl {
             group.addChild(clr)
         }
 
-        def trig:EVGElement (unwrap triggerEl)
-        trig.id = (this.triggerTid())
-        trig.className = "ui-combobox-trigger"
-        UiTree.setState(trig "ui-combobox-trigger" word)
-        UiTree.leafText(trig "▾")
-        group.addChild(trig)
+        if showTrigger {
+            def trig:EVGElement (unwrap triggerEl)
+            trig.id = (this.triggerTid())
+            trig.className = "ui-combobox-trigger"
+            UiTree.setState(trig "ui-combobox-trigger" word)
+            UiTree.leafText(trig "▾")
+            group.addChild(trig)
+        }
         root.addChild(group)
 
         if (open == false) {
@@ -877,16 +1274,39 @@ class ComboboxCtl extends UiCtl {
         UiTree.surface(content "bottom" "start")
         UiTree.clearChildren(content)
         def vis:[UiItem] (this.visibleItems())
-        if ((array_length vis) == 0) {
-            def em:EVGElement (unwrap emptyEl)
-            em.id = (this.emptyTid())
-            em.className = "ui-combobox-empty"
-            UiTree.leafText(em emptyText)
-            content.addChild(em)
+        if (autocomplete && loading) {
+            def ld:EVGElement (unwrap loadingEl)
+            ld.id = (this.loadingTid())
+            ld.className = "ui-combobox-loading"
+            UiTree.leafText(ld loadingText)
+            content.addChild(ld)
+        } {
+            if ((array_length vis) == 0) {
+                def em:EVGElement (unwrap emptyEl)
+                em.id = (this.emptyTid())
+                em.className = "ui-combobox-empty"
+                UiTree.leafText(em emptyText)
+                content.addChild(em)
+            }
         }
+        ; Rows go straight into the list, or into their section when they
+        ; have one: a section is a box with its heading and then its rows.
+        def section:EVGElement content
+        def sectionName:string ""
         def j:int 0
         while (j < (array_length vis)) {
             def it:UiItem (itemAt vis j)
+            def g:string (this.groupOf(it.value))
+            if (g != sectionName) {
+                sectionName = g
+                if ((strlen g) > 0) {
+                    section = (UiTree.div((this.sectionTid(g)) "ui-combobox-section"))
+                    section.addChild((UiTree.label((this.sectionLabelTid(g)) "ui-combobox-section-label" g)))
+                    content.addChild(section)
+                } {
+                    section = content
+                }
+            }
             def el:EVGElement (unwrap it.el)
             el.id = (this.itemTid(it.value))
             el.className = "ui-combobox-item"
@@ -901,11 +1321,46 @@ class ComboboxCtl extends UiCtl {
                 itemWord = "selected"
             }
             UiTree.setState(el "ui-combobox-item" itemWord)
-            UiTree.leafText(el it.name)
-            content.addChild(el)
+            this.itemText(el it)
+            section.addChild(el)
             j = (j + 1)
         }
+        def more:int (this.hiddenCount())
+        if (more > 0) {
+            def mo:EVGElement (unwrap moreEl)
+            mo.id = (this.moreTid())
+            mo.className = "ui-combobox-more"
+            UiTree.leafText(mo ((to_string more) + moreSuffix))
+            content.addChild(mo)
+        }
         root.addChild(content)
+    }
+
+    ; A row's label: one run, or — with `emphasis` and a query — three, the
+    ; matching letters in the middle one. The runs have no ids, so a click on
+    ; any of them is a click on the row.
+    fn itemText:void (el:EVGElement it:UiItem) {
+        def q:string (this.query())
+        def at:int -1
+        if (emphasis && ((strlen q) > 0)) {
+            at = (indexOf (to_lowercase it.name) (to_lowercase q))
+        }
+        if (at < 0) {
+            UiTree.leafText(el it.name)
+            return
+        }
+        UiTree.clearChildren(el)
+        el.textContent = ""
+        el.elementType = 0
+        def n:int (strlen it.name)
+        def e:int (at + (strlen q))
+        if (at > 0) {
+            el.addChild((UiTree.label("" "ui-combobox-item-text" (substring it.name 0 at))))
+        }
+        el.addChild((UiTree.label("" "ui-combobox-item-match" (substring it.name at e))))
+        if (e < n) {
+            el.addChild((UiTree.label("" "ui-combobox-item-text" (substring it.name e n))))
+        }
     }
 
     fn tids:[string] () {
@@ -933,6 +1388,19 @@ class ComboboxCtl extends UiCtl {
         }
         push a (this.contentTid())
         push a (this.emptyTid())
+        push a (this.moreTid())
+        push a (this.loadingTid())
+        def gi:int 0
+        while (gi < (array_length itemGroups)) {
+            def gname:string (itemAt itemGroups gi)
+            if ((strlen gname) > 0) {
+                if ((indexOf a (this.sectionTid(gname))) < 0) {
+                    push a (this.sectionTid(gname))
+                    push a (this.sectionLabelTid(gname))
+                }
+            }
+            gi = (gi + 1)
+        }
         def j:int 0
         while (j < (array_length items)) {
             def it:UiItem (itemAt items j)
@@ -1036,16 +1504,18 @@ class ComboboxCtl extends UiCtl {
             push out clr
         }
 
-        def trig:UiRow (UiRow.of((this.triggerTid()) (EVGA11yRole.button()) "Open"))
-        trig.state = word
-        trig.disabled = disabled
-        trig.hasPopup = "listbox"
-        if open {
-            trig.expanded = (EVGA11yTri.yes())
-        } {
-            trig.expanded = (EVGA11yTri.no())
+        if showTrigger {
+            def trig:UiRow (UiRow.of((this.triggerTid()) (EVGA11yRole.button()) "Open"))
+            trig.state = word
+            trig.disabled = disabled
+            trig.hasPopup = "listbox"
+            if open {
+                trig.expanded = (EVGA11yTri.yes())
+            } {
+                trig.expanded = (EVGA11yTri.no())
+            }
+            push out trig
         }
-        push out trig
 
         if (open == false) {
             return out
@@ -1058,26 +1528,74 @@ class ComboboxCtl extends UiCtl {
         push out list
 
         def vis:[UiItem] (this.visibleItems())
-        if ((array_length vis) == 0) {
-            def em:UiRow (UiRow.of((this.emptyTid()) (EVGA11yRole.none()) emptyText))
-            em.parentTid = (this.contentTid())
-            push out em
+        if (autocomplete && ((array_length vis) > 0) && (loading == false)) {
+            ; A list with rows in it is named after its box ("Fruit
+            ; suggestions"); an empty or loading one takes its one line of
+            ; text as its name instead, below.
+            list.name = (name + " suggestions")
         }
+        if (autocomplete && loading) {
+            ; Collected onto the listbox as its name, as the empty line is.
+            def ld:UiRow (UiRow.of((this.loadingTid()) (EVGA11yRole.none()) loadingText))
+            ld.parentTid = (this.contentTid())
+            push out ld
+        } {
+            if ((array_length vis) == 0) {
+                def em:UiRow (UiRow.of((this.emptyTid()) (EVGA11yRole.none()) emptyText))
+                em.parentTid = (this.contentTid())
+                push out em
+            }
+        }
+        def more:int (this.hiddenCount())
+        if (more > 0) {
+            ; Drawn for the eye; a reader is told on the list itself, where it
+            ; does not become the list's name.
+            list.description = ((to_string more) + " more matches not shown")
+            def mo:UiRow (UiRow.of((this.moreTid()) (EVGA11yRole.none()) ""))
+            mo.parentTid = (this.contentTid())
+            mo.hidden = true
+            push out mo
+        }
+        def sectionName:string ""
         def j:int 0
         while (j < (array_length vis)) {
             def it:UiItem (itemAt vis j)
+            def g:string (this.groupOf(it.value))
+            def parent:string (this.contentTid())
+            if ((strlen g) > 0) {
+                parent = (this.sectionTid(g))
+                if (g != sectionName) {
+                    ; role=group named by its heading, which is then hidden so
+                    ; it is not read twice.
+                    def sec:UiRow (UiRow.of((this.sectionTid(g)) (EVGA11yRole.group()) g))
+                    sec.parentTid = (this.contentTid())
+                    push out sec
+                    def lab:UiRow (UiRow.of((this.sectionLabelTid(g)) (EVGA11yRole.none()) ""))
+                    lab.parentTid = (this.sectionTid(g))
+                    lab.hidden = true
+                    push out lab
+                }
+            }
+            sectionName = g
             def row:UiRow (UiRow.of((this.itemTid(it.value)) (EVGA11yRole.option()) it.name))
-            row.parentTid = (this.contentTid())
+            row.parentTid = parent
             row.disabled = it.disabled
             row.focusable = (it.disabled == false)
             ; `aria-selected` follows the SELECTION, whatever the highlight is
             ; doing. Measured — and the one place this parts from SelectCtl.
+            ; An autocomplete has no selection, and marks the highlighted row
+            ; instead, as the APG's list-autocomplete example does.
+            if (autocomplete && (it.value == activeValue)) {
+                row.state = "selected"
+                row.selected = (EVGA11yTri.yes())
+            } {
             if (this.isChosen(it.value)) {
                 row.state = "selected"
                 row.selected = (EVGA11yTri.yes())
             } {
                 row.state = "unselected"
                 row.selected = (EVGA11yTri.no())
+            }
             }
             push out row
             j = (j + 1)

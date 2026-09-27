@@ -1,0 +1,196 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * ReUI / shadcn Autocomplete, as an EVG stylesheet: a 36px input with a 1px
+ * #e4e4e7 border and an 8px radius, and under it a white popup as wide as the
+ * input with a hairline border, a soft shadow and 32px rows whose highlight
+ * is a rounded #f4f4f5. Zinc palette, as shadcn's default theme.
+ *
+ * `ui-combobox-*` and `ui-input-*` are the controllers' own classes (the
+ * autocomplete is ComboboxCtl in its autocomplete mode); `au-*` are this
+ * page's. Class-first, one token per selector, no descendant selectors.
+ */
+
+/* --- the page ---------------------------------------------------------------- */
+
+.au-page {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  align-content: flex-start;
+  gap: 16px;
+  padding: 24px;
+  width: 900px;
+  background-color: #ffffff;
+}
+
+/* One card per pattern, as on ReUI's page: a caption, the example under it. */
+.au-card {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  width: 418px;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  background-color: #ffffff;
+}
+
+.au-caption {
+  height: 40px;
+  line-height: 40px;
+  padding: 0 16px;
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 500;
+  border-bottom: 1px solid #f4f4f5;
+}
+
+.au-stage {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: center;
+  padding: 24px 24px 24px 24px;
+}
+
+.au-field {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 8px;
+  width: 320px;
+}
+
+.au-label { color: #09090b; font-size: 14px; font-weight: 500; height: 20px; line-height: 20px; }
+.au-hint  { color: #71717a; font-size: 12px; height: 16px; line-height: 16px; }
+
+/* --- the input ----------------------------------------------------------------- */
+
+.ui-combobox { display: flex; flex-direction: column; width: 100%; position: relative; }
+
+.ui-combobox-group {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: 36px;
+  padding: 0 6px 0 12px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background-color: #ffffff;
+  shadow-color: rgba(0, 0, 0, 0.05);
+  shadow-radius: 2px;
+  shadow-offset-y: 1px;
+  transition: border-color 120ms ease-out;
+}
+/* shadcn's focus-visible: the border goes zinc-400. */
+.au-group-focus { border-color: #a1a1aa; }
+
+.ui-combobox-input {
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  height: 34px;
+  flex-grow: 1;
+  background-color: transparent;
+}
+.ui-combobox-input-single { min-width: 0; white-space: nowrap; }
+.ui-combobox-grow { flex-grow: 0; min-width: 0; width: 0; height: 4px; }
+
+.ui-input {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+  background-color: transparent;
+  cursor: text;
+}
+.ui-input-text { color: #09090b; font-family: Arial; font-size: 14px; height: 20px; line-height: 20px; white-space: pre; }
+.ui-input-placeholder { color: #71717a; }
+.ui-input-caret { position: absolute; top: 8px; width: 1px; height: 18px; background-color: #09090b; }
+.au-band { position: absolute; top: 8px; height: 18px; background-color: #bfdbfe; }
+
+/* The clear button: a muted × in a 24px square that tints on hover. */
+.ui-combobox-clear {
+  width: 24px; height: 24px; line-height: 24px; border-radius: 6px;
+  color: #71717a; font-size: 16px; text-align: center; cursor: pointer;
+}
+.ui-combobox-clear:hover { background-color: #f4f4f5; color: #09090b; }
+
+/* --- the popup ------------------------------------------------------------------ */
+
+.ui-combobox-content {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  margin-top: 4px;
+  padding: 4px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background-color: #ffffff;
+  shadow-color: rgba(0, 0, 0, 0.10);
+  shadow-radius: 12px;
+  shadow-offset-y: 4px;
+}
+
+.ui-combobox-item {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  width: 100%;
+  height: 32px;
+  line-height: 32px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: #09090b;
+  font-size: 14px;
+  white-space: pre;
+  cursor: pointer;
+  /* Stated, not left to default: the rows are the controller's elements,
+   * kept from one build to the next, and a sheet re-applied to an element
+   * does not take back a property a rule that no longer matches once set —
+   * the highlight stayed on a row the arrows had left. */
+  background-color: transparent;
+}
+.ui-combobox-item-active { background-color: #f4f4f5; }
+.ui-combobox-item-disabled { color: #a1a1aa; }
+/* The matching letters, and the rest of the label around them. */
+.ui-combobox-item-text  { color: #09090b; font-size: 14px; height: 20px; line-height: 20px; white-space: pre; }
+.ui-combobox-item-match { color: #09090b; font-size: 14px; font-weight: 700; height: 20px; line-height: 20px; white-space: pre; }
+
+.ui-combobox-section { display: flex; flex-direction: column; align-items: stretch; width: 100%; }
+.ui-combobox-section-label {
+  height: 28px; line-height: 28px; padding: 0 8px;
+  color: #71717a; font-size: 12px; font-weight: 500;
+}
+
+.ui-combobox-empty {
+  height: 36px; line-height: 36px; padding: 0 8px;
+  color: #71717a; font-size: 14px; text-align: center;
+}
+.ui-combobox-loading {
+  height: 36px; line-height: 36px; padding: 0 8px;
+  color: #71717a; font-size: 14px; text-align: center;
+}
+
+.ui-combobox-more {
+  height: 28px; line-height: 28px; padding: 0 8px;
+  margin-top: 4px;
+  border-top: 1px solid #f4f4f5;
+  color: #71717a; font-size: 12px;
+}
+
+/* --- a phone ------------------------------------------------------------------ */
+
+@media (max-width: 600px) {
+  .au-page { width: 100%; padding: 12px; gap: 12px; }
+  .au-card { width: 100%; }
+  .au-stage { padding: 20px 16px; }
+  .au-field { width: 100%; }
+}
