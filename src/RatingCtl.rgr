@@ -1,0 +1,329 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; RatingCtl — a star rating, after ReUI's Rating
+; =============================================================================
+; ReUI's Rating (reui.io/components/rating) is a row of `maxRating` stars, each
+; filled by how much of it the rating covers — `min(max(rating - i, 0), 1)` —
+; so 4.6 is four whole stars and a fifth filled 60%. `editable` makes the row
+; take a hover preview and a click; `showValue` prints the rating with one
+; decimal ("4.0"). This controller owns that arithmetic and the parts ReUI's
+; page leaves to the reader: the keyboard and what the row IS to a reader.
+;
+; WHAT IT IS, TO A READER. Two answers, because a rating is two things:
+;
+;   read-only   role="img", named "Rated 4.6 out of 5 stars". A picture of a
+;               number: nothing to operate, not a tab stop.
+;   editable    role="slider" — the WAI-ARIA APG's "Rating Slider" choice
+;               rather than its radio group: one tab stop, one value, and a
+;               half-star precision is just a smaller step, where a radio group
+;               would need ten radios for five stars.
+;               aria-valuemin 0, aria-valuemax and aria-valuenow in STEPS (the
+;               tree's value fields are integers, so at half precision 4.5 is
+;               step 9 of 10), and aria-valuetext "4.5 out of 5 stars", which
+;               is what a reader announces in place of the number.
+;
+; KEYS (editable only): ArrowRight / ArrowUp add one step, ArrowLeft /
+; ArrowDown take one away, Home is 0 (no rating), End is the maximum. The
+; value is clamped to 0..max.
+;
+; POINTER. A star is one hit target at whole precision and two (its left and
+; right halves) at half precision, so the host needs no coordinates: hovering
+; `<tid>-star-<i>-h<0|1>` previews i+0.5 / i+1, pressing it sets that value.
+; A second press on the value already set leaves it set, as ReUI's
+; `onRatingChange(value)` does; `clearable` makes it clear to 0 instead (MUI's
+; behaviour), off by default.
+;
+; The controller draws nothing: `fillAt(i)` is what a page paints, and
+; `applyTo(el)` writes the role and values onto the element it chose.
+; =============================================================================
+
+Import "UiCtl.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+
+class RatingCtl extends UiCtl {
+    def value:double 0.0
+    def maxRating:int 5
+    ; 1.0 (whole stars) or 0.5 (half stars).
+    def precision:double 1.0
+    def readOnly:boolean true
+    def clearable:boolean false
+    ; The value under the pointer, or -1 when nothing is being previewed.
+    def hoverValue:double -1.0
+
+    Constructor () {
+    }
+
+    ; tid, name, value, maxRating and readOnly in one call.
+    fn setup:void (id:string label:string v:double max:int ro:boolean) {
+        tid = id
+        name = label
+        maxRating = max
+        readOnly = ro
+        value = (this.clamp(v))
+    }
+
+    fn editable:boolean () {
+        return ((readOnly == false) && (disabled == false))
+    }
+
+    fn clamp:double (v:double) {
+        if (v < 0.0) {
+            return 0.0
+        }
+        def top:double (to_double maxRating)
+        if (v > top) {
+            return top
+        }
+        return v
+    }
+
+    ; Onto the step grid: 4.3 at half precision is 4.5, at whole precision 4.
+    fn snap:double (v:double) {
+        def p:double precision
+        if (p <= 0.0) {
+            p = 1.0
+        }
+        def n:int (to_int ((v / p) + 0.5))
+        return (this.clamp(((to_double n) * p)))
+    }
+
+    fn setValue:void (v:double) {
+        value = (this.clamp(v))
+    }
+
+    ; What the stars show: the preview while there is one, else the value.
+    fn shown:double () {
+        if (hoverValue >= 0.0) {
+            return hoverValue
+        }
+        return value
+    }
+
+    ; How much of star i (0-based) is filled, 0..1.
+    fn fillAt:double (i:int) {
+        def f:double ((this.shown()) - (to_double i))
+        if (f < 0.0) {
+            return 0.0
+        }
+        if (f > 1.0) {
+            return 1.0
+        }
+        return f
+    }
+
+    fn halves:boolean () {
+        return (precision < 1.0)
+    }
+
+    fn starTid:string (i:int) {
+        return (tid + "-star-" + (to_string i))
+    }
+
+    ; The hit targets of star i: one at whole precision, two at half.
+    fn hitTid:string (i:int half:int) {
+        return ((this.starTid(i)) + "-h" + (to_string half))
+    }
+
+    ; The value a hit target stands for, or -1 when it is not one of ours.
+    fn valueFor:double (target:string) {
+        def i:int 0
+        while (i < maxRating) {
+            if (target == (this.hitTid(i 1))) {
+                return (to_double (i + 1))
+            }
+            if (target == (this.hitTid(i 0))) {
+                if (this.halves()) {
+                    return ((to_double i) + 0.5)
+                }
+                return (to_double (i + 1))
+            }
+            i = (i + 1)
+        }
+        return -1.0
+    }
+
+    ; --- the pointer -------------------------------------------------------------
+
+    fn hover:string (target:string) {
+        if ((this.editable()) == false) {
+            hoverValue = -1.0
+            return ""
+        }
+        hoverValue = (this.valueFor(target))
+        return ""
+    }
+
+    fn unhover:string () {
+        hoverValue = -1.0
+        return ""
+    }
+
+    ; A press on a star sets the rating and puts the focus on the slider.
+    fn activate:string (target:string) {
+        if ((this.editable()) == false) {
+            return ""
+        }
+        def v:double (this.valueFor(target))
+        if (v < 0.0) {
+            return ""
+        }
+        if (clearable && (v == value)) {
+            value = 0.0
+        } {
+            value = v
+        }
+        return tid
+    }
+
+    ; --- the keyboard ------------------------------------------------------------
+
+    fn keyDown:string (target:string key:string) {
+        if ((this.editable()) == false) {
+            return ""
+        }
+        if (target != tid) {
+            return ""
+        }
+        hoverValue = -1.0
+        if ((key == "ArrowRight") || (key == "ArrowUp")) {
+            value = (this.clamp((value + precision)))
+        }
+        if ((key == "ArrowLeft") || (key == "ArrowDown")) {
+            value = (this.clamp((value - precision)))
+        }
+        if (key == "Home") {
+            value = 0.0
+        }
+        if (key == "End") {
+            value = (to_double maxRating)
+        }
+        return ""
+    }
+
+    ; Does the control take this key? (So the host does not also scroll or
+    ; walk a composite with it.)
+    fn takesKey:boolean (key:string) {
+        if ((this.editable()) == false) {
+            return false
+        }
+        if ((key == "ArrowRight") || (key == "ArrowUp")) {
+            return true
+        }
+        if ((key == "ArrowLeft") || (key == "ArrowDown")) {
+            return true
+        }
+        return ((key == "Home") || (key == "End"))
+    }
+
+    ; --- words and numbers ---------------------------------------------------------
+
+    ; One decimal, as ReUI's showValue prints it: 4 -> "4.0", 4.6 -> "4.6".
+    sfn oneDecimal:string (v:double) {
+        def tenths:int (to_int ((v * 10.0) + 0.5))
+        def whole:int (idiv tenths 10)
+        def frac:int (tenths - (whole * 10))
+        return ((to_string whole) + "." + (to_string frac))
+    }
+
+    ; As short as it can be: 4 -> "4", 4.5 -> "4.5".
+    sfn short:string (v:double) {
+        def tenths:int (to_int ((v * 10.0) + 0.5))
+        def whole:int (idiv tenths 10)
+        def frac:int (tenths - (whole * 10))
+        if (frac == 0) {
+            return (to_string whole)
+        }
+        return ((to_string whole) + "." + (to_string frac))
+    }
+
+    fn label:string () {
+        return (RatingCtl.oneDecimal(value))
+    }
+
+    fn valueText:string () {
+        return ((RatingCtl.short(value)) + " out of " + (to_string maxRating) + " stars")
+    }
+
+    fn imageName:string () {
+        return ("Rated " + (RatingCtl.short(value)) + " out of " + (to_string maxRating) + " stars")
+    }
+
+    ; The value, min and max in steps — see the header.
+    fn stepsPerStar:int () {
+        if (this.halves()) {
+            return 2
+        }
+        return 1
+    }
+
+    fn valueNow:int () {
+        return (to_int ((value * (to_double (this.stepsPerStar()))) + 0.5))
+    }
+
+    fn valueMax:int () {
+        return (maxRating * (this.stepsPerStar()))
+    }
+
+    ; Write the role and the values onto the element that stands for the row.
+    fn applyTo:void (el:EVGElement) {
+        el.id = tid
+        if (this.editable()) {
+            el.role = "slider"
+            el.a11yLabel = name
+            el.a11yFocusable = true
+            el.a11yOrientation = "horizontal"
+            el.a11yHasValue = true
+            el.a11yValueNow = (this.valueNow())
+            el.a11yHasRange = true
+            el.a11yValueMin = 0
+            el.a11yValueMax = (this.valueMax())
+            el.a11yValue = (this.valueText())
+            return
+        }
+        el.role = "img"
+        el.a11yLabel = (this.imageName())
+        el.a11yFocusable = false
+        el.a11yHasValue = false
+        el.a11yHasRange = false
+        el.a11yValue = ""
+    }
+
+    fn isFocusable:boolean (target:string) {
+        return ((this.editable()) && (target == tid))
+    }
+
+    fn tids:[string] () {
+        def a:[string]
+        push a tid
+        def i:int 0
+        while (i < maxRating) {
+            push a (this.starTid(i))
+            push a (this.hitTid(i 0))
+            push a (this.hitTid(i 1))
+            i = (i + 1)
+        }
+        return a
+    }
+
+    fn rows:[UiRow] () {
+        def out:[UiRow]
+        if (this.editable()) {
+            def r:UiRow (UiRow.of(tid (EVGA11yRole.slider()) name))
+            r.orientation = "horizontal"
+            r.hasValueNow = true
+            r.valueNow = (this.valueNow())
+            r.hasRange = true
+            r.valueMin = 0
+            r.valueMax = (this.valueMax())
+            r.valueText = (this.valueText())
+            r.tabStop = true
+            r.focusable = true
+            push out r
+            return out
+        }
+        push out (UiRow.of(tid (EVGA11yRole.image()) (this.imageName())))
+        return out
+    }
+}

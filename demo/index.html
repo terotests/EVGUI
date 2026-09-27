@@ -700,6 +700,26 @@
               rules grow with them.
             </p>
           </section>
+          <section data-for="rating">
+            <h2>what to try</h2>
+            <p class="hint">
+              Move the pointer over the stars in <strong>Interactive</strong>:
+              they preview the rating under the pointer and go back when it
+              leaves. Click to set it; the <strong>4.0</strong> label follows.
+              In <strong>Half-star precision</strong> each star is two targets,
+              so the left half of the fourth star is 3.5.
+            </p>
+            <p class="hint">
+              Tab to an editable rating: it is one <code>slider</code> stop.
+              <strong>Arrow Right / Up</strong> add a step, <strong>Left /
+              Down</strong> take one away, <strong>Home</strong> is 0 and
+              <strong>End</strong> the maximum; a reader hears
+              <code>aria-valuetext</code> &ldquo;4 out of 5 stars&rdquo;. The
+              read-only ratings (the sizes, the summary, <strong>Read-only</strong>)
+              are images named &ldquo;Rated 3.5 out of 5 stars&rdquo; and take
+              no input.
+            </p>
+          </section>
           <section data-for="pagination">
             <h2>what to try</h2>
             <p class="hint">
@@ -1400,6 +1420,12 @@
   "src": "AutocompleteDemo",
   "caption": "ComboboxCtl in autocomplete mode · after Base UI's Autocomplete, ReUI's look",
   "desc": "ReUI's Autocomplete patterns, one card each: basic, grouped suggestions, a clear button, inline completion, an async search with a loading state, and a limit with a count of the rest. The text is the value and the suggestions only complete it. Every box is a ComboboxCtl — the controller measured against Base UI's Combobox — in its autocomplete mode, which follows Base UI's documented Autocomplete and the WAI-ARIA combobox pattern (aria-autocomplete list / both, aria-activedescendant) rather than a measurement of its own; the text is edited on the page's text session."
+ },
+ "rating": {
+  "title": "Rating",
+  "src": "RatingDemo",
+  "caption": "RatingCtl · ReUI's Rating, specified from its page",
+  "desc": "ReUI's Rating patterns, one card each: the three sizes, a review summary (4.6 with the fifth star filled 60%, and a distribution of yellow progress bars), an interactive rating with its value label, half-star precision, read-only next to editable, and ten stars. The value, the hover preview, the precision, the keys and what the row is to a reader are RatingCtl's: a read-only row is an image named \"Rated 4.6 out of 5 stars\", an editable one a slider (the WAI-ARIA rating-slider choice) with aria-valuetext \"4 out of 5 stars\". reui.io was not reachable from here, so the look is specified from screenshots and the behaviour from ReUI's documented props, not measured."
  },
  "pagination": {
   "title": "Pagination",

@@ -1,0 +1,228 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * ReUI's Rating, as an EVG stylesheet: yellow-400 (#facc15) stars over a
+ * light grey (#d4d4d8) outline, shadcn's zinc ramp for the words and lines.
+ *
+ * A star is three layers in one box: the grey outline, a CLIP box as wide as
+ * the fraction of the star that is filled (RatingCtl.fillAt, written inline
+ * by RatingDemo), and inside the clip the whole yellow star — so 4.6 draws the
+ * fifth star's left 60% yellow over its outline. The sizes are ReUI's
+ * `[&_svg]:size-3.5 / 4.5 / 5.5` with `gap-0.5`: 14, 18 and 22px, 2px apart.
+ *
+ * Class-first, one token per selector.
+ */
+
+.rt-page {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 24px;
+  width: 900px;
+  background-color: #ffffff;
+}
+
+/* One card per pattern, as on ReUI's page: a caption, the example centred
+ * in the room under it. */
+.rt-card {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  width: 418px;
+  height: 220px;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  background-color: #ffffff;
+}
+
+/* The first row holds the review summary, the tallest example. */
+.rt-card-tall { height: 340px; }
+
+.rt-caption {
+  height: 40px;
+  line-height: 40px;
+  padding: 0 16px;
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 500;
+  border-bottom: 1px solid #f4f4f5;
+}
+
+.rt-stage {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  flex-grow: 1;
+  padding: 24px;
+}
+
+/* --- the component ----------------------------------------------------------- */
+
+/* The row of stars: `flex items-center gap-0.5`. */
+.rt-stars {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 2px;
+}
+
+.rt-star {
+  position: relative;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+}
+.rt-star-sm { width: 14px; height: 14px; }
+.rt-star-lg { width: 22px; height: 22px; }
+
+/* Lucide's star, outlined: the empty star, and what shows past the fill. */
+.rt-star-empty {
+  position: absolute;
+  left: 0px;
+  top: 0px;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: #d4d4d8;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+/* The fraction of the star that is filled. Its width is written inline. */
+.rt-star-clip {
+  position: absolute;
+  left: 0px;
+  top: 0px;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* The whole filled star, at the star's own size whatever the clip's width:
+ * out of flow, placed against the clip's left edge, and cut off by it. */
+.rt-star-full {
+  position: absolute;
+  left: 0px;
+  top: 0px;
+  width: 18px;
+  height: 18px;
+  fill: #facc15;
+  stroke: #facc15;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.rt-star-full-sm { width: 14px; height: 14px; }
+.rt-star-full-lg { width: 22px; height: 22px; }
+
+/* The pointer's targets: the whole star, or its two halves. Invisible. */
+.rt-hit {
+  position: absolute;
+  top: 0px;
+  left: 0px;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+.rt-hit-left { width: 50%; }
+.rt-hit-right { left: 50%; width: 50%; }
+
+/* showValue: `text-sm font-medium`, 8px after the stars. */
+.rt-value {
+  color: #09090b;
+  font-size: 14px;
+  font-weight: 500;
+  height: 20px;
+  line-height: 20px;
+}
+
+/* --- the pieces the examples are made of ------------------------------------- */
+
+.rt-col {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+.rt-sizes { gap: 16px; }
+
+.rt-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.rt-muted { color: #71717a; font-size: 12px; height: 16px; line-height: 16px; }
+.rt-hint  { color: #71717a; font-size: 12px; height: 16px; line-height: 16px; }
+.rt-interactive { gap: 12px; }
+
+/* 2. The review summary: max-w-xs, the head centred and gap-2, a rule, then
+ * the distribution with space-y-2. */
+.rt-summary {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  width: 320px;
+  gap: 16px;
+}
+.rt-summary-head { gap: 8px; }
+.rt-big {
+  color: #09090b;
+  font-size: 30px;
+  font-weight: 600;
+  height: 36px;
+  line-height: 36px;
+}
+.rt-rule { height: 1px; width: 100%; flex-shrink: 0; background-color: #e4e4e7; }
+
+.rt-dist {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 8px;
+  width: 100%;
+}
+.rt-dist-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 16px;
+}
+.rt-dist-label { width: 12px; flex-shrink: 0; text-align: right; color: #71717a; font-size: 12px; height: 16px; line-height: 16px; }
+.rt-dist-count { width: 28px; flex-shrink: 0; text-align: right; color: #71717a; font-size: 12px; height: 16px; line-height: 16px; }
+
+/* Progress: h-1.5, a zinc-100 track, a yellow-400 indicator, fully rounded. */
+.rt-bar {
+  flex-grow: 1;
+  flex-shrink: 1;
+  height: 6px;
+  border-radius: 3px;
+  background-color: #f4f4f5;
+  overflow: hidden;
+}
+.rt-bar-fill {
+  height: 6px;
+  border-radius: 3px;
+  background-color: #facc15;
+}
+
+/* 5. Read-only next to editable, a label column on the left. */
+.rt-pairs { gap: 16px; align-items: flex-start; }
+.rt-pair-label { width: 80px; color: #71717a; font-size: 12px; height: 16px; line-height: 16px; }
+
+/* --- a phone ------------------------------------------------------------------ */
+
+@media (max-width: 600px) {
+  .rt-page { width: 100%; padding: 12px; gap: 12px; }
+  .rt-card { width: 100%; height: auto; }
+  .rt-card-tall { height: auto; }
+  .rt-stage { padding: 20px 16px; flex-grow: 0; justify-content: flex-start; }
+  .rt-summary { width: 100%; }
+}

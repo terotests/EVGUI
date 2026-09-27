@@ -113,7 +113,8 @@ const EXPECTED = ["menubar", "toolbar", "sortable", "table", "tree", "timeline",
   "popover",
   "autocomplete",
   "pagination",
-  "radio"];
+  "radio",
+  "rating"];
 ok("the switcher offers every demo",
   EXPECTED.every((n) => names.includes(n)) && names.length === EXPECTED.length,
   names.join(","));
