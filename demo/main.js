@@ -2457,6 +2457,13 @@ function setupChrome() {
     }
     label.dataset.name = name;
   }
+  // Alphabetical by the name shown, whatever order DEMO_NAMES holds, so a new
+  // demo lands in its place without anyone reordering the list.
+  const list = document.getElementById("demos");
+  const rows = [...list.querySelectorAll(":scope > label")];
+  rows
+    .sort((a, b) => demoMeta(a.dataset.name).title.localeCompare(demoMeta(b.dataset.name).title, "en"))
+    .forEach((row) => list.append(row));
 
   const filter = document.getElementById("demofilter");
   if (filter) {
