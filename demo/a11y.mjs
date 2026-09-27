@@ -63,6 +63,7 @@ const { SeparatorDemo } = require(path.join(ROOT, "gallery/evgui/bin/SeparatorDe
 const { TabsDemo } = require(path.join(ROOT, "gallery/evgui/bin/TabsDemo.cjs"));
 const { AutocompleteDemo } = require(path.join(ROOT, "gallery/evgui/bin/AutocompleteDemo.cjs"));
 const { PaginationDemo } = require(path.join(ROOT, "gallery/evgui/bin/PaginationDemo.cjs"));
+const { RadioGroupDemo } = require(path.join(ROOT, "gallery/evgui/bin/RadioGroupDemo.cjs"));
 const MENUBAR_CSS = fs.readFileSync(path.join(HERE, "menubar.css"), "utf8");
 const TOOLBAR_CSS = fs.readFileSync(path.join(HERE, "toolbar.css"), "utf8");
 const SORTABLE_CSS = fs.readFileSync(path.join(HERE, "sortable.css"), "utf8");
@@ -118,6 +119,17 @@ paginationBusy.press("pg3-goto");
 paginationBusy.applyEdit("pg3-goto", "", 0, 0);
 paginationBusy.keyWith("Enter", false, false);
 paginationBusy.press("pg8-rows-trigger");
+const radio = atRest(RadioGroupDemo, "radio.css");
+// Changed and focused: other radios checked by click and by arrow, the focus
+// (and its ring) on a card in the grid, a row hovered.
+const radioBusy = atRest(RadioGroupDemo, "radio.css");
+radioBusy.press("rg1-chat");
+radioBusy.press("rg9-mastercard");
+radioBusy.setFocus("rg6-medium");
+radioBusy.key("ArrowDown");
+radioBusy.press("rg3-reports");
+radioBusy.setHover("rg2-french");
+radioBusy.displayListJson();
 const sizeOf = (d) => [typeof d.widthPx === "function" ? d.widthPx() : 900, d.heightPx()];
 const REST = [
   ["profile — a label-left form", profile, 40],
@@ -135,6 +147,8 @@ const REST = [
   ["tabs — Password panel, saved", tabsPw, 52],
   ["pagination — ten cards at rest", pagination, 53],
   ["pagination — mid pages, an invalid box, a list open", paginationBusy, 54],
+  ["radio — ten groups at rest", radio, 57],
+  ["radio — other radios checked, one focused, one hovered", radioBusy, 58],
 ].map(([name, d, gen]) => ({
   name,
   size: sizeOf(d),

@@ -51,6 +51,7 @@ SUITES=(
   ui:tabs:check
   ui:autocomplete:check
   ui:pagination:check
+  ui:radio:check
   ui:dialog:check
   ui:popover:check
   ui:semantics:check

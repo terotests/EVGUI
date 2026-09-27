@@ -57,6 +57,8 @@ import { AutocompleteDemo } from "./generated-host.js";
 import { AUTOCOMPLETE_CSS } from "./generated.js";
 import { PaginationDemo } from "./generated-host.js";
 import { PAGINATION_CSS } from "./generated.js";
+import { RadioGroupDemo } from "./generated-host.js";
+import { RADIO_CSS } from "./generated.js";
 import { MENUBAR_CSS, TOOLBAR_CSS, SORTABLE_CSS, MOTION_CSS, TABLE_CSS, DROPDOWN_CSS, DIALOG_CSS, TREE_CSS, TIMELINE_CSS, RESIZE_CSS, FORM_CSS, PROFILE_CSS, DASHBOARD_CSS, CALENDAR_CSS, FILTERS_CSS, EVENTCAL_CSS, MESSAGE_CSS, CONTROLS_CSS, OTP_CSS, METADATA_CSS, EFFECTS_CSS, SEPARATOR_CSS, TABS_CSS, EFFECT_PRESETS_CSS } from "./generated.js";
 
 // The default stage width. A demo wider than this says so — the dashboard
@@ -439,6 +441,11 @@ let lastAutocompleteHover = "";
 let pagination = new PaginationDemo();
 pagination.init(PAGINATION_CSS);
 let lastPaginationHover = "";
+// Radio Group: ReUI's ten patterns, one RadioGroupCtl (measured against
+// Radix RadioGroup) per group; the arrows check as they move (WAI-ARIA).
+let radio = new RadioGroupDemo();
+radio.init(RADIO_CSS);
+let lastRadioHover = "";
 // ONE DRIVER FOR THE PAGE. It reads the effect instances off whatever display
 // list is being painted, so it works for any demo whose stylesheet declares an
 // effect and costs nothing on the nineteen that do not.
@@ -1441,6 +1448,35 @@ DEMOS.pagination = {
     root: () => null,
   }),
 };
+// Radio Group. No `ownsTab`: the page's generic Tab walk makes each
+// radiogroup one stop, landing on its checked radio. The arrows (which move
+// AND check, wrapping) and Space are the demo's, through RadioGroupCtl.
+DEMOS.radio = {
+  height: () => radio.heightPx(),
+  list: () => radio.displayListJson(),
+  hit: (x, y) => radio.hitId(x, y),
+  a11y: (gen, focus) => radio.a11yJson(gen, focus),
+  cursorAt: (x, y) => radio.cursorAt(x, y),
+  press: (id) => radio.press(id),
+  hover: (id) => {
+    if (id === lastRadioHover) return false;
+    lastRadioHover = id;
+    radio.setHover(id);
+    return true;
+  },
+  keyWith: (k, shift, ctrl) => radio.keyWith(k, shift, ctrl),
+  key: (k) => radio.key(k),
+  host: () => ({
+    setHover: (id) => {
+      if (id === lastRadioHover) return false;
+      lastRadioHover = id;
+      radio.setHover(id);
+      return true;
+    },
+    setPressed: (id) => radio.setPressed(id),
+    root: () => null,
+  }),
+};
 
 /**
  * Put the floating copy under the pointer, by mutating the element rather than
@@ -1720,6 +1756,7 @@ const INSTANCE = {
   autocomplete: () => autocomplete,
   pagination: () => pagination,
 };
+INSTANCE.radio = () => radio;
 INSTANCE.popover = () => popover;
 // A press on the page outside the canvas is outside the popover too, and
 // Radix dismisses on a pointer down outside wherever it lands.
@@ -1854,6 +1891,8 @@ const NARROW = {
   // Laid out at the room (up to its 1024), and as tall as it lays out.
   pagination: { min: 320, h: "own", grow: true },
 };
+// Laid out at the room (up to its 1024), and as tall as it lays out.
+NARROW.radio = { min: 320, h: "own", grow: true };
 // `keep`: the popovers open inside the page and need the room it has.
 NARROW.popover = { min: 320, h: "auto", keep: true };
 const NARROW_AT = 600;
@@ -2577,6 +2616,7 @@ const DEMO_NAMES = ["menubar", "toolbar", "sortable", "table", "tree", "timeline
 DEMO_NAMES.push("popover");
 DEMO_NAMES.push("autocomplete");
 DEMO_NAMES.push("pagination");
+DEMO_NAMES.push("radio");
 const wanted = new URLSearchParams(location.search).get("demo");
 if (wanted && DEMO_NAMES.includes(wanted)) state.which = wanted;
 
@@ -3265,6 +3305,7 @@ window.__resetDemo = (name) => {
   else if (name === "tabs") { tabs = new TabsDemo(); tabs.init(TABS_CSS); lastTabsHover = ""; }
   else if (name === "autocomplete") { autocomplete = new AutocompleteDemo(); autocomplete.init(AUTOCOMPLETE_CSS); lastAutocompleteHover = ""; }
   else if (name === "pagination") { pagination = new PaginationDemo(); pagination.init(PAGINATION_CSS); lastPaginationHover = ""; }
+  else if (name === "radio") { radio = new RadioGroupDemo(); radio.init(RADIO_CSS); lastRadioHover = ""; }
   else if (name === "dialog") { dialog = new DialogDemo(); dialog.init(DIALOG_CSS); lastDialogHover = ""; }
   else if (name === "popover") { popover = new PopoverDemo(); popover.init(POPOVER_CSS); lastPopoverHover = ""; }
   else return false;

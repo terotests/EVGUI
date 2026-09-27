@@ -1,0 +1,803 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; RadioGroupDemo — ReUI's ten radio-group patterns, one card each
+; =============================================================================
+; The reference is ReUI's Radio Group page (shadcn's RadioGroup over Radix's
+; RadioGroup) in ten settings:
+;
+;    1  in a card, with icons     Email / Phone / Chat, the radio on the right
+;    2  in a frame                English / Spanish / French / German, left
+;    3  a 2 × 2 grid of cards     Payments / Invoices / Billing / Reports
+;    4  user cards                two people, an initials avatar each
+;    5  coloured                  Blue / Green / Yellow radios in their colour
+;    6  legend and description    "Battery Level", High / Medium / Low
+;    7  cards with descriptions   Plus / Pro
+;    8  in a card, separators     Standard / Express / Overnight Shipping
+;    9  payment methods           Visa / Mastercard / add a new one
+;   10  plans                     Free / Pro / Enterprise with prices
+;
+; EVERY GROUP IS A `RadioGroupCtl` — the controller measured against Radix's
+; RadioGroup — which owns the value, which items there are, the roving tab
+; stop and the next / previous step (wrapping, skipping disabled items). This
+; file draws what it says, and adds one rule on top: the WAI-ARIA radio group
+; pattern CHECKS the radio an arrow lands on. The controller moves only the
+; focus there (that is what the Radix trace recorded), so the demo activates
+; the item `keyDown` hands back. Space checks the focused radio; Enter is left
+; to the page, as a native radio leaves it to the form.
+;
+; The whole row or card is the radio: role radio, aria-checked, the click
+; target; the drawn circle inside it is decoration. Each group is a
+; radiogroup named by its legend where it has one (6), else by aria-label.
+; =============================================================================
+
+Import "../src/RadioGroupCtl.rgr"
+Import "../src/UiCtl.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGUnit.rgr"
+Import "pkg:evg/EVGLayout.rgr"
+Import "pkg:evg/EVGDisplayList.rgr"
+Import "pkg:evg/EVGStyleSheet.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+Import "pkg:evg/EVGA11yFromTree.rgr"
+Import "pkg:evg/EVGHitTest.rgr"
+
+treefactory Rg {
+    child addChild
+    text  textContent
+
+    tag Page     EVGElement (props (className "rg-page"))
+    tag Card     EVGElement (props (className "rg-card"))
+    tag Stage    EVGElement (props (className "rg-stage"))
+    tag Foot     EVGElement (props (className "rg-foot"))
+    tag Caption  EVGElement (props (className "rg-caption") (elementType 1) (role "heading") (a11yLevel 2))
+    tag Group    EVGElement (props (className "rg-group") (role "radiogroup"))
+    tag Radio    EVGElement (props (className "rg-row") (role "radio") (a11yFocusable true) (cursor "pointer"))
+    tag Box      EVGElement (props (className "rg-box"))
+    tag Col      EVGElement (props (className "rg-col"))
+    tag Tx       EVGElement (props (className "rg-label") (elementType 1))
+    tag Legend   EVGElement (props (className "rg-legend") (elementType 1) (role "text"))
+    tag Dot      EVGElement (props (className "rg-dot") (a11yHidden true))
+    tag Rule     EVGElement (props (className "rg-rule") (a11yHidden true))
+    tag Icon     EVGElement (props (className "rg-icon") (tagName "path") (elementType 3) (viewBox "0 0 24 24") (a11yHidden true))
+    tag Shape    EVGElement (props (className "rg-shape") (tagName "path") (elementType 3) (a11yHidden true))
+}
+
+class RadioGroupDemo {
+
+    def g1:RadioGroupCtl (new RadioGroupCtl())
+    def g2:RadioGroupCtl (new RadioGroupCtl())
+    def g3:RadioGroupCtl (new RadioGroupCtl())
+    def g4:RadioGroupCtl (new RadioGroupCtl())
+    def g5:RadioGroupCtl (new RadioGroupCtl())
+    def g6:RadioGroupCtl (new RadioGroupCtl())
+    def g7:RadioGroupCtl (new RadioGroupCtl())
+    def g8:RadioGroupCtl (new RadioGroupCtl())
+    def g9:RadioGroupCtl (new RadioGroupCtl())
+    def g10:RadioGroupCtl (new RadioGroupCtl())
+
+    def root@(optional):EVGElement
+    def sheet@(optional):EVGStyleSheet
+    def layout@(optional):EVGLayout
+
+    def hovered:string ""
+    def pressed:string ""
+    def focused:string ""
+    def dirty:boolean true
+
+    def pageW:double 1024.0
+    def pageH:double 1400.0
+
+    Constructor () {
+    }
+
+    fn setUp:void (c:RadioGroupCtl tid:string label:string) {
+        c.tid = tid
+        c.name = label
+    }
+
+    fn init:void (css:string) {
+        def s (new EVGStyleSheet())
+        s.parse(css)
+        sheet = s
+
+        this.setUp(g1 "rg1" "Contact method")
+        g1.addItem("email" "Email" false)
+        g1.addItem("phone" "Phone" false)
+        g1.addItem("chat" "Chat" false)
+        g1.value = "email"
+
+        this.setUp(g2 "rg2" "Language")
+        g2.addItem("english" "English" false)
+        g2.addItem("spanish" "Spanish" false)
+        g2.addItem("french" "French" false)
+        g2.addItem("german" "German" false)
+        g2.value = "english"
+
+        this.setUp(g3 "rg3" "Workspace")
+        g3.addItem("payments" "Payments" false)
+        g3.addItem("invoices" "Invoices" false)
+        g3.addItem("billing" "Billing" false)
+        g3.addItem("reports" "Reports" false)
+        g3.value = "payments"
+
+        this.setUp(g4 "rg4" "Account")
+        g4.addItem("emma" "Emma Wilson" false)
+        g4.addItem("john" "John Doe" false)
+        g4.value = "emma"
+
+        this.setUp(g5 "rg5" "Colour")
+        g5.addItem("blue" "Blue" false)
+        g5.addItem("green" "Green" false)
+        g5.addItem("yellow" "Yellow" false)
+        g5.value = "blue"
+
+        this.setUp(g6 "rg6" "Battery Level")
+        g6.addItem("high" "High" false)
+        g6.addItem("medium" "Medium" false)
+        g6.addItem("low" "Low" false)
+        g6.value = "medium"
+
+        this.setUp(g7 "rg7" "Plan")
+        g7.addItem("plus" "Plus" false)
+        g7.addItem("pro" "Pro" false)
+        g7.value = "plus"
+
+        this.setUp(g8 "rg8" "Shipping method")
+        g8.addItem("standard" "Standard Shipping" false)
+        g8.addItem("express" "Express Shipping" false)
+        g8.addItem("overnight" "Overnight Shipping" false)
+        g8.value = "standard"
+
+        this.setUp(g9 "rg9" "Payment method")
+        g9.addItem("visa" "Visa ending in 4242" false)
+        g9.addItem("mastercard" "Mastercard ending in 8888" false)
+        g9.addItem("new" "Add new payment method" false)
+        g9.value = "visa"
+
+        this.setUp(g10 "rg10" "Pricing plan")
+        g10.addItem("free" "Free" false)
+        g10.addItem("pro" "Pro" false)
+        g10.addItem("enterprise" "Enterprise" false)
+        g10.value = "pro"
+
+        this.rebuild()
+    }
+
+    ; --- lookups ------------------------------------------------------------------
+
+    fn ctls:[RadioGroupCtl] () {
+        def a:[RadioGroupCtl]
+        push a g1
+        push a g2
+        push a g3
+        push a g4
+        push a g5
+        push a g6
+        push a g7
+        push a g8
+        push a g9
+        push a g10
+        return a
+    }
+
+    ; Group n, 1-based.
+    fn ctlAt:RadioGroupCtl (n:int) {
+        def a:[RadioGroupCtl] (this.ctls())
+        return (itemAt a (n - 1))
+    }
+
+    ; The group whose item `target` is, or -1.
+    fn ownerOf:int (target:string) {
+        if ((strlen target) == 0) {
+            return -1
+        }
+        def a:[RadioGroupCtl] (this.ctls())
+        def j:int 0
+        while (j < (array_length a)) {
+            def c:RadioGroupCtl (itemAt a j)
+            def i:int 0
+            while (i < (array_length c.items)) {
+                def it:UiItem (itemAt c.items i)
+                if ((c.itemTid(it.value)) == target) {
+                    return j
+                }
+                i = (i + 1)
+            }
+            j = (j + 1)
+        }
+        return -1
+    }
+
+    fn narrow:boolean () {
+        return (pageW < 600.0)
+    }
+
+    ; --- icons (Lucide, 24 × 24, stroked) -------------------------------------------
+
+    sfn iconPath:string (name:string) {
+        if (name == "mail") {
+            return "M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M22 7l-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"
+        }
+        if (name == "phone") {
+            return "M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z M12 18h.01"
+        }
+        if (name == "chat") {
+            return "M7.9 20A9 9 0 1 0 4 16.1L2 22Z"
+        }
+        if (name == "dollar") {
+            return "M22 12a10 10 0 1 1-20 0a10 10 0 1 1 20 0z M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8 M12 18V6"
+        }
+        if (name == "file") {
+            return "M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z M14 2v4a2 2 0 0 0 2 2h4 M10 9H8 M16 13H8 M16 17H8"
+        }
+        if (name == "card") {
+            return "M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z M2 10h20"
+        }
+        if (name == "chart") {
+            return "M12 20V10 M18 20v-4 M6 20V4"
+        }
+        ; plus
+        return "M5 12h14 M12 5v14"
+    }
+
+    sfn icon:EVGElement (name:string cls:string) {
+        return (tree Rg (Icon (props (className ("rg-icon " + cls)) (svgPath (RadioGroupDemo.iconPath(name))))))
+    }
+
+    ; --- the pieces -------------------------------------------------------------------
+
+    fn isOn:boolean (c:RadioGroupCtl value:string) {
+        return (c.value == value)
+    }
+
+    ; The drawn circle: a 1px ring, or a thick dark ring when checked.
+    fn dot:EVGElement (c:RadioGroupCtl value:string tone:string extra:string) {
+        def rid:string (c.itemTid(value))
+        def cls:string "rg-dot"
+        def on:boolean (this.isOn(c value))
+        if ((strlen tone) > 0) {
+            cls = (cls + " rg-dot-" + tone)
+            if on {
+                cls = (cls + " rg-dot-" + tone + "-on")
+            }
+        } {
+            if on {
+                cls = (cls + " rg-dot-on")
+            } {
+                if (hovered == rid) {
+                    cls = (cls + " rg-dot-hover")
+                }
+            }
+        }
+        if (focused == rid) {
+            cls = (cls + " rg-dot-focus")
+        }
+        if ((strlen extra) > 0) {
+            cls = (cls + " " + extra)
+        }
+        return (tree Rg (Dot (props (className cls))))
+    }
+
+    ; The radio itself: the row or card, the click target.
+    fn radio:EVGElement (c:RadioGroupCtl value:string cls:string) {
+        def rid:string (c.itemTid(value))
+        def on:boolean (this.isOn(c value))
+        def full:string ("rg-row " + cls)
+        if on {
+            def words:[string] (strsplit cls " ")
+            def base:string (itemAt words 0)
+            full = (full + " " + base + "-on")
+        }
+        def r (tree Rg (Radio (props (id rid) (className full))))
+        if on {
+            r.a11yChecked = (EVGA11yTri.yes())
+        } {
+            r.a11yChecked = (EVGA11yTri.no())
+        }
+        return r
+    }
+
+    fn group:EVGElement (c:RadioGroupCtl cls:string) {
+        return (tree Rg (Group (props (id c.tid) (className ("rg-group " + cls)) (a11yLabel c.name))))
+    }
+
+    fn tx:EVGElement (s:string cls:string) {
+        return (tree Rg (Tx (props (className cls)) s))
+    }
+
+    fn nameOf:string (c:RadioGroupCtl value:string) {
+        def i:int (c.indexOfValue(value))
+        def it:UiItem (itemAt c.items i)
+        return it.name
+    }
+
+    ; --- the ten patterns ------------------------------------------------------------
+
+    ; 1 and 2 and 8: a bordered list of rows split by hairlines.
+    fn listRows:EVGElement (c:RadioGroupCtl list:EVGElement icons:[string] dotRight:boolean rowCls:string corner:string) {
+        def n:int (array_length c.items)
+        def i:int 0
+        while (i < n) {
+            def it:UiItem (itemAt c.items i)
+            def cls:string rowCls
+            if (i == 0) {
+                cls = (cls + " rg-first" + corner)
+            }
+            if (i == (n - 1)) {
+                cls = (cls + " rg-last" + corner)
+            }
+            def r:EVGElement (this.radio(c it.value cls))
+            if (dotRight == false) {
+                r.addChild((this.dot(c it.value "" "")))
+            }
+            if (i < (array_length icons)) {
+                r.addChild((RadioGroupDemo.icon((itemAt icons i) "rg-icon-muted")))
+            }
+            r.addChild((this.tx(it.name "rg-label rg-grow")))
+            if dotRight {
+                r.addChild((this.dot(c it.value "" "")))
+            }
+            list.addChild(r)
+            if (i < (n - 1)) {
+                list.addChild((tree Rg (Rule)))
+            }
+            i = (i + 1)
+        }
+        return list
+    }
+
+    fn withIcons:EVGElement () {
+        def icons:[string]
+        push icons "mail"
+        push icons "phone"
+        push icons "chat"
+        return (this.listRows(g1 (this.group(g1 "rg-list")) icons true "rg-li" ""))
+    }
+
+    fn inFrame:EVGElement () {
+        def none:[string]
+        def frame (tree Rg (Box (props (className "rg-frame"))))
+        frame.addChild((this.listRows(g2 (this.group(g2 "rg-list rg-list-inner")) none false "rg-li" "-in")))
+        return frame
+    }
+
+    fn gridCards:EVGElement () {
+        def g:EVGElement (this.group(g3 "rg-grid"))
+        def icons:[string]
+        push icons "dollar"
+        push icons "file"
+        push icons "card"
+        push icons "chart"
+        def descs:[string]
+        push descs "Receive payments from your customers"
+        push descs "Create and send invoices to your customers"
+        push descs "Manage your billing and subscriptions"
+        push descs "View your reports and analytics"
+        def i:int 0
+        while (i < (array_length g3.items)) {
+            def it:UiItem (itemAt g3.items i)
+            def r:EVGElement (this.radio(g3 it.value "rg-tile"))
+            def ib (tree Rg (Box (props (className "rg-ibox"))))
+            ib.addChild((RadioGroupDemo.icon((itemAt icons i) "")))
+            r.addChild(ib)
+            def col (tree Rg (Col (props (className "rg-col rg-col-tile"))))
+            col.addChild((this.tx(it.name "rg-title")))
+            col.addChild((this.tx((itemAt descs i) "rg-desc rg-wrap")))
+            r.addChild(col)
+            r.addChild((this.dot(g3 it.value "" "rg-abs")))
+            g.addChild(r)
+            i = (i + 1)
+        }
+        return g
+    }
+
+    fn users:EVGElement () {
+        def g:EVGElement (this.group(g4 "rg-stack"))
+        def handles:[string]
+        push handles "@emmawilson"
+        push handles "@johndoe"
+        def initials:[string]
+        push initials "EW"
+        push initials "JD"
+        def i:int 0
+        while (i < (array_length g4.items)) {
+            def it:UiItem (itemAt g4.items i)
+            def r:EVGElement (this.radio(g4 it.value "rg-card-row rg-user"))
+            def av (tree Rg (Box (props (className ("rg-avatar rg-avatar-" + (to_string i))))))
+            ; An initials disc in place of a photo; the name beside it says who.
+            av.a11yHidden = true
+            av.addChild((this.tx((itemAt initials i) "rg-initials")))
+            r.addChild(av)
+            def col (tree Rg (Col (props (className "rg-col rg-grow"))))
+            col.addChild((this.tx(it.name "rg-title")))
+            col.addChild((this.tx((itemAt handles i) "rg-handle")))
+            r.addChild(col)
+            r.addChild((this.dot(g4 it.value "" "")))
+            g.addChild(r)
+            i = (i + 1)
+        }
+        return g
+    }
+
+    fn colored:EVGElement () {
+        def g:EVGElement (this.group(g5 "rg-plain"))
+        def i:int 0
+        while (i < (array_length g5.items)) {
+            def it:UiItem (itemAt g5.items i)
+            def r:EVGElement (this.radio(g5 it.value "rg-inline"))
+            r.addChild((this.dot(g5 it.value it.value "")))
+            r.addChild((this.tx(it.name "rg-label")))
+            g.addChild(r)
+            i = (i + 1)
+        }
+        return g
+    }
+
+    fn legend:EVGElement () {
+        def box (tree Rg (Col (props (className "rg-col rg-fieldset"))))
+        box.addChild((tree Rg (Legend (props (id "rg6-legend")) "Battery Level")))
+        box.addChild((tree Rg (Legend (props (id "rg6-desc") (className "rg-legend-desc")) "Choose your preferred battery level.")))
+        def g:EVGElement (this.group(g6 "rg-plain rg-after-legend"))
+        g.a11yLabelledBy = "rg6-legend"
+        g.a11yDescribedBy = "rg6-desc"
+        g.a11yDescription = "Choose your preferred battery level."
+        def i:int 0
+        while (i < (array_length g6.items)) {
+            def it:UiItem (itemAt g6.items i)
+            def r:EVGElement (this.radio(g6 it.value "rg-inline"))
+            r.addChild((this.dot(g6 it.value "" "")))
+            r.addChild((this.tx(it.name "rg-label")))
+            g.addChild(r)
+            i = (i + 1)
+        }
+        box.addChild(g)
+        return box
+    }
+
+    fn described:EVGElement () {
+        def g:EVGElement (this.group(g7 "rg-stack rg-w270"))
+        def descs:[string]
+        push descs "For individuals and small teams."
+        push descs "For growing businesses."
+        def i:int 0
+        while (i < (array_length g7.items)) {
+            def it:UiItem (itemAt g7.items i)
+            def r:EVGElement (this.radio(g7 it.value "rg-card-row rg-top"))
+            def col (tree Rg (Col (props (className "rg-col rg-grow"))))
+            col.addChild((this.tx(it.name "rg-label")))
+            col.addChild((this.tx((itemAt descs i) "rg-desc rg-desc-14")))
+            r.addChild(col)
+            r.addChild((this.dot(g7 it.value "" "")))
+            g.addChild(r)
+            i = (i + 1)
+        }
+        return g
+    }
+
+    fn separators:EVGElement () {
+        def none:[string]
+        return (this.listRows(g8 (this.group(g8 "rg-list rg-w270")) none false "rg-li rg-li-sep" ""))
+    }
+
+    ; Visa: a bordered tile with the word mark. Mastercard: two circles and the
+    ; lens where they overlap, as the brand draws it.
+    fn logo:EVGElement (value:string) {
+        def tile (tree Rg (Box (props (className "rg-logo"))))
+        ; The card's text already says which network it is.
+        tile.a11yHidden = true
+        if (value == "visa") {
+            tile.addChild((this.tx("VISA" "rg-visa")))
+            return tile
+        }
+        def mark (tree Rg (Box (props (className "rg-mc"))))
+        mark.addChild((tree Rg (Shape (props (className "rg-shape rg-mc-red") (viewBox "0 0 26 16") (svgPath "M16 8a7 7 0 1 1-14 0a7 7 0 1 1 14 0z")))))
+        mark.addChild((tree Rg (Shape (props (className "rg-shape rg-mc-yellow") (viewBox "0 0 26 16") (svgPath "M24 8a7 7 0 1 1-14 0a7 7 0 1 1 14 0z")))))
+        mark.addChild((tree Rg (Shape (props (className "rg-shape rg-mc-orange") (viewBox "0 0 26 16") (svgPath "M13 2.255A7 7 0 0 1 13 13.745A7 7 0 0 1 13 2.255z")))))
+        tile.addChild(mark)
+        return tile
+    }
+
+    fn payments:EVGElement () {
+        def g:EVGElement (this.group(g9 "rg-stack rg-w320"))
+        def exp:[string]
+        push exp "Expires 12/26"
+        push exp "Expires 09/25"
+        def i:int 0
+        while (i < (array_length g9.items)) {
+            def it:UiItem (itemAt g9.items i)
+            if (it.value == "new") {
+                def r2:EVGElement (this.radio(g9 it.value "rg-card-row rg-pay rg-pay-new"))
+                r2.addChild((RadioGroupDemo.icon("plus" "rg-icon-sm")))
+                r2.addChild((this.tx(it.name "rg-label")))
+                r2.addChild((this.dot(g9 it.value "" "rg-abs rg-abs-pay")))
+                g.addChild(r2)
+            } {
+                def r:EVGElement (this.radio(g9 it.value "rg-card-row rg-pay"))
+                r.addChild((this.logo(it.value)))
+                def col (tree Rg (Col (props (className "rg-col rg-grow"))))
+                col.addChild((this.tx(it.name "rg-label")))
+                col.addChild((this.tx((itemAt exp i) "rg-desc")))
+                r.addChild(col)
+                r.addChild((this.dot(g9 it.value "" "rg-abs rg-abs-pay")))
+                g.addChild(r)
+            }
+            i = (i + 1)
+        }
+        return g
+    }
+
+    fn plans:EVGElement () {
+        def g:EVGElement (this.group(g10 "rg-stack rg-w320"))
+        def prices:[string]
+        push prices "$0/mo"
+        push prices "$19/mo"
+        push prices "$49/mo"
+        def descs:[string]
+        push descs "For personal projects and experiments."
+        push descs "For professionals and small teams."
+        push descs "For organizations with advanced needs."
+        def i:int 0
+        while (i < (array_length g10.items)) {
+            def it:UiItem (itemAt g10.items i)
+            def r:EVGElement (this.radio(g10 it.value "rg-card-row rg-top"))
+            r.addChild((this.dot(g10 it.value "" "rg-dot-nudge")))
+            def col (tree Rg (Col (props (className "rg-col rg-grow"))))
+            def head (tree Rg (Box (props (className "rg-head"))))
+            head.addChild((this.tx(it.name "rg-label rg-grow")))
+            head.addChild((this.tx((itemAt prices i) "rg-price")))
+            col.addChild(head)
+            col.addChild((this.tx((itemAt descs i) "rg-desc rg-wrap")))
+            r.addChild(col)
+            g.addChild(r)
+            i = (i + 1)
+        }
+        return g
+    }
+
+    fn card:EVGElement (n:int caption:string tall:string example:EVGElement) {
+        def id:string ("rg-card-" + (to_string n))
+        def stage (tree Rg (Stage (props (id (id + "-stage")) (className ("rg-stage rg-stage-" + tall)))))
+        stage.addChild(example)
+        return (tree Rg (Card (props (id id))
+            (child stage)
+            (Foot (Caption (props (id (id + "-caption"))) caption))))
+    }
+
+    fn pageBody:EVGElement () {
+        def page (tree Rg (Page (props (id "rg-page"))))
+        page.addChild((this.card(1 "Radio group in card with icons" "a" (this.withIcons()))))
+        page.addChild((this.card(2 "Radio group in frame" "a" (this.inFrame()))))
+        page.addChild((this.card(3 "Radio group with card grid and icons" "b" (this.gridCards()))))
+        page.addChild((this.card(4 "Radio group with user avatars" "b" (this.users()))))
+        page.addChild((this.card(5 "Colored radio group" "c" (this.colored()))))
+        page.addChild((this.card(6 "Radio group with legend and description" "c" (this.legend()))))
+        page.addChild((this.card(7 "Card radio group with descriptions" "c" (this.described()))))
+        page.addChild((this.card(8 "Radio group in card with separators" "c" (this.separators()))))
+        page.addChild((this.card(9 "Payment method radio group" "d" (this.payments()))))
+        page.addChild((this.card(10 "Plan radio group with prices" "d" (this.plans()))))
+        return page
+    }
+
+    fn rebuild:void () {
+        root = (this.pageBody())
+        dirty = true
+    }
+
+    ; --- layout -----------------------------------------------------------------------
+
+    fn markStates:void (el:EVGElement) {
+        el.isHovered = ((strlen hovered) > 0) && (el.id == hovered)
+        el.isFocused = ((strlen focused) > 0) && (el.id == focused)
+        el.isPressed = ((strlen pressed) > 0) && (el.id == pressed)
+        def i:int 0
+        while (i < (array_length el.children)) {
+            this.markStates((itemAt el.children i))
+            i = (i + 1)
+        }
+    }
+
+    sfn deepestBottom:double (el:EVGElement) {
+        def bottom:double ((el.calculatedY) + (el.calculatedHeight))
+        def i:int 0
+        while (i < (array_length el.children)) {
+            def b:double (RadioGroupDemo.deepestBottom((itemAt el.children i)))
+            if (b > bottom) {
+                bottom = b
+            }
+            i = (i + 1)
+        }
+        return bottom
+    }
+
+    ; A fresh tree for every pass, as PaginationDemo does: EVGLayout reads some
+    ; of its own answers from the last pass back as inputs.
+    fn layOnce:EVGLayout () {
+        root = (this.pageBody())
+        def r:EVGElement (unwrap root)
+        def s:EVGStyleSheet (unwrap sheet)
+        this.markStates(r)
+        s.setViewport(pageW pageH false)
+        s.applyTree(r "")
+        def lay (new EVGLayout())
+        lay.setPageSize(pageW pageH)
+        lay.layout(r)
+        layout = lay
+        return lay
+    }
+
+    fn laidOut:EVGLayout () {
+        if (dirty == false) {
+            if layout {
+                return (unwrap layout)
+            }
+        }
+        dirty = false
+        def lay:EVGLayout (this.layOnce())
+        def r:EVGElement (unwrap root)
+        def bottom:double 0.0
+        def i:int 0
+        while (i < (array_length r.children)) {
+            def b:double (RadioGroupDemo.deepestBottom((itemAt r.children i)))
+            if (b > bottom) {
+                bottom = b
+            }
+            i = (i + 1)
+        }
+        def want:double (to_double (to_int ((bottom + r.box.paddingBottomPx) + 0.999)))
+        if (want != pageH) {
+            pageH = want
+            return (this.layOnce())
+        }
+        return lay
+    }
+
+    ; --- input ------------------------------------------------------------------------
+
+    ; A press anywhere on a row or card checks it and puts the focus there.
+    fn press:boolean (target:string) {
+        def k:int (this.ownerOf(target))
+        if (k < 0) {
+            if ((strlen focused) > 0) {
+                focused = ""
+                this.rebuild()
+            }
+            return false
+        }
+        def c:RadioGroupCtl (this.ctlAt((k + 1)))
+        c.activate(target)
+        focused = target
+        this.rebuild()
+        return true
+    }
+
+    fn key:boolean (k:string) {
+        return (this.keyWith(k false false))
+    }
+
+    ; Arrows move AND check (WAI-ARIA), wrapping; Space checks the focused one.
+    fn keyWith:boolean (k:string shift:boolean ctrl:boolean) {
+        def owner:int (this.ownerOf(focused))
+        if (owner < 0) {
+            return false
+        }
+        def c:RadioGroupCtl (this.ctlAt((owner + 1)))
+        if (k == " ") {
+            c.activate(focused)
+            this.rebuild()
+            return true
+        }
+        if ((UiCtl.isNextKey(k)) || (UiCtl.isPrevKey(k))) {
+            def land:string (c.keyDown(focused k))
+            if ((strlen land) > 0) {
+                c.activate(land)
+                focused = land
+                this.rebuild()
+            }
+            return true
+        }
+        return false
+    }
+
+    fn setHover:void (id:string) {
+        if (id != hovered) {
+            hovered = id
+            this.rebuild()
+        }
+    }
+
+    fn setPressed:void (id:string) {
+        pressed = id
+    }
+
+    ; Focus arriving from the page (a Tab, a reader).
+    fn setFocus:void (id:string) {
+        if (id == focused) {
+            return
+        }
+        focused = id
+        def k:int (this.ownerOf(id))
+        if (k >= 0) {
+            def c:RadioGroupCtl (this.ctlAt((k + 1)))
+            c.onFocus(id)
+        }
+        this.rebuild()
+    }
+
+    ; --- what the page asks for ---------------------------------------------------------
+
+    fn displayListJson:string () {
+        def lay:EVGLayout (this.laidOut())
+        def r:EVGElement (unwrap root)
+        def dl (new EVGDisplayList())
+        dl.setTextEngine((lay.getTextEngine()))
+        dl.build(r)
+        return (dl.toJson())
+    }
+
+    fn hitId:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def hit (new EVGHitTest())
+        return (hit.idAt(r px py))
+    }
+
+    fn cursorAt:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def hit (new EVGHitTest())
+        return (hit.cursorAt(r px py))
+    }
+
+    fn a11yJson:string (generation:int focusId:string) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Radio group demo" generation focusId))
+        return (t.toJson())
+    }
+
+    fn a11yProblems:[string] () {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Radio group demo" 1 ""))
+        return (t.lint())
+    }
+
+    fn styleErrorCount:int () {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (s.getErrorCount())
+    }
+
+    fn styleErrorAt:string (i:int) {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (s.getError(i))
+    }
+
+    fn widthPx:double () { return pageW }
+
+    fn heightPx:double () {
+        this.laidOut()
+        return pageH
+    }
+
+    ; Group n's checked value, for a check.
+    fn valueOf:string (n:int) {
+        def c:RadioGroupCtl (this.ctlAt(n))
+        return c.value
+    }
+
+    fn summary:string () {
+        def out:string ""
+        def i:int 1
+        while (i <= 10) {
+            if (i > 1) {
+                out = (out + ",")
+            }
+            out = (out + (this.valueOf(i)))
+            i = (i + 1)
+        }
+        return (out + "|" + focused)
+    }
+}

@@ -1,0 +1,288 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * Radio Group, as an EVG stylesheet: ReUI / shadcn's look — zinc greys, 1px
+ * #e4e4e7 lines, 10–12px radii, 14px text, a 16px radio whose checked state is
+ * a thick dark ring. The selected row or card is #f4f4f5 with a darker edge.
+ *
+ * Class-first, one token per selector (EVG has no descendant selectors).
+ * Which radio is checked, hovered or focused is written by RadioGroupDemo as
+ * classes; nothing here decides it.
+ */
+
+/* --- the page and its cards ------------------------------------------------- */
+
+.rg-page {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  row-gap: 16px;
+  padding: 16px;
+  width: 100%;
+  background-color: #ffffff;
+}
+
+.rg-card {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  width: 48.5%;
+  border: 1px solid #e4e4e7;
+  border-radius: 14px;
+  background-color: #ffffff;
+  padding: 4px 4px 0 4px;
+  shadow-color: rgba(0, 0, 0, 0.04);
+  shadow-radius: 2px;
+  shadow-offset-y: 1px;
+}
+
+.rg-stage {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 12px;
+  border: 1px solid #ececef;
+  border-radius: 10px;
+  background-color: #ffffff;
+}
+.rg-stage-a { height: 250px; }
+.rg-stage-b { height: 330px; }
+.rg-stage-c { height: 236px; }
+.rg-stage-d { height: 290px; }
+
+.rg-foot {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  height: 44px;
+  padding: 0 12px;
+}
+
+.rg-caption { color: #71717a; font-size: 13px; line-height: 18px; }
+
+/* --- groups ------------------------------------------------------------------ */
+
+.rg-group { display: flex; flex-direction: column; flex-wrap: nowrap; }
+
+/* 1, 2, 8: rows in one bordered box, split by hairlines. */
+.rg-list {
+  width: 292px;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  background-color: #ffffff;
+}
+.rg-list-inner { width: 100%; border-radius: 10px; }
+.rg-rule { height: 1px; width: 100%; background-color: #e4e4e7; flex-shrink: 0; }
+
+/* 2: the outer frame round the list. */
+.rg-frame {
+  display: flex;
+  flex-direction: column;
+  width: 292px;
+  padding: 4px;
+  border: 1px solid #ececef;
+  border-radius: 14px;
+  background-color: #fafafa;
+}
+
+/* 3: two columns of cards. */
+.rg-grid {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: stretch;
+  width: 292px;
+  gap: 16px;
+  row-gap: 16px;
+}
+
+/* 4, 7, 9, 10: stacked bordered cards. */
+.rg-stack { width: 292px; gap: 8px; }
+.rg-w270 { width: 272px; }
+.rg-w320 { width: 320px; }
+
+/* 5, 6: bare radios with a label. */
+.rg-plain { gap: 10px; }
+.rg-fieldset { gap: 6px; width: 280px; }
+.rg-legend { color: #09090b; font-size: 16px; font-weight: 500; line-height: 24px; }
+.rg-legend-desc { color: #71717a; font-size: 14px; font-weight: 400; line-height: 20px; }
+.rg-after-legend { margin-top: 8px; }
+
+/* --- the radios (rows and cards) ---------------------------------------------- */
+
+.rg-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.rg-li { padding: 10px 14px; height: 40px; background-color: #ffffff; }
+.rg-li:hover { background-color: #fafafa; }
+.rg-li-on { background-color: #f4f4f5; }
+.rg-li-on:hover { background-color: #f4f4f5; }
+.rg-li-sep { height: 44px; padding: 12px 16px; }
+.rg-first { border-radius: 11px 11px 0 0; }
+.rg-last { border-radius: 0 0 11px 11px; }
+.rg-first-in { border-radius: 9px 9px 0 0; }
+.rg-last-in { border-radius: 0 0 9px 9px; }
+
+.rg-card-row {
+  padding: 12px 16px;
+  width: 100%;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  background-color: #ffffff;
+  position: relative;
+}
+.rg-card-row:hover { border-color: #d4d4d8; background-color: #fafafa; }
+.rg-card-row-on { background-color: #f4f4f5; border-color: #a1a1aa; }
+.rg-card-row-on:hover { background-color: #f4f4f5; border-color: #a1a1aa; }
+.rg-top { align-items: flex-start; }
+.rg-user { padding: 9px 12px; }
+
+.rg-tile {
+  flex-direction: column;
+  align-items: flex-start;
+  width: 138px;
+  padding: 12px;
+  gap: 10px;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  background-color: #ffffff;
+  position: relative;
+}
+.rg-tile:hover { border-color: #d4d4d8; background-color: #fafafa; }
+.rg-tile-on { background-color: #f4f4f5; border-color: #a1a1aa; }
+.rg-tile-on:hover { background-color: #f4f4f5; border-color: #a1a1aa; }
+
+.rg-inline { gap: 8px; }
+
+/* Room on the right for the corner radio, so a long line never runs under it. */
+.rg-pay { padding: 12px 36px 12px 16px; }
+.rg-pay-new { justify-content: center; gap: 8px; height: 54px; padding: 12px 36px; }
+
+/* --- the drawn radio --------------------------------------------------------- */
+
+.rg-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  border: 1px solid #e4e4e7;
+  background-color: #ffffff;
+  flex-shrink: 0;
+  shadow-color: rgba(0, 0, 0, 0.05);
+  shadow-radius: 1px;
+  shadow-offset-y: 1px;
+}
+.rg-dot-hover { border-color: #a1a1aa; }
+.rg-dot-on { border-width: 5px; border-color: #18181b; }
+.rg-dot-focus { shadow-color: rgba(113, 113, 122, 0.55); shadow-radius: 3px; shadow-offset-y: 0px; }
+/* ReUI's `absolute top-3 right-3`: 12px from the card's outer edge. EVG
+ * offsets an absolute child from its parent's CONTENT box, so the offsets
+ * here take the card's 1px border and padding back off. */
+.rg-abs { position: absolute; top: -1px; right: -1px; }
+.rg-abs-pay { right: -25px; }
+.rg-dot-nudge { margin-top: 2px; }
+
+.rg-dot-blue { border-color: #3b82f6; border-width: 1.5px; }
+.rg-dot-blue-on { border-width: 5px; }
+.rg-dot-green { border-color: #22c55e; border-width: 1.5px; }
+.rg-dot-green-on { border-width: 5px; }
+.rg-dot-yellow { border-color: #eab308; border-width: 1.5px; }
+.rg-dot-yellow-on { border-width: 5px; }
+
+/* --- text --------------------------------------------------------------------- */
+
+.rg-label { color: #09090b; font-size: 14px; font-weight: 500; line-height: 20px; }
+.rg-title { color: #09090b; font-size: 14px; font-weight: 600; line-height: 20px; }
+.rg-desc { color: #71717a; font-size: 12px; font-weight: 400; line-height: 16px; }
+.rg-desc-14 { font-size: 14px; line-height: 20px; }
+.rg-handle { color: #71717a; font-size: 13px; line-height: 18px; }
+.rg-price { color: #09090b; font-size: 14px; font-weight: 600; line-height: 20px; }
+.rg-wrap { width: 100%; }
+.rg-grow { flex-grow: 1; flex-shrink: 1; }
+
+.rg-col { display: flex; flex-direction: column; flex-wrap: nowrap; gap: 2px; }
+.rg-col-tile { width: 100%; gap: 4px; }
+.rg-head { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; width: 100%; gap: 8px; }
+
+/* --- icons, avatars, logos ----------------------------------------------------- */
+
+.rg-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: #09090b;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+.rg-icon-muted { stroke: #52525b; stroke-width: 1.75; }
+.rg-icon-sm { width: 16px; height: 16px; }
+
+.rg-ibox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e4e4e7;
+  border-radius: 16px;
+  background-color: #ffffff;
+  shadow-color: rgba(0, 0, 0, 0.05);
+  shadow-radius: 2px;
+  shadow-offset-y: 1px;
+}
+
+.rg-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 16px;
+  flex-shrink: 0;
+}
+.rg-avatar-0 { background-color: #be123c; }
+.rg-avatar-1 { background-color: #78716c; }
+.rg-initials { color: #ffffff; font-size: 12px; font-weight: 600; line-height: 16px; }
+
+.rg-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 30px;
+  border: 1px solid #e4e4e7;
+  border-radius: 6px;
+  background-color: #ffffff;
+  flex-shrink: 0;
+}
+.rg-visa { color: #1434cb; font-size: 12px; font-weight: 800; line-height: 14px; letter-spacing: 0.5px; }
+.rg-mc { width: 26px; height: 16px; position: relative; }
+.rg-shape { position: absolute; top: 0px; left: 0px; width: 26px; height: 16px; stroke: none; }
+.rg-mc-red { fill: #eb001b; }
+.rg-mc-yellow { fill: #f79e1b; }
+.rg-mc-orange { fill: #ff5f00; }
+
+/* --- a phone ---------------------------------------------------------------------- */
+
+@media (max-width: 600px) {
+  .rg-page { padding: 12px; row-gap: 12px; }
+  .rg-card { width: 100%; }
+  /* Content-high on a phone, so nothing to centre in: from the top. */
+  .rg-stage { justify-content: flex-start; }
+  /* The 320px stacks take the stage's width instead. */
+  .rg-w320 { width: 100%; }
+  .rg-stage-a { height: auto; padding: 24px 12px; }
+  .rg-stage-b { height: auto; padding: 24px 12px; }
+  .rg-stage-c { height: auto; padding: 24px 12px; }
+  .rg-stage-d { height: auto; padding: 24px 12px; }
+}

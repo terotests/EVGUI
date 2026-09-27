@@ -729,6 +729,29 @@
               shadcn&rsquo;s <code>hidden sm:block</code> does.
             </p>
           </section>
+          <section data-for="radio">
+            <h2>what to try</h2>
+            <p class="hint">
+              Click anywhere on a row or card: the whole of it is the radio, and
+              the checked one turns grey with a darker edge. Each card is its own
+              group, so checking <em>Phone</em> leaves <em>English</em> alone.
+            </p>
+            <p class="hint">
+              Tab onto a group: it is one stop, and it lands on the checked
+              radio. <strong>&uarr;</strong> / <strong>&darr;</strong> (or
+              <strong>&larr;</strong> / <strong>&rarr;</strong>) move
+              <em>and</em> check, wrapping at the ends, as the WAI-ARIA radio
+              group asks; <strong>Space</strong> checks the focused one. The next
+              Tab goes on to the next group.
+            </p>
+            <p class="hint">
+              Each group is a <code>radiogroup</code> &mdash; &ldquo;Battery
+              Level&rdquo; is named by its legend (<code>aria-labelledby</code>),
+              the others by an <code>aria-label</code> &mdash; and every row a
+              <code>radio</code> with <code>aria-checked</code>. On a phone the
+              cards stack in one column; the 2&times;2 grid keeps its two.
+            </p>
+          </section>
           <section data-for="tabs">
             <h2>what to try</h2>
             <p class="hint">
@@ -1383,6 +1406,12 @@
   "src": "PaginationDemo",
   "caption": "PaginationCtl · shadcn / ReUI patterns, specified from source",
   "desc": "ReUI's ten Pagination patterns, one card each: hover and circle styles, go-to-page inputs, a numbered pill, page info, an ellipsis, an outlined group, rows per page with a range and a Page select. Which pages are drawn and where the ellipsis goes, the disabled ends, clamping and the rows-per-page range are PaginationCtl's, which shares TableCtl's page arithmetic; the boxes are InputCtls on the page's text session and the selects SelectCtls. There is no reference library to measure it against, so the behaviour is specified from shadcn's and MUI's source, not measured."
+ },
+ "radio": {
+  "title": "Radio Group",
+  "src": "RadioGroupDemo",
+  "caption": "RadioGroupCtl · measured against @radix-ui/react-radio-group",
+  "desc": "ReUI's ten Radio Group patterns, one card each: rows with icons, a framed list, a 2x2 grid of cards, user cards, coloured radios, a legend with a description, described cards, a separated list, payment methods and priced plans. Each group is a RadioGroupCtl, the controller measured against Radix RadioGroup, which owns the value, the roving tab stop and the wrapping step; the demo adds the WAI-ARIA rule that an arrow checks the radio it lands on (the controller, like the recorded Radix trace, only moves the focus there). The whole row or card is the click target; the logos and avatars are drawn shapes, not images."
  },
  "tabs": {
   "title": "Tabs",

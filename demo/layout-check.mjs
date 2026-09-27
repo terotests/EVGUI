@@ -91,6 +91,7 @@ const DEMOS = [
   ["TabsDemo", "tabs.css"],
   ["AutocompleteDemo", "autocomplete.css"],
   ["PaginationDemo", "pagination.css"],
+  ["RadioGroupDemo", "radio.css"],
 ];
 
 const rect = (e) => ({
