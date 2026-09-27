@@ -1581,7 +1581,7 @@ const MIN_SCALE = 0.75;
 // or "auto" to measure the laid-out content (see `contentHeight`).
 const NARROW = {
   menubar: { min: 320, h: "auto", keep: true, grow: true },
-  toolbar: { min: 320, h: "auto", grow: true },
+  toolbar: { min: 320, h: "auto", keep: true, grow: true },
   sortable: { min: 320, h: "auto", grow: true },
   tree: { min: 320, h: "auto" },
   timeline: { min: 320, h: "auto" },
