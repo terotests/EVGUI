@@ -66,6 +66,7 @@ const STATIC_ARGS = {
 // its own is not skipped; it is initialised with an empty one, because a demo
 // that only lays out correctly with CSS is still a demo that has to lay out.
 const DEMOS = [
+  ["AccordionDemo", "accordion.css"],
   ["CalendarDemo", "calendar.css"],
   ["ControlsDemo", "controls.css"],
   ["DashboardDemo", "dashboard.css"],

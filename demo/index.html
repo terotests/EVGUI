@@ -584,6 +584,20 @@
               horizontal arrows are for nesting and nothing else.
             </p>
           </section>
+          <section data-for="accordion">
+            <h2>what to try</h2>
+            <p class="hint">
+              <strong>Tab</strong> visits every trigger &mdash; an accordion
+              does not rove. <strong>&darr;</strong> / <strong>&uarr;</strong>
+              step between the triggers of one list and wrap at the ends,
+              <strong>Home</strong> / <strong>End</strong> jump to the first and
+              last, <strong>Enter</strong> or <strong>Space</strong> toggles.
+            </p>
+            <p class="hint">
+              In the two <em>single</em> lists opening an item closes the other.
+              The <em>Multiple</em> list keeps them all.
+            </p>
+          </section>
           <section data-for="dashboard">
             <h2>what to try</h2>
             <p class="hint">
@@ -1016,6 +1030,17 @@
             row. Compare it with the <em>Menubar</em> demo, whose keyboard is
             hand-written and matched against nothing.
           </p>
+          <p class="note" data-for="accordion">
+            <strong>Each list is an <code>AccordionCtl</code>.</strong> Which
+            items are open, <code>type="single"</code> versus
+            <code>"multiple"</code>, <code>collapsible</code> and every key are
+            <code>gallery/evgui/src/AccordionCtl.rgr</code>&rsquo;s, written
+            against <code>@radix-ui/react-accordion</code>: triggers are buttons
+            with <code>aria-expanded</code> and <code>aria-controls</code>, the
+            open panel is a region labelled by its trigger. The page grows and
+            shrinks with the open items. Panels open without a height
+            animation, which EVG&rsquo;s transitions do not cover.
+          </p>
           <p class="note" data-for="dialog">
             <strong>Anything can go inside.</strong> <code>WindowCtl</code> owns a
             frame and a title bar; <code>bodyEl</code> is an ordinary
@@ -1220,6 +1245,12 @@
   "src": "EffectsDemo",
   "caption": "GPU surface effects · declared in effects.css",
   "desc": "A starfield, a pane of liquid glass and water, each declared by one line of CSS on the element that has it. Edit the stylesheet in the controls below and the cascade reads it back; PNG snapshots and the software rasteriser draw none of the effects."
+ },
+ "accordion": {
+  "title": "Accordion",
+  "src": "AccordionDemo",
+  "caption": "AccordionCtl · modelled on @radix-ui/react-accordion",
+  "desc": "shadcn and ReUI's accordion three ways: ReUI's bordered FAQ, shadcn's single collapsible list and a type=\"multiple\" one. Which items are open, the single/multiple/collapsible rules and the keyboard (arrows and Home/End between the triggers, Enter/Space to toggle) are AccordionCtl's, written against Radix Accordion's contract. The panels open at once — EVG does not transition heights — and the chevron turns over 200 ms."
  }
 }
     </script>

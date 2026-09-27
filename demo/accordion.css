@@ -1,0 +1,144 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * shadcn / ReUI's Accordion, as an EVG stylesheet.
+ *
+ * Class-first, one token per selector (EVGStyleSheet matches one class token
+ * per selector, so a variant is its own token on the same element). The
+ * palette is shadcn's zinc ramp: #09090b ink, #71717a muted, #e4e4e7 lines.
+ * Nothing here says whether an item is open — that is AccordionCtl's answer,
+ * and the demo writes it as which classes an element carries.
+ */
+
+/* No fixed height: AccordionDemo sizes the page to what is laid out in it,
+ * because every open and close changes how tall that is. */
+.ac-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  background-color: #fafafa;
+  padding: 24px;
+  width: 900px;
+}
+
+.ac-card {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  background-color: #ffffff;
+  padding: 20px 24px 24px 24px;
+  width: 100%;
+}
+
+/* As wide as the list under it, so the heading lines up with it. */
+.ac-cardhead {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 512px;
+}
+
+.ac-cardtitle { color: #09090b; font-size: 14px; font-weight: 600; line-height: 20px; }
+.ac-cardsub { color: #71717a; font-size: 13px; line-height: 18px; }
+
+/* The list: max-w-lg (512px), centred by the card. */
+.ac-root {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  width: 512px;
+}
+
+/* ReUI's bordered list: space-y-2. */
+.ac-root-boxed { gap: 8px; }
+
+.ac-item {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+/* shadcn's default: border-b on every item but the last — a 1px box at the
+   item's foot, below its panel when it is open. */
+.ac-rule { background-color: #e4e4e7; height: 1px; width: 100%; }
+
+/* ReUI's: each item its own rounded-lg box, px-3. */
+.ac-item-boxed {
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background-color: #ffffff;
+  padding: 0 12px;
+}
+
+/* --- the trigger ------------------------------------------------------------
+   A full-width row: the question takes the slack and wraps if it has to, the
+   chevron sits at the right. py-4 in the default list, py-3 in the boxes. */
+.ac-trigger {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-radius: 6px;
+  padding: 16px 0;
+  width: 100%;
+}
+
+.ac-trigger-boxed { padding: 12px 0; }
+
+.ac-triglabel {
+  color: #09090b;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  flex-grow: 1;
+  flex-shrink: 1;
+}
+
+/* The chevron turns half over when its item opens — the one part of the
+   accordion that animates, because a transform is what EVG transitions. */
+.ac-chevron {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: #71717a;
+  stroke-width: 2;
+  transform: rotate(0deg);
+  transition: transform 200ms ease-out;
+}
+
+.ac-chevron-open { transform: rotate(180deg); }
+
+/* --- the panel --------------------------------------------------------------
+   pt-0 pb-4; paragraphs a prose gap apart. */
+.ac-content {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 10px;
+  padding: 0 0 16px 0;
+  width: 100%;
+}
+
+.ac-text {
+  color: #71717a;
+  font-size: 14px;
+  line-height: 20px;
+  width: 100%;
+}
+
+/* --- a phone ------------------------------------------------------------------
+   Laid out at the preview's width (main.js `fitDemo`): the lists take the
+   card, and the card's padding comes in. */
+@media (max-width: 600px) {
+  .ac-page { width: 100%; padding: 12px; gap: 12px; }
+  .ac-card { padding: 16px; }
+  .ac-root { width: 100%; }
+  .ac-cardhead { width: 100%; }
+}

@@ -58,6 +58,7 @@ const { FilterDemo } = require(path.join(ROOT, "gallery/evgui/bin/FilterDemo.cjs
 const { EventCalDemo } = require(path.join(ROOT, "gallery/evgui/bin/EventCalDemo.cjs"));
 const { MessageDemo } = require(path.join(ROOT, "gallery/evgui/bin/MessageDemo.cjs"));
 const { ControlsDemo } = require(path.join(ROOT, "gallery/evgui/bin/ControlsDemo.cjs"));
+const { AccordionDemo } = require(path.join(ROOT, "gallery/evgui/bin/AccordionDemo.cjs"));
 const MENUBAR_CSS = fs.readFileSync(path.join(HERE, "menubar.css"), "utf8");
 const TOOLBAR_CSS = fs.readFileSync(path.join(HERE, "toolbar.css"), "utf8");
 const SORTABLE_CSS = fs.readFileSync(path.join(HERE, "sortable.css"), "utf8");
@@ -89,6 +90,11 @@ const filters = atRest(FilterDemo, "filters.css");
 const eventcal = atRest(EventCalDemo, "eventcal.css");
 const message = atRest(MessageDemo, "message.css");
 const controls = atRest(ControlsDemo, "controls.css");
+const accordion = atRest(AccordionDemo, "accordion.css");
+// The same accordion with every item of every list pressed once: the single
+// lists end on their last item, the multiple list with all three open.
+const accordionOpen = atRest(AccordionDemo, "accordion.css");
+for (const id of ["acb-integrations-trigger", "acs-item-3-trigger", "acm-shipping-trigger", "acm-returns-trigger"]) accordionOpen.press(id);
 const sizeOf = (d) => [typeof d.widthPx === "function" ? d.widthPx() : 900, d.heightPx()];
 const REST = [
   ["profile — a label-left form", profile, 40],
@@ -99,6 +105,8 @@ const REST = [
   ["eventcal — a week of events", eventcal, 45],
   ["message — a chat transcript", message, 46],
   ["controls — stepper, sliders and a number field", controls, 47],
+  ["accordion — three lists, first items open", accordion, 48],
+  ["accordion — other items open, multiple list all open", accordionOpen, 49],
 ].map(([name, d, gen]) => ({
   name,
   size: sizeOf(d),
