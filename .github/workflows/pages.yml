@@ -25,10 +25,7 @@ on:
         default: ""
 
 env:
-  # Pinned to the Ranger commit that adds what the demos use from lib/evg
-  # (a11yDescribedBy, the spinbutton role, willReadFrequently on the text
-  # atlas) until that is merged to master; then set this back to 'master'.
-  RANGER_REF: ${{ inputs.ranger_ref || '57260750ae03b9d5705daa01c49e6c51679d0cab' }}
+  RANGER_REF: ${{ inputs.ranger_ref || 'master' }}
 
 permissions:
   contents: read
