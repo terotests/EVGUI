@@ -58,6 +58,7 @@ const { FilterDemo } = require(path.join(ROOT, "gallery/evgui/bin/FilterDemo.cjs
 const { EventCalDemo } = require(path.join(ROOT, "gallery/evgui/bin/EventCalDemo.cjs"));
 const { MessageDemo } = require(path.join(ROOT, "gallery/evgui/bin/MessageDemo.cjs"));
 const { ControlsDemo } = require(path.join(ROOT, "gallery/evgui/bin/ControlsDemo.cjs"));
+const { SeparatorDemo } = require(path.join(ROOT, "gallery/evgui/bin/SeparatorDemo.cjs"));
 const MENUBAR_CSS = fs.readFileSync(path.join(HERE, "menubar.css"), "utf8");
 const TOOLBAR_CSS = fs.readFileSync(path.join(HERE, "toolbar.css"), "utf8");
 const SORTABLE_CSS = fs.readFileSync(path.join(HERE, "sortable.css"), "utf8");
@@ -89,6 +90,7 @@ const filters = atRest(FilterDemo, "filters.css");
 const eventcal = atRest(EventCalDemo, "eventcal.css");
 const message = atRest(MessageDemo, "message.css");
 const controls = atRest(ControlsDemo, "controls.css");
+const separator = atRest(SeparatorDemo, "separator.css");
 const sizeOf = (d) => [typeof d.widthPx === "function" ? d.widthPx() : 900, d.heightPx()];
 const REST = [
   ["profile — a label-left form", profile, 40],
@@ -99,6 +101,7 @@ const REST = [
   ["eventcal — a week of events", eventcal, 45],
   ["message — a chat transcript", message, 46],
   ["controls — stepper, sliders and a number field", controls, 47],
+  ["separator — six rules, some semantic and some decorative", separator, 48],
 ].map(([name, d, gen]) => ({
   name,
   size: sizeOf(d),
@@ -549,12 +552,31 @@ if (!fs.existsSync(path.join(HERE, "bundle.js"))) {
       await kb.keyboard.press("Shift+Tab");
       back = await where();
     }
+    // A PURELY PRESENTATIONAL DEMO has no stop, and must not be given one to
+    // satisfy this walk: a tab stop on something that does nothing is a
+    // defect of its own (WCAG 2.4.3 — focus order has to mean something).
+    // The separator page is the case: rules and text, nothing to press. What
+    // is checked for such a demo is the other half of the contract — its
+    // mirror has NO focusable node, Tab goes straight past the canvas, and
+    // Shift+Tab from after it goes straight past it back again. The demo is
+    // recognised by its tree, not by name, so a control added to it later
+    // puts it back under the ordinary rule.
+    const presentational = await kb.evaluate(() =>
+      !JSON.parse(window.__lastA11y).nodes.some((n) => n.focusable));
     const reached = walked.length > 0;
     const left = !!out;
     const reentered = !!back && back.inside;
-    const ok = reached && left && reentered && kbErrors.length === 0;
+    const ok = presentational
+      ? !reached && left && !!back && !back.inside && kbErrors.length === 0
+      : reached && left && reentered && kbErrors.length === 0;
     if (!ok) failures += 1;
-    const said = !reached ? "Tab never reached a control"
+    const said = presentational
+      ? (reached ? `presentational, but Tab stopped inside at ${walked.join(" ")}`
+        : !left ? "presentational, but Tab never left"
+        : back && back.inside ? `presentational, but Shift+Tab stopped inside at ${back.id}`
+        : kbErrors.length ? kbErrors.join("; ")
+        : `presentational: no stop, Tab passes over to #${out.id} and Shift+Tab back to #${back.id}`)
+      : !reached ? "Tab never reached a control"
       : !left ? `Tab never left (trapped after ${walked.length} presses: …${walked.slice(-4).join(" ")})`
       : !reentered ? "Shift+Tab from after the canvas did not come back in"
       : kbErrors.length ? kbErrors.join("; ")

@@ -46,6 +46,7 @@ SUITES=(
   ui:controls:demo
   ui:otp:demo
   ui:metadata:check
+  ui:separator:check
   ui:semantics:check
   ui:input:bench
   ui:layout:check

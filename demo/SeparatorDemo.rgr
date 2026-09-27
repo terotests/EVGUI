@@ -1,0 +1,388 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; SeparatorDemo — six uses of one rule, after shadcn / ReUI's Separator
+; =============================================================================
+; The reference is ReUI's Separator page (reui.io/components/separator), which
+; is shadcn's Separator over Radix's. It shows the component in six settings,
+; one card each, and so does this:
+;
+;   1. content sections   a heading and a paragraph, a horizontal rule between
+;   2. inline elements    Blog | Docs | Source, a vertical rule 20px tall
+;   3. menu groups        three two-line columns, vertical rules as tall as
+;                         the columns
+;   4. list rows          label left, value right, a rule between rows
+;   5. labelled           "or continue with" centred ON the rule, the rule
+;                         hidden behind the text
+;   6. order summary      rows of money with two rules through them
+;
+; The page is ONE TREE LITERAL. Every rule in it is an ordinary element the
+; literal puts where it goes, and `SeparatorCtl.adopt` then dresses each one:
+; its class, its role and its `aria-orientation` come from the controller, so
+; the literal says where the rules are and nothing about what they mean.
+;
+; WHICH RULES ARE DECORATIVE is the one choice this page makes, and it follows
+; what each rule is for. A rule that divides two things a reader should hear
+; as two — the heading from the paragraph, one menu group from the next, the
+; items of an order from its total — is `role="separator"`. A rule that only
+; draws a line a reader already hears — the bars between inline links, the
+; hairlines between list rows, the line under "or continue with" — is
+; decorative and leaves the accessible tree, as Radix's `decorative` does.
+;
+; NOTHING HERE IS FOCUSABLE. A separator that is not a splitter is not a
+; control, and the page's keyboard walk passes straight over this demo; see
+; `a11y.mjs`.
+; =============================================================================
+
+Import "../src/UiTree.rgr"
+Import "../src/SeparatorCtl.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGLayout.rgr"
+Import "pkg:evg/EVGDisplayList.rgr"
+Import "pkg:evg/EVGStyleSheet.rgr"
+Import "pkg:evg/EVGTransition.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+Import "pkg:evg/EVGA11yFromTree.rgr"
+Import "pkg:evg/EVGHitTest.rgr"
+
+treefactory Sp {
+    child addChild
+    text  textContent
+
+    tag SpPage    EVGElement (props (className "sp-page"))
+    tag SpCard    EVGElement (props (className "sp-card"))
+    tag SpCaption EVGElement (props (className "sp-caption") (elementType 1) (role "heading") (a11yLevel 2))
+    tag SpStage   EVGElement (props (className "sp-stage"))
+    tag SpBox     EVGElement (props (className "sp-box"))
+    tag SpCol     EVGElement (props (className "sp-col"))
+    tag SpRow     EVGElement (props (className "sp-row"))
+    ; The rules. Bare elements: SeparatorCtl gives them their class and role.
+    tag SpH       EVGElement (props (className "sp-h"))
+    tag SpV       EVGElement (props (className "sp-v"))
+    ; Text, as `role="text"` (the mirror writes it as content, not a label), so a reader walking the mirror hears the words
+    ; the rules sit between — a separator between two silences says nothing.
+    tag SpTitle   EVGElement (props (className "sp-title") (elementType 1) (role "text"))
+    tag SpMuted   EVGElement (props (className "sp-muted") (elementType 1) (role "text"))
+    tag SpBody    EVGElement (props (className "sp-body") (elementType 1) (role "text"))
+    tag SpLink    EVGElement (props (className "sp-link") (elementType 1) (role "text"))
+    tag SpLabel   EVGElement (props (className "sp-label") (elementType 1) (role "text"))
+    tag SpValue   EVGElement (props (className "sp-value") (elementType 1) (role "text"))
+    tag SpGood    EVGElement (props (className "sp-value sp-good") (elementType 1) (role "text"))
+    tag SpStrong  EVGElement (props (className "sp-label sp-strong") (elementType 1) (role "text"))
+    tag SpStrongV EVGElement (props (className "sp-value sp-strong") (elementType 1) (role "text"))
+    tag SpOrText  EVGElement (props (className "sp-or-text") (elementType 1) (role "text"))
+}
+
+class SeparatorDemo {
+
+    def root@(optional):EVGElement
+    def sheet@(optional):EVGStyleSheet
+    def transitions:EVGTransition (new EVGTransition())
+    def layout@(optional):EVGLayout
+    def separators:[SeparatorCtl]
+    def hovered:string ""
+    def pressed:string ""
+    ; Always "": there is nothing here to focus. Kept so the page's
+    ; `appFocus` reads the same field it reads on every other demo.
+    def focused:string ""
+    def pageW:double 900.0
+    def pageH:double 640.0
+
+    Constructor () {
+    }
+
+    fn init:void (css:string) {
+        def s (new EVGStyleSheet())
+        s.parse(css)
+        sheet = s
+        def r:EVGElement (SeparatorDemo.page())
+        root = r
+        this.dressRules(r)
+    }
+
+    ; --- the tree -------------------------------------------------------------
+
+    sfn card:EVGElement (id:string caption:string example:EVGElement) {
+        def c (tree Sp (SpCard (props (id id))
+            (SpCaption (props (id (id + "-caption"))) caption)))
+        def stage (tree Sp (SpStage (props (id (id + "-stage")))))
+        stage.addChild(example)
+        c.addChild(stage)
+        return c
+    }
+
+    sfn page:EVGElement () {
+        def page (tree Sp (SpPage (props (id "sp-page"))))
+
+        ; 1. Content sections.
+        def ex1 (tree Sp (SpBox (props (id "sp-sections") (className "sp-box sp-sections"))
+            (SpCol (props (id "sp-sections-head") (className "sp-col sp-head"))
+                (SpTitle (props (id "sp-sections-title")) "Design System")
+                (SpMuted (props (id "sp-sections-sub")) "The Foundation for your UI."))
+            (SpH (props (id "sp-sections-sep")))
+            (SpBody (props (id "sp-sections-body")) "A set of beautifully designed components that you can customize, extend, and build on.")))
+        page.addChild((SeparatorDemo.card("sp-card-sections" "Horizontal separator for content sections" ex1)))
+
+        ; 2. Inline elements.
+        def ex2 (tree Sp (SpRow (props (id "sp-inline") (className "sp-row sp-inline"))
+            (SpLink (props (id "sp-inline-blog")) "Blog")
+            (SpV (props (id "sp-inline-sep-0") (className "sp-v sp-inline-sep")))
+            (SpLink (props (id "sp-inline-docs")) "Docs")
+            (SpV (props (id "sp-inline-sep-1") (className "sp-v sp-inline-sep")))
+            (SpLink (props (id "sp-inline-source")) "Source")))
+        page.addChild((SeparatorDemo.card("sp-card-inline" "Vertical separator for inline elements" ex2)))
+
+        ; 3. Menu groups. The rules stretch: they are as tall as the columns
+        ; because the row says so, not because anyone measured the text.
+        def ex3 (tree Sp (SpRow (props (id "sp-menu") (className "sp-row sp-menu"))
+            (SpCol (props (id "sp-menu-settings") (className "sp-col sp-menu-col"))
+                (SpTitle (props (id "sp-menu-settings-title")) "Settings")
+                (SpMuted (props (id "sp-menu-settings-sub") (className "sp-muted sp-menu-sub")) "Manage preferences"))
+            (SpV (props (id "sp-menu-sep-0")))
+            (SpCol (props (id "sp-menu-account") (className "sp-col sp-menu-col"))
+                (SpTitle (props (id "sp-menu-account-title")) "Account")
+                (SpMuted (props (id "sp-menu-account-sub") (className "sp-muted sp-menu-sub")) "Profile & security"))
+            (SpV (props (id "sp-menu-sep-1")))
+            (SpCol (props (id "sp-menu-help") (className "sp-col sp-menu-col"))
+                (SpTitle (props (id "sp-menu-help-title")) "Help")
+                (SpMuted (props (id "sp-menu-help-sub") (className "sp-muted sp-menu-sub")) "Support & docs"))))
+        page.addChild((SeparatorDemo.card("sp-card-menu" "Vertical separator grouping menu items" ex3)))
+
+        ; 4. List rows.
+        def ex4 (tree Sp (SpBox (props (id "sp-list") (className "sp-box sp-list"))
+            (SpRow (props (id "sp-list-row-1") (className "sp-row sp-pair"))
+                (SpLabel (props (id "sp-list-label-1")) "Item 1")
+                (SpValue (props (id "sp-list-value-1")) "Value 1"))
+            (SpH (props (id "sp-list-sep-0")))
+            (SpRow (props (id "sp-list-row-2") (className "sp-row sp-pair"))
+                (SpLabel (props (id "sp-list-label-2")) "Item 2")
+                (SpValue (props (id "sp-list-value-2")) "Value 2"))
+            (SpH (props (id "sp-list-sep-1")))
+            (SpRow (props (id "sp-list-row-3") (className "sp-row sp-pair"))
+                (SpLabel (props (id "sp-list-label-3")) "Item 3")
+                (SpValue (props (id "sp-list-value-3")) "Value 3"))))
+        page.addChild((SeparatorDemo.card("sp-card-list" "Horizontal separator between list items" ex4)))
+
+        ; 5. Labelled. The rule is OUT OF FLOW, laid across the middle of the
+        ; box, and the label is in flow and centred over it with the card's
+        ; own white behind it — so the line stops at the text's padding on
+        ; both sides without anything having measured where the text is.
+        def ex5 (tree Sp (SpRow (props (id "sp-or") (className "sp-row sp-or"))
+            (SpH (props (id "sp-or-line") (className "sp-h sp-or-line")))
+            (SpOrText (props (id "sp-or-text")) "or continue with")))
+        page.addChild((SeparatorDemo.card("sp-card-or" "Separator with a label" ex5)))
+
+        ; 6. Order summary.
+        def ex6 (tree Sp (SpBox (props (id "sp-order") (className "sp-box sp-order"))
+            (SpTitle (props (id "sp-order-title")) "Order Summary")
+            (SpH (props (id "sp-order-sep-0")))
+            (SpCol (props (id "sp-order-lines") (className "sp-col sp-lines"))
+                (SpRow (props (id "sp-order-subtotal") (className "sp-row sp-pair"))
+                    (SpLabel (props (id "sp-order-subtotal-label")) "Subtotal")
+                    (SpValue (props (id "sp-order-subtotal-value")) "$49.00"))
+                (SpRow (props (id "sp-order-discount") (className "sp-row sp-pair"))
+                    (SpLabel (props (id "sp-order-discount-label")) "Discount")
+                    (SpGood (props (id "sp-order-discount-value")) "-$5.00"))
+                (SpRow (props (id "sp-order-tax") (className "sp-row sp-pair"))
+                    (SpLabel (props (id "sp-order-tax-label")) "Tax")
+                    (SpValue (props (id "sp-order-tax-value")) "$3.52")))
+            (SpH (props (id "sp-order-sep-1")))
+            (SpRow (props (id "sp-order-total") (className "sp-row sp-pair"))
+                (SpStrong (props (id "sp-order-total-label")) "Total")
+                (SpStrongV (props (id "sp-order-total-value")) "$47.52"))))
+        page.addChild((SeparatorDemo.card("sp-card-order" "Order summary" ex6)))
+        return page
+    }
+
+    ; Which rules say something. Listed by id so the choice is in one place
+    ; and a check can read it back: everything else is decorative.
+    sfn semantic:boolean (id:string) {
+        if (id == "sp-sections-sep") { return true }
+        if (id == "sp-menu-sep-0")   { return true }
+        if (id == "sp-menu-sep-1")   { return true }
+        if (id == "sp-order-sep-0")  { return true }
+        if (id == "sp-order-sep-1")  { return true }
+        return false
+    }
+
+    ; Walk the literal and hand every rule to a SeparatorCtl.
+    fn dressRules:void (el:EVGElement) {
+        def isH:boolean (UiTree.hasClass(el "sp-h"))
+        def isV:boolean (UiTree.hasClass(el "sp-v"))
+        if (isH || isV) {
+            def deco:boolean ((SeparatorDemo.semantic(el.id)) == false)
+            push separators (SeparatorCtl.adopt(el isV deco))
+        }
+        def i:int 0
+        while (i < (array_length el.children)) {
+            this.dressRules((itemAt el.children i))
+            i = (i + 1)
+        }
+    }
+
+    fn separatorCount:int () {
+        return (array_length separators)
+    }
+
+    ; --- state the page keeps -------------------------------------------------
+
+    fn setHover:void (id:string) {
+        hovered = id
+    }
+
+    fn setPressed:void (id:string) {
+        pressed = id
+    }
+
+    fn press:boolean (target:string) {
+        return false
+    }
+
+    fn key:boolean (k:string) {
+        return false
+    }
+
+    fn laidOut:EVGLayout () {
+        def r:EVGElement (unwrap root)
+        def s:EVGStyleSheet (unwrap sheet)
+        s.setViewport(pageW pageH false)
+        s.applyTree(r "")
+        def t:EVGTransition transitions
+        t.reconcileTree(r)
+        if layout {
+            def lay:EVGLayout (unwrap layout)
+            if ((s.layoutClean()) == false) {
+                lay.layout(r)
+            }
+            return lay
+        }
+        ; A FRESH layout means the page was given a new size (the host drops
+        ; `layout` when it resizes the demo), and EVGLayout reads some of its
+        ; own answers from the last pass back as inputs: a flex-grown height
+        ; (`calculatedFlexHeight`, written only when the parent is definite and
+        ; never cleared) kept every card 248px tall after the phone rules made
+        ; them `height: auto`, and a stretched row sized itself from its
+        ; items' old inner heights, so the menu's columns kept their one-line
+        ; desktop height after their text had wrapped. The old sizes are
+        ; forgotten before the new pass. (A lib/evg fix would make this
+        ; unnecessary; `separator-check` holds the resize to it either way.)
+        SeparatorDemo.forgetFlex(r)
+        def fresh (new EVGLayout())
+        fresh.setPageSize(pageW pageH)
+        layout = fresh
+        fresh.layout(r)
+        ; The page is as tall as its cards: the first pass says where the last
+        ; one ends, and the page is resized to that and laid out once more.
+        def need:double ((SeparatorDemo.contentBottom(r)) + r.box.paddingBottomPx)
+        if (need != pageH) {
+            pageH = need
+            r.layoutClean = false
+            r.height = (EVGUnit.px(pageH))
+            def sized (new EVGLayout())
+            sized.setPageSize(pageW pageH)
+            layout = sized
+            sized.layout(r)
+            return sized
+        }
+        return fresh
+    }
+
+    sfn forgetFlex:void (el:EVGElement) {
+        el.calculatedFlexHeight = 0.0
+        el.calculatedHeight = 0.0
+        el.calculatedWidth = 0.0
+        el.calculatedInnerHeight = 0.0
+        el.calculatedInnerWidth = 0.0
+        el.hasDefiniteHeight = false
+        el.layoutClean = false
+        def i:int 0
+        while (i < (array_length el.children)) {
+            SeparatorDemo.forgetFlex((itemAt el.children i))
+            i = (i + 1)
+        }
+    }
+
+    sfn contentBottom:double (el:EVGElement) {
+        def bottom:double 0.0
+        def i:int 0
+        while (i < (array_length el.children)) {
+            def kid:EVGElement (itemAt el.children i)
+            def b:double ((kid.calculatedY) + (kid.calculatedHeight))
+            if (b > bottom) {
+                bottom = b
+            }
+            i = (i + 1)
+        }
+        return bottom
+    }
+
+    fn displayListJson:string () {
+        def lay:EVGLayout (this.laidOut())
+        def r:EVGElement (unwrap root)
+        def dl (new EVGDisplayList())
+        dl.setTextEngine((lay.getTextEngine()))
+        dl.build(r)
+        return (dl.toJson())
+    }
+
+    fn hitId:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def hit (new EVGHitTest())
+        return (hit.idAt(r px py))
+    }
+
+    fn a11yJson:string (generation:int focusId:string) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Separator demo" generation focusId))
+        return (t.toJson())
+    }
+
+    fn a11yProblems:[string] () {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Separator demo" 1 ""))
+        def out:[string] (t.lint())
+        def i:int 0
+        while (i < (array_length t.notes)) {
+            push out (itemAt t.notes i)
+            i = (i + 1)
+        }
+        return out
+    }
+
+    fn styleErrorCount:int () {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (s.getErrorCount())
+    }
+
+    fn styleErrorAt:string (i:int) {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (s.getError(i))
+    }
+
+    fn tick:boolean (dtMs:double) {
+        def r:EVGElement (unwrap root)
+        def t:EVGTransition transitions
+        t.advanceTree(r dtMs)
+        return (t.busy(r))
+    }
+
+    fn busyNow:boolean () {
+        def r:EVGElement (unwrap root)
+        def t:EVGTransition transitions
+        return (t.busy(r))
+    }
+
+    fn heightPx:double () {
+        this.laidOut()
+        return pageH
+    }
+
+    fn widthPx:double () {
+        return pageW
+    }
+}

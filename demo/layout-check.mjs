@@ -80,6 +80,7 @@ const DEMOS = [
   ["OtpDemo", "otp.css"],
   ["ProfileDemo", "profile.css"],
   ["ResizeDemo", "resize.css"],
+  ["SeparatorDemo", "separator.css"],
   ["SortableDemo", "sortable.css"],
   ["TableDemo", "table.css"],
   ["TimelineDemo", "timeline.css"],

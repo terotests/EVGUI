@@ -32,7 +32,7 @@ function requireDom(name) {
   }
 }
 
-const DEMOS = ["FilterDemo", "EventCalDemo", "MessageDemo", "ControlsDemo", "MenubarDemo", "ToolbarDemo", "SortableDemo", "MotionDemo", "TableDemo", "DropdownDemo", "DialogDemo", "TreeDemo", "TimelineDemo", "ResizeDemo", "FormDemo", "ProfileDemo", "DashboardDemo", "CalendarDemo", "OtpDemo", "MetadataDemo", "EffectsDemo"];
+const DEMOS = ["FilterDemo", "EventCalDemo", "MessageDemo", "ControlsDemo", "MenubarDemo", "ToolbarDemo", "SortableDemo", "MotionDemo", "TableDemo", "DropdownDemo", "DialogDemo", "TreeDemo", "TimelineDemo", "ResizeDemo", "FormDemo", "ProfileDemo", "DashboardDemo", "CalendarDemo", "OtpDemo", "MetadataDemo", "EffectsDemo", "SeparatorDemo"];
 for (const name of DEMOS) {
   if (!fs.existsSync(path.join(UI, "bin", name + ".cjs"))) {
     console.error(`compiled ${name} missing — run \`npm run ui:demo:build\` first`);
@@ -66,6 +66,7 @@ fs.writeFileSync(
     'export { OtpDemo } from "../bin/OtpDemo.cjs";\n' +
     'export { MetadataDemo } from "../bin/MetadataDemo.cjs";\n' +
     'export { EffectsDemo } from "../bin/EffectsDemo.cjs";\n' +
+    'export { SeparatorDemo } from "../bin/SeparatorDemo.cjs";\n' +
     // The whole modules too, as a list: the browser's text measurer is
     // installed into every one of them (`lib/evg/gl/evg-measure.js`),
     // because two copies of a class are two classes and each compiled demo
@@ -102,6 +103,7 @@ fs.writeFileSync(
     `export const OTP_CSS = ${css("otp.css")};\n` +
     `export const METADATA_CSS = ${css("metadata.css")};\n` +
     `export const EFFECTS_CSS = ${css("effects.css")};\n` +
+    `export const SEPARATOR_CSS = ${css("separator.css")};\n` +
     // NOT ONE OF THIS DIRECTORY'S STYLESHEETS: the presets live with the
     // effects they configure, in `lib/evg/gl`, and are read from there by the
     // contact sheet and by the pixel gate as well. The page carries the FILE,
