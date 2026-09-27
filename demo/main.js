@@ -1403,43 +1403,43 @@ DEMOS.popover = {
     setPressed: (id) => popover.setPressed(id),
     root: () => null,
   }),
-  // Pagination. No `ownsTab`: every link, box and select is a stop of the
-  // page's generic Tab walk; Enter / Space on a link is the demo's.
-  pagination: {
-    height: () => pagination.heightPx(),
-    list: () => pagination.displayListJson(),
-    hit: (x, y) => pagination.hitId(x, y),
-    a11y: (gen, focus) => pagination.a11yJson(gen, focus),
-    cursorAt: (x, y) => pagination.cursorAt(x, y),
-    textSession: {
-      focused: () => pagination.focusedField(),
-      state: (tid) => JSON.parse(pagination.fieldStateJson(tid)),
-      apply: (tid, v, a, b) => pagination.applyEdit(tid, v, a, b),
-    },
-    press: (id, x, y, ev) => pagination.beginSelection(id, x, !!(ev && ev.shiftKey)),
-    drag: (id, ev) => pagination.extendSelection(ev.offsetX),
-    drop: () => pagination.endSelection(),
-    dblclick: (id, x) => pagination.selectWordAt(id, x),
-    hover: (id) => {
+};
+// Pagination. No `ownsTab`: every link, box and select is a stop of the
+// page's generic Tab walk; Enter / Space on a link is the demo's.
+DEMOS.pagination = {
+  height: () => pagination.heightPx(),
+  list: () => pagination.displayListJson(),
+  hit: (x, y) => pagination.hitId(x, y),
+  a11y: (gen, focus) => pagination.a11yJson(gen, focus),
+  cursorAt: (x, y) => pagination.cursorAt(x, y),
+  textSession: {
+    focused: () => pagination.focusedField(),
+    state: (tid) => JSON.parse(pagination.fieldStateJson(tid)),
+    apply: (tid, v, a, b) => pagination.applyEdit(tid, v, a, b),
+  },
+  press: (id, x, y, ev) => pagination.beginSelection(id, x, !!(ev && ev.shiftKey)),
+  drag: (id, ev) => pagination.extendSelection(ev.offsetX),
+  drop: () => pagination.endSelection(),
+  dblclick: (id, x) => pagination.selectWordAt(id, x),
+  hover: (id) => {
+    if (id === lastPaginationHover) return false;
+    lastPaginationHover = id;
+    pagination.setHover(id);
+    return true;
+  },
+  keyWith: (k, shift, ctrl) => pagination.keyWith(k, shift, ctrl),
+  key: (k) => pagination.key(k),
+  ownsKey: (k) => pagination.ownsKey(k),
+  host: () => ({
+    setHover: (id) => {
       if (id === lastPaginationHover) return false;
       lastPaginationHover = id;
       pagination.setHover(id);
       return true;
     },
-    keyWith: (k, shift, ctrl) => pagination.keyWith(k, shift, ctrl),
-    key: (k) => pagination.key(k),
-    ownsKey: (k) => pagination.ownsKey(k),
-    host: () => ({
-      setHover: (id) => {
-        if (id === lastPaginationHover) return false;
-        lastPaginationHover = id;
-        pagination.setHover(id);
-        return true;
-      },
-      setPressed: (id) => pagination.setPressed(id),
-      root: () => null,
-    }),
-  },
+    setPressed: (id) => pagination.setPressed(id),
+    root: () => null,
+  }),
 };
 
 /**
