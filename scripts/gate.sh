@@ -47,6 +47,7 @@ SUITES=(
   ui:otp:demo
   ui:metadata:check
   ui:accordion:check
+  ui:separator:check
   ui:semantics:check
   ui:input:bench
   ui:layout:check

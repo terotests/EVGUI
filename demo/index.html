@@ -679,6 +679,27 @@
               the effects.
             </p>
           </section>
+          <section data-for="separator">
+            <h2>what to look at</h2>
+            <p class="hint">
+              Nothing here moves or takes a press: a separator is a picture of a
+              boundary, not a control, so <strong>Tab passes over this demo</strong>.
+              What differs between the six cards is what the rule <em>means</em>.
+              The rules under &ldquo;Design System&rdquo;, between the three menu
+              columns and through the order summary are
+              <code>role="separator"</code> with an <code>aria-orientation</code>;
+              the bars between Blog, Docs and Source, the hairlines between list
+              rows and the line under &ldquo;or continue with&rdquo; are
+              decorative and leave the accessible tree, as Radix&rsquo;s
+              <code>decorative</code> prop does.
+            </p>
+            <p class="hint">
+              The vertical rules are not given a height: they stretch to the row
+              they are in, so the menu&rsquo;s rules are as tall as its two-line
+              columns. On a phone the columns wrap their second line and the
+              rules grow with them.
+            </p>
+          </section>
           <section data-for="metadata">
             <h2>what to try</h2>
             <p class="hint">
@@ -1239,6 +1260,12 @@
   "src": "MotionDemo",
   "caption": "Transitions from motion.css · checked against a browser by EVGTimingTest",
   "desc": "What the CSS engine does with time: seven timing functions racing under the curves that move them, staggered delays, transform origins and cards that answer the pointer — every one a rule in motion.css."
+ },
+ "separator": {
+  "title": "Separator",
+  "src": "SeparatorDemo",
+  "caption": "SeparatorCtl · Radix Separator semantics, shadcn / ReUI's look",
+  "desc": "ReUI's six Separator patterns, one card each: content sections, inline links, menu groups, list rows, a labelled rule and an order summary. SeparatorCtl gives each rule its role and aria-orientation, or takes a decorative one out of the accessible tree, following Radix's Separator; there is no interaction to measure, so the look is specified from shadcn's source, not measured."
  },
  "effects": {
   "title": "Surface Effects",

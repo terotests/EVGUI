@@ -1,0 +1,135 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; SeparatorCtl — a rule between two pieces of content, after Radix Separator
+; =============================================================================
+; Parity contract (@radix-ui/react-separator, which shadcn's and ReUI's
+; Separator wrap):
+;
+;   role         separator            when it SAYS something — the content on
+;                                     either side is two things, not one
+;   orientation  horizontal|vertical  `aria-orientation`. Radix writes it only
+;                                     for vertical, because horizontal is the
+;                                     ARIA default; it is written both ways
+;                                     here because a reader loses nothing and a
+;                                     check can then ask for it by name
+;   decorative   no role at all       Radix's `role="none"`: a line that is a
+;                                     picture and nothing more (the bars
+;                                     between inline links, the rules between
+;                                     list rows). It leaves the accessible tree
+;                                     entirely, like `aria-hidden` would
+;
+; A separator is NOT FOCUSABLE. The only separator a keyboard stops on is the
+; one that moves something — a splitter, which is ResizeCtl's and has a value.
+;
+; The controller owns one element and only its CLASS, ROLE and ORIENTATION:
+;
+;   ui-separator ui-separator-horizontal   a 1px rule as wide as its box
+;   ui-separator ui-separator-vertical     a 1px rule as tall as its box
+;
+; What 1px looks like, and how long "as wide as its box" is, belongs to the
+; stylesheet. `adopt` dresses an element somebody else built — a tree literal
+; that already put the rule where it goes — so a page can describe itself in
+; one literal and still have the semantics come from one place.
+; =============================================================================
+
+Import "UiCtl.rgr"
+Import "UiTree.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+
+class SeparatorCtl extends UiCtl {
+    ; "horizontal" or "vertical". Anything else is read as horizontal, the
+    ; ARIA default — Radix does the same with an unknown value.
+    def orientation:string "horizontal"
+    def decorative:boolean false
+
+    Constructor () {
+        rootEl = (EVGElement.createDiv())
+    }
+
+    sfn horizontal:SeparatorCtl (id:string decorative:boolean) {
+        def c (new SeparatorCtl())
+        c.tid = id
+        c.orientation = "horizontal"
+        c.decorative = decorative
+        c.build()
+        return c
+    }
+
+    sfn vertical:SeparatorCtl (id:string decorative:boolean) {
+        def c (new SeparatorCtl())
+        c.tid = id
+        c.orientation = "vertical"
+        c.decorative = decorative
+        c.build()
+        return c
+    }
+
+    ; Dress an element that is already in a tree. Its id becomes the tid; any
+    ; class it carried besides the separator's own is kept, so a page can
+    ; still say "this rule, and a little margin" with a class of its own.
+    sfn adopt:SeparatorCtl (el:EVGElement vertical:boolean decorative:boolean) {
+        def c (new SeparatorCtl())
+        c.tid = el.id
+        if vertical {
+            c.orientation = "vertical"
+        }
+        c.decorative = decorative
+        c.rootEl = el
+        c.build()
+        return c
+    }
+
+    fn isVertical:boolean () {
+        return (orientation == "vertical")
+    }
+
+    fn ariaOrientation:string () {
+        if (this.isVertical()) {
+            return "vertical"
+        }
+        return "horizontal"
+    }
+
+    fn build:void () {
+        def el:EVGElement (unwrap rootEl)
+        el.id = tid
+        UiTree.addClass(el "ui-separator")
+        if (this.isVertical()) {
+            UiTree.removeClass(el "ui-separator-horizontal")
+            UiTree.addClass(el "ui-separator-vertical")
+        } {
+            UiTree.removeClass(el "ui-separator-vertical")
+            UiTree.addClass(el "ui-separator-horizontal")
+        }
+        el.a11yFocusable = false
+        if decorative {
+            el.role = ""
+            el.a11yOrientation = ""
+            el.a11yHidden = true
+        } {
+            el.role = "separator"
+            el.a11yOrientation = (this.ariaOrientation())
+            el.a11yHidden = false
+        }
+    }
+
+    fn isFocusable:boolean (target:string) {
+        return false
+    }
+
+    ; A decorative rule reports nothing: it is not in the tree, so there is no
+    ; row to describe.
+    fn rows:[UiRow] () {
+        def out:[UiRow]
+        if decorative {
+            return out
+        }
+        def r:UiRow (UiRow.of(tid (EVGA11yRole.separator()) ""))
+        r.orientation = (this.ariaOrientation())
+        r.tabStop = false
+        push out r
+        return out
+    }
+}

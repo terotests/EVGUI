@@ -30,7 +30,7 @@ import { createTextInputBridge } from "../../../lib/evg/gl/evg-textinput.js";
 // asked for it with `?inspect=1`, so a demo that nobody is inspecting pays
 // one import and no work at all.
 import { attach as attachInspector } from "../../../lib/evg/inspect/evg-inspect.js";
-import { MenubarDemo, ToolbarDemo, SortableDemo, MotionDemo, TableDemo, DropdownDemo, DialogDemo, TreeDemo, TimelineDemo, ResizeDemo, FormDemo, ProfileDemo, DashboardDemo, CalendarDemo, FilterDemo, EventCalDemo, MessageDemo, ControlsDemo, OtpDemo, MetadataDemo, EffectsDemo, MODULES } from "./generated-host.js";
+import { MenubarDemo, ToolbarDemo, SortableDemo, MotionDemo, TableDemo, DropdownDemo, DialogDemo, TreeDemo, TimelineDemo, ResizeDemo, FormDemo, ProfileDemo, DashboardDemo, CalendarDemo, FilterDemo, EventCalDemo, MessageDemo, ControlsDemo, OtpDemo, MetadataDemo, EffectsDemo, SeparatorDemo, MODULES } from "./generated-host.js";
 // The effect driver: what turns a press on the canvas into the events a
 // surface effect reads. It is per HOST and not per demo, because a press is a
 // browser event and the box it landed in is already in the display list.
@@ -51,7 +51,7 @@ const fontMeasure = installCanvasMeasurer(MODULES);
 window.__fontMeasure = fontMeasure;
 import { AccordionDemo } from "./generated-host.js";
 import { ACCORDION_CSS } from "./generated.js";
-import { MENUBAR_CSS, TOOLBAR_CSS, SORTABLE_CSS, MOTION_CSS, TABLE_CSS, DROPDOWN_CSS, DIALOG_CSS, TREE_CSS, TIMELINE_CSS, RESIZE_CSS, FORM_CSS, PROFILE_CSS, DASHBOARD_CSS, CALENDAR_CSS, FILTERS_CSS, EVENTCAL_CSS, MESSAGE_CSS, CONTROLS_CSS, OTP_CSS, METADATA_CSS, EFFECTS_CSS, EFFECT_PRESETS_CSS } from "./generated.js";
+import { MENUBAR_CSS, TOOLBAR_CSS, SORTABLE_CSS, MOTION_CSS, TABLE_CSS, DROPDOWN_CSS, DIALOG_CSS, TREE_CSS, TIMELINE_CSS, RESIZE_CSS, FORM_CSS, PROFILE_CSS, DASHBOARD_CSS, CALENDAR_CSS, FILTERS_CSS, EVENTCAL_CSS, MESSAGE_CSS, CONTROLS_CSS, OTP_CSS, METADATA_CSS, EFFECTS_CSS, SEPARATOR_CSS, EFFECT_PRESETS_CSS } from "./generated.js";
 
 // The default stage width. A demo wider than this says so — the dashboard
 // grew to 1336 when its sidebar arrived, and a stage that stays 1240 does not
@@ -410,6 +410,11 @@ let lastOtpHover = "";
 let metadata = new MetadataDemo();
 metadata.init(METADATA_CSS);
 let lastMetadataHover = "";
+// Separator: six uses of one rule, after shadcn / ReUI. Nothing on it moves or
+// takes a press — every rule is a picture, and the ones that divide two things
+// are `role="separator"` in the mirror (see SeparatorCtl).
+const separator = new SeparatorDemo();
+separator.init(SEPARATOR_CSS);
 let lastControlsHover = "";
 let lastCalendarHover = "";
 const dashboard = new DashboardDemo();
@@ -850,6 +855,17 @@ const DEMOS = {
       setPressed: (id) => effects.setPressed(id),
       root: () => null,
     }),
+  },
+  // Presentational: no press, no key, no hover. The page still hit-tests it,
+  // and the mirror still carries its separators and text.
+  separator: {
+    height: () => separator.heightPx(),
+    list: () => separator.displayListJson(),
+    hit: (x, y) => separator.hitId(x, y),
+    a11y: (gen, focus) => separator.a11yJson(gen, focus),
+    press: () => false,
+    hover: () => false,
+    key: () => false,
   },
   metadata: {
     height: () => metadata.heightPx(),
@@ -1524,6 +1540,7 @@ const INSTANCE = {
   dialog: () => dialog,
   motion: () => motion,
   effects: () => effects,
+  separator: () => separator,
 };
 
 /** The demo showing now, or null for one of the three kept trees. */
@@ -1641,6 +1658,7 @@ const NARROW = {
   accordion: { min: 320, h: "own" },
   motion: { min: 320, h: "auto" },
   effects: { min: 320, h: "auto" },
+  separator: { min: 320, h: "auto" },
 };
 const NARROW_AT = 600;
 const naturalSize = {};
@@ -2359,7 +2377,7 @@ function syncPanels() {
 // `?demo=dashboard` lands on one directly. A page with eighteen demos and one
 // entry point makes every link to it a click instruction; a check that wants
 // the dashboard should not have to press a radio to get there.
-const DEMO_NAMES = ["menubar", "toolbar", "sortable", "table", "tree", "timeline", "resizable", "form", "calendar", "filters", "eventcal", "message", "controls", "otp", "metadata", "profile", "dashboard", "dropdown", "dialog", "motion", "effects", "accordion"];
+const DEMO_NAMES = ["menubar", "toolbar", "sortable", "table", "tree", "timeline", "resizable", "form", "calendar", "filters", "eventcal", "message", "controls", "otp", "metadata", "profile", "dashboard", "dropdown", "dialog", "motion", "effects", "accordion", "separator"];
 const wanted = new URLSearchParams(location.search).get("demo");
 if (wanted && DEMO_NAMES.includes(wanted)) state.which = wanted;
 
