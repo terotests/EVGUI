@@ -489,7 +489,7 @@ class PaginationDemo {
             def s:double (c.caretXAt(eng (c.selStart())))
             def e:double (c.caretXAt(eng (c.selEnd())))
             def band (tree Pg (Band))
-            band.left = (EVGUnit.px(((s - c.scrollX) + 10.0)))
+            band.left = (EVGUnit.px((s - c.scrollX)))
             band.width = (EVGUnit.px((e - s)))
             box.addChild(band)
         }
@@ -497,7 +497,11 @@ class PaginationDemo {
         if (focused == c.tid) {
             def cx:double (c.caretXAt(eng c.caret))
             def car (tree Pg (Caret))
-            car.left = (EVGUnit.px(((cx - c.scrollX) + 10.0)))
+            ; An absolute child is placed from the box's content edge — the padding
+            ; is already behind it — so the caret is the measured x and nothing
+            ; more. Adding the 10px padding again put it a padding's width right
+            ; of the glyph it follows.
+            car.left = (EVGUnit.px((cx - c.scrollX)))
             box.addChild(car)
         }
         return box
