@@ -25,10 +25,7 @@ on:
         default: ""
 
 env:
-  # Pinned to terotests/Ranger#1076 (aria-controls / aria-labelledby for the
-  # Tabs and Dialog demos, and the relayout fix) until it is merged; then set
-  # this back to 'master'.
-  RANGER_REF: ${{ inputs.ranger_ref || '3d31fee886bd7e0579082a3ffe3755669321f3bb' }}
+  RANGER_REF: ${{ inputs.ranger_ref || 'master' }}
 
 permissions:
   contents: read
