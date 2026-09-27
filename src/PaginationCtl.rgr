@@ -1,0 +1,412 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; PaginationCtl — which page, which pages to show, and what the ends allow
+; =============================================================================
+; shadcn's Pagination is markup only: a <nav aria-label="pagination">, a list,
+; links with `aria-current="page"` on the active one, Previous / Next with
+; "Go to previous page" / "Go to next page", and an ellipsis that is hidden
+; from readers. Everything a page has to WORK OUT is left to the caller, and
+; every caller works it out again. This is that part, once:
+;
+;   page        1-based, always inside 1..pageCount (every setter clamps)
+;   pageCount   given, or derived from `total` rows at `pageSize` a page —
+;               the same arithmetic TableCtl pages its rows with (`pagesFor`)
+;   items       the pages to draw, with an ellipsis where a run is left out:
+;               `boundaries` pages kept at each end, a window of `span`
+;               pages (2 × siblings + 1 unless set) around the current one,
+;               a gap of ONE page drawn as that page (an ellipsis standing
+;               for a single number hides nothing and costs the same room),
+;               a longer gap as "…". With no boundaries the ends are an
+;               ellipsis too: `1 2 3 …` at page 1 of 10.
+;   ends        first / previous / next / last, and whether each can move
+;   go to page  text in, a page out: a whole number is clamped to 1..N, and
+;               anything else ("", "2.5", "-") is refused so the field can say
+;               so instead of guessing
+;   page size   changing it keeps the first row that was on screen on screen
+;               (TanStack keeps the index; a page of 10 at page 7 becoming a
+;               page of 100 at page 7 is past the end)
+;
+; The item strings: a page is its number ("12"), an ellipsis is
+; "ellipsis-start" or "ellipsis-end" — two names, so each has a stable id.
+; =============================================================================
+
+class PaginationCtl {
+    def tid:string ""
+    def name:string "pagination"
+    def page:int 1
+    ; Used when `pageSize` is 0: a page count stated outright.
+    def pages:int 1
+    ; Rows, when the pages are derived from a row count.
+    def total:int 0
+    def pageSize:int 0
+    def siblings:int 1
+    def boundaries:int 1
+    ; How many consecutive pages the window holds; 0 means 2 × siblings + 1.
+    ; An even span puts the current page right of centre (`1 2 [3] 4 …`).
+    def span:int 0
+
+    Constructor () {
+    }
+
+    ; --- arithmetic -------------------------------------------------------------
+
+    ; How many pages `total` rows fill at `size` a page: never fewer than one,
+    ; because an empty table is still on page one. TableCtl pages with this.
+    sfn pagesFor:int (total:int size:int) {
+        if (size <= 0) {
+            return 1
+        }
+        ; `idiv`: plain `/` on two ints gives a double in Ranger.
+        def full:int (idiv total size)
+        if ((full * size) < total) {
+            full = (full + 1)
+        }
+        if (full < 1) {
+            full = 1
+        }
+        return full
+    }
+
+    fn pageCount:int () {
+        if (pageSize > 0) {
+            return (PaginationCtl.pagesFor(total pageSize))
+        }
+        if (pages < 1) {
+            return 1
+        }
+        return pages
+    }
+
+    fn clampPage:int (p:int) {
+        def n:int (this.pageCount())
+        if (p < 1) {
+            return 1
+        }
+        if (p > n) {
+            return n
+        }
+        return p
+    }
+
+    ; --- moving -----------------------------------------------------------------
+
+    ; Every move goes through here and says whether anything changed.
+    fn setPage:boolean (p:int) {
+        def to:int (this.clampPage(p))
+        if (to == page) {
+            return false
+        }
+        page = to
+        return true
+    }
+
+    fn canPrevious:boolean () {
+        return (page > 1)
+    }
+
+    fn canNext:boolean () {
+        return (page < (this.pageCount()))
+    }
+
+    fn previous:boolean () {
+        return (this.setPage((page - 1)))
+    }
+
+    fn next:boolean () {
+        return (this.setPage((page + 1)))
+    }
+
+    fn first:boolean () {
+        return (this.setPage(1))
+    }
+
+    fn last:boolean () {
+        return (this.setPage((this.pageCount())))
+    }
+
+    ; A new page size, keeping the first row that was showing in view.
+    fn setPageSize:boolean (size:int) {
+        if (size <= 0) {
+            return false
+        }
+        if (size == pageSize) {
+            return false
+        }
+        def firstRow:int 0
+        if (pageSize > 0) {
+            firstRow = ((page - 1) * pageSize)
+        }
+        pageSize = size
+        page = (this.clampPage(((idiv firstRow size) + 1)))
+        return true
+    }
+
+    ; --- the list of items -------------------------------------------------------
+
+    fn windowSpan:int () {
+        if (span > 0) {
+            return span
+        }
+        return ((siblings * 2) + 1)
+    }
+
+    fn items:[string] () {
+        def out:[string]
+        def n:int (this.pageCount())
+        def w:int (this.windowSpan())
+        if (w > n) {
+            w = n
+        }
+        ; The window: `w` pages with the current one in it, slid back inside
+        ; 1..n at either end so it never shrinks.
+        def from:int (page - (idiv (w - 1) 2))
+        if ((w % 2) == 0) {
+            from = (page - (idiv w 2))
+        }
+        if ((from + w) > (n + 1)) {
+            from = ((n + 1) - w)
+        }
+        if (from < 1) {
+            from = 1
+        }
+        def until:int ((from + w) - 1)
+        ; Which pages are kept, as flags 1..n.
+        def keep:[boolean]
+        def i:int 0
+        while (i <= n) {
+            def on:boolean false
+            if (i >= 1) {
+                if ((i <= boundaries) || (i > (n - boundaries))) {
+                    on = true
+                }
+                if ((i >= from) && (i <= until)) {
+                    on = true
+                }
+            }
+            push keep on
+            i = (i + 1)
+        }
+        ; A gap of exactly one page between two kept ones is drawn as the page.
+        if (boundaries > 0) {
+            i = 2
+            while (i < n) {
+                if ((itemAt keep i) == false) {
+                    if ((itemAt keep (i - 1)) && (itemAt keep (i + 1))) {
+                        keep = (PaginationCtl.setFlag(keep i))
+                    }
+                }
+                i = (i + 1)
+            }
+        }
+        def seenStart:boolean false
+        def gap:boolean false
+        i = 1
+        while (i <= n) {
+            if (itemAt keep i) {
+                if gap {
+                    if seenStart {
+                        push out "ellipsis-end"
+                    } {
+                        push out "ellipsis-start"
+                    }
+                }
+                gap = false
+                push out (to_string i)
+                if (i >= page) {
+                    seenStart = true
+                }
+            } {
+                gap = true
+                if (i > page) {
+                    seenStart = true
+                }
+            }
+            i = (i + 1)
+        }
+        if gap {
+            push out "ellipsis-end"
+        }
+        return out
+    }
+
+    sfn setFlag:[boolean] (a:[boolean] at:int) {
+        def out:[boolean]
+        def i:int 0
+        while (i < (array_length a)) {
+            if (i == at) {
+                push out true
+            } {
+                push out (itemAt a i)
+            }
+            i = (i + 1)
+        }
+        return out
+    }
+
+    ; The items as a reader of a test wants them: "1 2 3 … 10 11 12".
+    fn itemsText:string () {
+        def all:[string] (this.items())
+        def out:string ""
+        def i:int 0
+        while (i < (array_length all)) {
+            def it:string (itemAt all i)
+            if ((PaginationCtl.isEllipsis(it))) {
+                it = "…"
+            }
+            if (i > 0) {
+                out = (out + " ")
+            }
+            out = (out + it)
+            i = (i + 1)
+        }
+        return out
+    }
+
+    sfn isEllipsis:boolean (item:string) {
+        return ((indexOf item "ellipsis") == 0)
+    }
+
+    ; --- range text --------------------------------------------------------------
+
+    ; "1-25 of 100": the rows on this page. Empty rows read "0-0 of 0".
+    fn rangeText:string () {
+        if ((total <= 0) || (pageSize <= 0)) {
+            return ("0-0 of " + (to_string total))
+        }
+        def from:int (((page - 1) * pageSize) + 1)
+        def until:int (page * pageSize)
+        if (until > total) {
+            until = total
+        }
+        return ((((to_string from) + "-") + (to_string until)) + (" of " + (to_string total)))
+    }
+
+    ; --- go to page ---------------------------------------------------------------
+
+    ; The page a typed string asks for, clamped to 1..N, or -1 when it is not a
+    ; whole number. Leading and trailing spaces are forgiven; a sign, a
+    ; separator or a letter are not — "2.5" is not a page, and rounding it
+    ; would be the field making up an answer.
+    fn parsePage:int (text:string) {
+        def t:string (trim text)
+        def n:int (strlen t)
+        if (n == 0) {
+            return -1
+        }
+        if (n > 9) {
+            ; Nine digits and more is past any page count; still a number.
+            def j:int 0
+            while (j < n) {
+                def c0:int (charAt t j)
+                if ((c0 < 48) || (c0 > 57)) {
+                    return -1
+                }
+                j = (j + 1)
+            }
+            return (this.pageCount())
+        }
+        def v:int 0
+        def i:int 0
+        while (i < n) {
+            def c:int (charAt t i)
+            if ((c < 48) || (c > 57)) {
+                return -1
+            }
+            v = ((v * 10) + (c - 48))
+            i = (i + 1)
+        }
+        return (this.clampPage(v))
+    }
+
+    ; Apply typed text: true when it was a page (whether or not it moved).
+    fn goTo:boolean (text:string) {
+        def p:int (this.parsePage(text))
+        if (p < 0) {
+            return false
+        }
+        page = p
+        return true
+    }
+
+    ; --- ids ------------------------------------------------------------------------
+
+    fn navTid:string ()                 { return tid }
+    fn listTid:string ()                { return (tid + "-list") }
+    fn linkTid:string (p:int)           { return ((tid + "-page-") + (to_string p)) }
+    fn ellipsisTid:string (item:string) { return ((tid + "-") + item) }
+    fn prevTid:string ()                { return (tid + "-prev") }
+    fn nextTid:string ()                { return (tid + "-next") }
+    fn firstTid:string ()               { return (tid + "-first") }
+    fn lastTid:string ()                { return (tid + "-last") }
+
+    ; The page a link id names, or -1.
+    fn pageOfTid:int (target:string) {
+        def head:string (tid + "-page-")
+        def h:int (strlen head)
+        if ((strlen target) <= h) {
+            return -1
+        }
+        if ((substring target 0 h) != head) {
+            return -1
+        }
+        def rest:string (substring target h (strlen target))
+        def i:int 0
+        def v:int 0
+        while (i < (strlen rest)) {
+            def c:int (charAt rest i)
+            if ((c < 48) || (c > 57)) {
+                return -1
+            }
+            v = ((v * 10) + (c - 48))
+            i = (i + 1)
+        }
+        return v
+    }
+
+    ; A press on one of this pagination's controls: true when it was one of
+    ; them (a disabled end counts — it was hit, and nothing happens).
+    fn press:boolean (target:string) {
+        if (target == (this.prevTid())) {
+            this.previous()
+            return true
+        }
+        if (target == (this.nextTid())) {
+            this.next()
+            return true
+        }
+        if (target == (this.firstTid())) {
+            this.first()
+            return true
+        }
+        if (target == (this.lastTid())) {
+            this.last()
+            return true
+        }
+        def p:int (this.pageOfTid(target))
+        if (p > 0) {
+            this.setPage(p)
+            return true
+        }
+        return false
+    }
+
+    fn owns:boolean (target:string) {
+        if (target == (this.prevTid())) { return true }
+        if (target == (this.nextTid())) { return true }
+        if (target == (this.firstTid())) { return true }
+        if (target == (this.lastTid())) { return true }
+        return ((this.pageOfTid(target)) > 0)
+    }
+
+    ; Whether a control is at its end and does nothing.
+    fn isDisabled:boolean (target:string) {
+        if ((target == (this.prevTid())) || (target == (this.firstTid()))) {
+            return ((this.canPrevious()) == false)
+        }
+        if ((target == (this.nextTid())) || (target == (this.lastTid()))) {
+            return ((this.canNext()) == false)
+        }
+        return false
+    }
+}

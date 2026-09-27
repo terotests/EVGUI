@@ -700,6 +700,35 @@
               rules grow with them.
             </p>
           </section>
+          <section data-for="pagination">
+            <h2>what to try</h2>
+            <p class="hint">
+              Every card works. Click a page, <strong>Previous</strong> /
+              <strong>Next</strong> or the first / last arrows: the active page
+              moves and the ellipsis follows it (card 4 keeps three pages at each
+              end, the others a window of three or four). At either end the
+              arrows fade and become <code>aria-disabled</code>.
+            </p>
+            <p class="hint">
+              Type a page into <strong>Go to page</strong> and press
+              <strong>Enter</strong> or leave the box: a number past the end is
+              clamped to the last page, an empty box or <code>2.5</code> turns it
+              red with <code>aria-invalid</code> and a message, and
+              <strong>Escape</strong> puts the current page back. The
+              <strong>Rows per page</strong> select changes the range text
+              (&ldquo;1-25 of 100&rdquo;) and the page count; the
+              <strong>Page</strong> select jumps.
+            </p>
+            <p class="hint">
+              Each card is a <code>navigation</code> landmark named
+              &ldquo;pagination, &hellip;&rdquo; (shadcn&rsquo;s name plus which
+              card, so ten landmarks are not ten of the same) holding a list;
+              the ellipsis is read as &ldquo;More pages&rdquo;; the current page is
+              <code>aria-current="page"</code>. Tab walks the links (Enter or
+              Space follows one); a phone drops the Previous / Next words, as
+              shadcn&rsquo;s <code>hidden sm:block</code> does.
+            </p>
+          </section>
           <section data-for="tabs">
             <h2>what to try</h2>
             <p class="hint">
@@ -1282,6 +1311,12 @@
   "src": "SeparatorDemo",
   "caption": "SeparatorCtl · Radix Separator semantics, shadcn / ReUI's look",
   "desc": "ReUI's six Separator patterns, one card each: content sections, inline links, menu groups, list rows, a labelled rule and an order summary. SeparatorCtl gives each rule its role and aria-orientation, or takes a decorative one out of the accessible tree, following Radix's Separator; there is no interaction to measure, so the look is specified from shadcn's source, not measured."
+ },
+ "pagination": {
+  "title": "Pagination",
+  "src": "PaginationDemo",
+  "caption": "PaginationCtl · shadcn / ReUI patterns, specified from source",
+  "desc": "ReUI's ten Pagination patterns, one card each: hover and circle styles, go-to-page inputs, a numbered pill, page info, an ellipsis, an outlined group, rows per page with a range and a Page select. Which pages are drawn and where the ellipsis goes, the disabled ends, clamping and the rows-per-page range are PaginationCtl's, which shares TableCtl's page arithmetic; the boxes are InputCtls on the page's text session and the selects SelectCtls. There is no reference library to measure it against, so the behaviour is specified from shadcn's and MUI's source, not measured."
  },
  "tabs": {
   "title": "Tabs",

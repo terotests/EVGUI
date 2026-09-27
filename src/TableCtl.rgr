@@ -47,6 +47,7 @@
 
 Import "UiCtl.rgr"
 Import "UiTree.rgr"
+Import "PaginationCtl.rgr"
 Import "pkg:evg/EVGElement.rgr"
 Import "pkg:evg/EVGA11yTree.rgr"
 
@@ -357,20 +358,9 @@ class TableCtl extends UiCtl {
         return out
     }
 
+    ; PaginationCtl's arithmetic, so a table and a pager count pages alike.
     fn pageCount:int () {
-        def n:int (array_length records)
-        if (pageSize <= 0) {
-            return 1
-        }
-        ; `idiv`: plain `/` on two ints gives a double in Ranger.
-        def full:int (idiv n pageSize)
-        if ((full * pageSize) < n) {
-            full = (full + 1)
-        }
-        if (full < 1) {
-            full = 1
-        }
-        return full
+        return (PaginationCtl.pagesFor((array_length records) pageSize))
     }
 
     ; The rows actually on screen: sorted, then the current page's window.
