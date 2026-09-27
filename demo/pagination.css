@@ -1,0 +1,354 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * Pagination, as an EVG stylesheet: ReUI / shadcn's look — zinc greys, 1px
+ * #e4e4e7 lines, 8px radius, 36px (size-9) page links, 14px text.
+ *
+ * Class-first, one token per selector. Which page is active, which end is
+ * disabled and which link is hovered are written by PaginationDemo as classes
+ * and flags; nothing here decides them.
+ */
+
+/* --- the page and its cards ------------------------------------------------- */
+
+.pg-page {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  row-gap: 16px;
+  padding: 16px;
+  width: 100%;
+  background-color: #ffffff;
+}
+
+/* ReUI's card: an outer frame, the preview inset in it with its own border,
+ * and the caption under it. */
+.pg-card {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  width: 48.5%;
+  border: 1px solid #e4e4e7;
+  border-radius: 14px;
+  background-color: #ffffff;
+  padding: 4px 4px 0 4px;
+  shadow-color: rgba(0, 0, 0, 0.04);
+  shadow-radius: 2px;
+  shadow-offset-y: 1px;
+}
+
+.pg-stage {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  height: 208px;
+  padding: 16px 12px;
+  border: 1px solid #ececef;
+  border-radius: 10px;
+  background-color: #ffffff;
+}
+
+.pg-foot {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  height: 44px;
+  padding: 0 12px;
+}
+
+.pg-caption { color: #71717a; font-size: 13px; line-height: 18px; }
+
+/* --- the nav and its list -------------------------------------------------- */
+
+.pg-nav {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  row-gap: 12px;
+}
+
+.pg-list {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.pg-item {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.pg-group {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.pg-col {
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 4: the pill round the run. */
+.pg-pill {
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  padding: 4px;
+}
+.pg-list-tight { gap: 2px; }
+
+/* 5 and 8: two ends, pushed apart. */
+.pg-nav-split {
+  justify-content: space-between;
+  width: 360px;
+}
+.pg-nav-rows { gap: 8px; }
+.pg-range { gap: 12px; }
+
+/* 7: one outlined group; the rules between cells are elements. */
+.pg-seglist {
+  gap: 0px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+}
+.pg-divider {
+  width: 1px;
+  height: 36px;
+  background-color: #e4e4e7;
+}
+
+/* --- links ------------------------------------------------------------------- */
+
+.pg-link {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 36px;
+  border-radius: 8px;
+  background-color: #ffffff;
+  cursor: pointer;
+}
+
+/* Every link but the segmented cells carries a border the colour of the
+ * page, so the outlined active one is the same size as the rest. */
+.pg-bd { border: 1px solid #ffffff; }
+
+.pg-sq { width: 36px; }
+.pg-wide { padding: 0 10px; }
+.pg-round { border-radius: 18px; }
+.pg-seg { border-radius: 0px; }
+
+.pg-link:hover { background-color: #f4f4f5; }
+.pg-hb:hover { border-color: #e4e4e7; }
+.pg-link:active { background-color: #e4e4e7; }
+
+/* The active page, three ways. */
+.pg-on {
+  border-color: #e4e4e7;
+  shadow-color: rgba(0, 0, 0, 0.05);
+  shadow-radius: 2px;
+  shadow-offset-y: 1px;
+}
+.pg-on-solid { background-color: #18181b; border-color: #18181b; }
+.pg-on-solid:hover { background-color: #27272a; }
+.pg-seg-on { background-color: #f4f4f5; }
+
+/* Ends that cannot move: faded, and no hover. */
+.pg-off { cursor: default; }
+.pg-off:hover { background-color: #ffffff; border-color: #ffffff; }
+.pg-off:active { background-color: #ffffff; }
+
+.pg-link:focus {
+  border-color: #a1a1aa;
+  shadow-color: rgba(161, 161, 170, 0.5);
+  shadow-radius: 3px;
+  shadow-offset-y: 0px;
+}
+
+.pg-tx { color: #09090b; font-size: 14px; font-weight: 500; height: 20px; line-height: 20px; }
+.pg-tx-solid { color: #ffffff; }
+.pg-tx-off { color: #a1a1aa; }
+
+.pg-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: #09090b;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.pg-icon-off { stroke: #a1a1aa; }
+.pg-icon-muted { stroke: #71717a; }
+.pg-icon-slot { width: 16px; height: 16px; flex-grow: 0; }
+.pg-icon-check { stroke: #09090b; }
+.pg-icon-dots { stroke: #09090b; }
+
+.pg-ell {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+}
+
+/* --- text beside the controls ------------------------------------------------ */
+
+.pg-muted { color: #71717a; font-size: 14px; height: 20px; line-height: 20px; }
+.pg-strong { color: #09090b; font-size: 14px; font-weight: 500; height: 20px; line-height: 20px; }
+
+.pg-info {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+}
+
+/* --- the go-to-page field ---------------------------------------------------- */
+
+.pg-box {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  position: relative;
+  width: 56px;
+  height: 36px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background-color: #ffffff;
+  padding: 0 10px;
+  cursor: text;
+  shadow-color: rgba(0, 0, 0, 0.05);
+  shadow-radius: 2px;
+  shadow-offset-y: 1px;
+}
+.pg-box:hover { border-color: #d4d4d8; }
+.pg-box:focus {
+  border-color: #a1a1aa;
+  shadow-color: rgba(161, 161, 170, 0.5);
+  shadow-radius: 3px;
+  shadow-offset-y: 0px;
+}
+/* Invalid, as the form's `aria-invalid` fields are: a red edge. */
+.pg-box-bad { border-color: #dc2626; }
+.pg-box-bad:hover { border-color: #dc2626; }
+.pg-box-bad:focus { border-color: #991b1b; shadow-color: rgba(220, 38, 38, 0.25); }
+
+.pg-text { color: #09090b; font-family: Arial; font-size: 14px; height: 20px; line-height: 20px; }
+
+.pg-caret {
+  position: absolute;
+  top: 7px;
+  width: 1px;
+  height: 20px;
+  background-color: #09090b;
+}
+
+.pg-band {
+  position: absolute;
+  top: 7px;
+  height: 20px;
+  background-color: #bfdbfe;
+}
+
+.pg-err { color: #dc2626; font-size: 12px; height: 16px; line-height: 16px; }
+
+/* --- the selects --------------------------------------------------------------- */
+
+.pg-selwrap {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.pg-trigger {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background-color: #ffffff;
+  padding: 0 10px 0 12px;
+  cursor: pointer;
+  shadow-color: rgba(0, 0, 0, 0.05);
+  shadow-radius: 2px;
+  shadow-offset-y: 1px;
+}
+.pg-trigger:hover { background-color: #fafafa; }
+.pg-trigger:focus {
+  border-color: #a1a1aa;
+  shadow-color: rgba(161, 161, 170, 0.5);
+  shadow-radius: 3px;
+  shadow-offset-y: 0px;
+}
+.pg-trigger-rows { width: 72px; }
+.pg-trigger-page { width: 120px; }
+
+.pg-trigtx { color: #09090b; font-size: 14px; height: 20px; line-height: 20px; }
+.pg-spacer { flex-grow: 1; }
+
+.pg-listbox {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background-color: #ffffff;
+  padding: 4px;
+  shadow-color: rgba(0, 0, 0, 0.1);
+  shadow-radius: 8px;
+  shadow-offset-y: 4px;
+}
+.pg-listbox-rows { width: 96px; }
+.pg-listbox-page { width: 120px; }
+
+.pg-option {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  height: 32px;
+  border-radius: 6px;
+  padding: 0 8px;
+  cursor: pointer;
+}
+.pg-option:hover { background-color: #f4f4f5; }
+.pg-option-active { background-color: #f4f4f5; }
+
+.pg-opttx { color: #09090b; font-size: 14px; height: 20px; line-height: 20px; }
+
+/* --- a phone ---------------------------------------------------------------------- */
+
+@media (max-width: 600px) {
+  .pg-page { padding: 12px; row-gap: 12px; }
+  .pg-card { width: 100%; }
+  /* Content-high on a phone, so nothing to centre in: from the top. */
+  .pg-stage { height: auto; padding: 28px 8px; justify-content: flex-start; }
+  /* shadcn's `hidden sm:block`: Previous / Next keep only their chevrons. */
+  .pg-word { display: none; }
+  .pg-wide { padding: 0px; width: 36px; }
+  .pg-nav-split { width: 100%; }
+  .pg-nav-rows { row-gap: 12px; }
+}

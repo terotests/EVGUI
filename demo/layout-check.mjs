@@ -90,6 +90,7 @@ const DEMOS = [
   ["TreeDemo", "tree.css"],
   ["TabsDemo", "tabs.css"],
   ["AutocompleteDemo", "autocomplete.css"],
+  ["PaginationDemo", "pagination.css"],
 ];
 
 const rect = (e) => ({

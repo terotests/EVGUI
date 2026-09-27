@@ -55,6 +55,8 @@ import { PopoverDemo } from "./generated-host.js";
 import { POPOVER_CSS } from "./generated.js";
 import { AutocompleteDemo } from "./generated-host.js";
 import { AUTOCOMPLETE_CSS } from "./generated.js";
+import { PaginationDemo } from "./generated-host.js";
+import { PAGINATION_CSS } from "./generated.js";
 import { MENUBAR_CSS, TOOLBAR_CSS, SORTABLE_CSS, MOTION_CSS, TABLE_CSS, DROPDOWN_CSS, DIALOG_CSS, TREE_CSS, TIMELINE_CSS, RESIZE_CSS, FORM_CSS, PROFILE_CSS, DASHBOARD_CSS, CALENDAR_CSS, FILTERS_CSS, EVENTCAL_CSS, MESSAGE_CSS, CONTROLS_CSS, OTP_CSS, METADATA_CSS, EFFECTS_CSS, SEPARATOR_CSS, TABS_CSS, EFFECT_PRESETS_CSS } from "./generated.js";
 
 // The default stage width. A demo wider than this says so — the dashboard
@@ -432,6 +434,11 @@ let lastPopoverHover = "";
 let autocomplete = new AutocompleteDemo();
 autocomplete.init(AUTOCOMPLETE_CSS);
 let lastAutocompleteHover = "";
+// Pagination: ReUI's ten patterns, each over a PaginationCtl; the go-to-page
+// boxes are InputCtls on the page's text session, the selects SelectCtls.
+let pagination = new PaginationDemo();
+pagination.init(PAGINATION_CSS);
+let lastPaginationHover = "";
 // ONE DRIVER FOR THE PAGE. It reads the effect instances off whatever display
 // list is being painted, so it works for any demo whose stylesheet declares an
 // effect and costs nothing on the nineteen that do not.
@@ -1396,6 +1403,43 @@ DEMOS.popover = {
     setPressed: (id) => popover.setPressed(id),
     root: () => null,
   }),
+  // Pagination. No `ownsTab`: every link, box and select is a stop of the
+  // page's generic Tab walk; Enter / Space on a link is the demo's.
+  pagination: {
+    height: () => pagination.heightPx(),
+    list: () => pagination.displayListJson(),
+    hit: (x, y) => pagination.hitId(x, y),
+    a11y: (gen, focus) => pagination.a11yJson(gen, focus),
+    cursorAt: (x, y) => pagination.cursorAt(x, y),
+    textSession: {
+      focused: () => pagination.focusedField(),
+      state: (tid) => JSON.parse(pagination.fieldStateJson(tid)),
+      apply: (tid, v, a, b) => pagination.applyEdit(tid, v, a, b),
+    },
+    press: (id, x, y, ev) => pagination.beginSelection(id, x, !!(ev && ev.shiftKey)),
+    drag: (id, ev) => pagination.extendSelection(ev.offsetX),
+    drop: () => pagination.endSelection(),
+    dblclick: (id, x) => pagination.selectWordAt(id, x),
+    hover: (id) => {
+      if (id === lastPaginationHover) return false;
+      lastPaginationHover = id;
+      pagination.setHover(id);
+      return true;
+    },
+    keyWith: (k, shift, ctrl) => pagination.keyWith(k, shift, ctrl),
+    key: (k) => pagination.key(k),
+    ownsKey: (k) => pagination.ownsKey(k),
+    host: () => ({
+      setHover: (id) => {
+        if (id === lastPaginationHover) return false;
+        lastPaginationHover = id;
+        pagination.setHover(id);
+        return true;
+      },
+      setPressed: (id) => pagination.setPressed(id),
+      root: () => null,
+    }),
+  },
 };
 
 /**
@@ -1674,6 +1718,7 @@ const INSTANCE = {
   separator: () => separator,
   tabs: () => tabs,
   autocomplete: () => autocomplete,
+  pagination: () => pagination,
 };
 INSTANCE.popover = () => popover;
 // A press on the page outside the canvas is outside the popover too, and
@@ -1806,6 +1851,8 @@ const NARROW = {
   tabs: { min: 320, h: "auto" },
   // The page grows under an open list, so its height is the demo's own.
   autocomplete: { min: 320, h: "own" },
+  // Laid out at the room (up to its 1024), and as tall as it lays out.
+  pagination: { min: 320, h: "own", grow: true },
 };
 // `keep`: the popovers open inside the page and need the room it has.
 NARROW.popover = { min: 320, h: "auto", keep: true };
@@ -2529,6 +2576,7 @@ function syncPanels() {
 const DEMO_NAMES = ["menubar", "toolbar", "sortable", "table", "tree", "timeline", "resizable", "form", "calendar", "filters", "eventcal", "message", "controls", "otp", "metadata", "profile", "dashboard", "dropdown", "dialog", "motion", "effects", "accordion", "separator", "tabs"];
 DEMO_NAMES.push("popover");
 DEMO_NAMES.push("autocomplete");
+DEMO_NAMES.push("pagination");
 const wanted = new URLSearchParams(location.search).get("demo");
 if (wanted && DEMO_NAMES.includes(wanted)) state.which = wanted;
 
@@ -3216,6 +3264,7 @@ window.__resetDemo = (name) => {
   else if (name === "message") { message = new MessageDemo(); message.init(MESSAGE_CSS); lastMessageHover = ""; }
   else if (name === "tabs") { tabs = new TabsDemo(); tabs.init(TABS_CSS); lastTabsHover = ""; }
   else if (name === "autocomplete") { autocomplete = new AutocompleteDemo(); autocomplete.init(AUTOCOMPLETE_CSS); lastAutocompleteHover = ""; }
+  else if (name === "pagination") { pagination = new PaginationDemo(); pagination.init(PAGINATION_CSS); lastPaginationHover = ""; }
   else if (name === "dialog") { dialog = new DialogDemo(); dialog.init(DIALOG_CSS); lastDialogHover = ""; }
   else if (name === "popover") { popover = new PopoverDemo(); popover.init(POPOVER_CSS); lastPopoverHover = ""; }
   else return false;

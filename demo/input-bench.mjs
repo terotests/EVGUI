@@ -708,6 +708,15 @@ function diff(r, o) {
 
 async function prepareField(f) {
   await load(f.demo);
+  // A field below the fold (the pagination demo's last card) is scrolled up
+  // into the viewport: a pointer event outside it lands nowhere. Fields above
+  // the fold are left where `load` put them, so their origins do not move.
+  await page.evaluate((t) => {
+    const el = document.querySelector(`[data-a11y-id="${t}"]`);
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    if (r.bottom > innerHeight - 40) window.scrollBy(0, Math.round(r.top - innerHeight / 3));
+  }, f.tid);
   f.state = await fieldState(f.tid);
   const cr = await canvasRect();
   const tree = await a11y();

@@ -62,6 +62,7 @@ const { AccordionDemo } = require(path.join(ROOT, "gallery/evgui/bin/AccordionDe
 const { SeparatorDemo } = require(path.join(ROOT, "gallery/evgui/bin/SeparatorDemo.cjs"));
 const { TabsDemo } = require(path.join(ROOT, "gallery/evgui/bin/TabsDemo.cjs"));
 const { AutocompleteDemo } = require(path.join(ROOT, "gallery/evgui/bin/AutocompleteDemo.cjs"));
+const { PaginationDemo } = require(path.join(ROOT, "gallery/evgui/bin/PaginationDemo.cjs"));
 const MENUBAR_CSS = fs.readFileSync(path.join(HERE, "menubar.css"), "utf8");
 const TOOLBAR_CSS = fs.readFileSync(path.join(HERE, "toolbar.css"), "utf8");
 const SORTABLE_CSS = fs.readFileSync(path.join(HERE, "sortable.css"), "utf8");
@@ -105,6 +106,18 @@ const tabs = atRest(TabsDemo, "tabs.css");
 const tabsPw = atRest(TabsDemo, "tabs.css");
 tabsPw.press("tb-tab-password");
 tabsPw.press("tb-save-password");
+const pagination = atRest(PaginationDemo, "pagination.css");
+// Moved and opened: pages in the middle (an ellipsis each side), a go-to box
+// left invalid, and the rows-per-page list open on the overlay layer.
+const paginationBusy = atRest(PaginationDemo, "pagination.css");
+paginationBusy.press("pg4-page-10");
+paginationBusy.press("pg4-prev");
+paginationBusy.press("pg4-prev");
+paginationBusy.press("pg4-prev");
+paginationBusy.press("pg3-goto");
+paginationBusy.applyEdit("pg3-goto", "", 0, 0);
+paginationBusy.keyWith("Enter", false, false);
+paginationBusy.press("pg8-rows-trigger");
 const sizeOf = (d) => [typeof d.widthPx === "function" ? d.widthPx() : 900, d.heightPx()];
 const REST = [
   ["profile — a label-left form", profile, 40],
@@ -120,6 +133,8 @@ const REST = [
   ["separator — six rules, some semantic and some decorative", separator, 50],
   ["tabs — Account panel", tabs, 51],
   ["tabs — Password panel, saved", tabsPw, 52],
+  ["pagination — ten cards at rest", pagination, 53],
+  ["pagination — mid pages, an invalid box, a list open", paginationBusy, 54],
 ].map(([name, d, gen]) => ({
   name,
   size: sizeOf(d),

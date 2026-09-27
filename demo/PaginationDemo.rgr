@@ -1,0 +1,1320 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; PaginationDemo — ReUI's ten pagination patterns, one card each
+; =============================================================================
+; The reference is ReUI's Pagination page, which is shadcn's Pagination (a
+; <nav aria-label="pagination">, a list, links) in ten settings:
+;
+;    1  hover effect       ‹ Previous  1 [2] 3  Next ›, a border on hover
+;    2  circle buttons     the same, the active page a circle
+;    3  go-to-page input   ‹ [1] 2 3 … ›  Go to page [1]
+;    4  numbered, in card  a bordered pill, the active page filled dark
+;    5  page info on left  "Page 1 of 10" … ‹ Previous  Next ›
+;    6  ellipsis           ‹ Previous [1] 2 3 4 … Next ›
+;    7  outline buttons    one segmented group with shared borders
+;    8  rows per page      Rows per page [25 ▾]  1-25 of 100  |‹ ‹ › ›|
+;    9  page select        |‹ ‹ [Page 1 ▾] › ›|
+;   10  input, compact     ‹ [1] 2 3 4 … ›  Go to page [1]
+;
+; EVERY CARD WORKS. The arithmetic — which pages are drawn and where the
+; ellipsis goes, what the ends allow, clamping, rows-per-page ranges — is
+; `PaginationCtl`'s, one per card; this file only draws what it says. The
+; go-to-page boxes are `InputCtl`s on the page's text session (the page parks
+; a real <input> over the focused box), applied on Enter or when the focus
+; leaves; the two selects are `SelectCtl`s drawn as ProfileDemo draws its
+; Visibility select, with the list on the overlay layer.
+;
+; SEMANTICS are shadcn's: a navigation landmark named "pagination" holding a
+; list; each page a link, the current one `aria-current="page"`; the arrows
+; links named "Go to previous page" and so on, `aria-disabled` at the ends.
+; shadcn hides its ellipsis from readers entirely (its sr-only "More pages"
+; sits inside the aria-hidden span, so nobody hears it); here the glyph is
+; hidden and "More pages" is read, because a list that jumps from 3 to 10
+; without saying so reads as a list of six pages.
+;
+; On a phone (the page laid out under 600px) the Previous / Next words fold
+; away as shadcn's `hidden sm:block` does, card 4 keeps one page at each end
+; instead of three, and the wide rows wrap.
+; =============================================================================
+
+Import "../src/PaginationCtl.rgr"
+Import "../src/SelectCtl.rgr"
+Import "../src/InputCtl.rgr"
+Import "../src/UiCtl.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGUnit.rgr"
+Import "pkg:evg/EVGLayout.rgr"
+Import "pkg:evg/EVGDisplayList.rgr"
+Import "pkg:evg/EVGStyleSheet.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+Import "pkg:evg/EVGA11yFromTree.rgr"
+Import "pkg:evg/EVGHitTest.rgr"
+Import "pkg:evg/EVGTextEngine.rgr"
+
+treefactory Pg {
+    child addChild
+    text  textContent
+
+    tag Page     EVGElement (props (className "pg-page"))
+    tag Card     EVGElement (props (className "pg-card"))
+    tag Stage    EVGElement (props (className "pg-stage"))
+    tag Foot     EVGElement (props (className "pg-foot"))
+    tag Caption  EVGElement (props (className "pg-caption") (elementType 1) (role "heading") (a11yLevel 2))
+    tag Nav      EVGElement (props (className "pg-nav") (role "navigation") (a11yLabel "pagination"))
+    tag List     EVGElement (props (className "pg-list") (role "list"))
+    tag Item     EVGElement (props (className "pg-item") (role "listitem"))
+    tag Link     EVGElement (props (className "pg-link") (role "link") (a11yFocusable true))
+    tag Tx       EVGElement (props (className "pg-tx") (elementType 1))
+    tag Icon     EVGElement (props (className "pg-icon") (tagName "path") (elementType 3) (viewBox "0 0 24 24") (a11yHidden true))
+    tag Ell      EVGElement (props (className "pg-ell") (role "text") (a11yLabel "More pages"))
+    tag Group    EVGElement (props (className "pg-group"))
+    tag Info     EVGElement (props (className "pg-info") (role "status"))
+    tag Muted    EVGElement (props (className "pg-muted") (elementType 1))
+    tag Strong   EVGElement (props (className "pg-strong") (elementType 1))
+    tag Divider  EVGElement (props (className "pg-divider") (a11yHidden true))
+    ; The go-to-page field.
+    tag Box      EVGElement (props (className "pg-box") (role "textbox") (a11yFocusable true))
+    tag Text     EVGElement (props (className "pg-text") (elementType 1))
+    tag Caret    EVGElement (props (className "pg-caret") (a11yHidden true))
+    tag Band     EVGElement (props (className "pg-band") (a11yHidden true))
+    tag Err      EVGElement (props (className "pg-err") (elementType 1) (role "text"))
+    ; The selects.
+    tag SelWrap  EVGElement (props (className "pg-selwrap"))
+    tag Trigger  EVGElement (props (className "pg-trigger") (role "combobox") (a11yFocusable true) (isOverlayAnchor true))
+    tag TrigTx   EVGElement (props (className "pg-trigtx") (elementType 1))
+    tag Spacer   EVGElement (props (className "pg-spacer"))
+    tag Listbox  EVGElement (props (className "pg-listbox") (isOverlay true) (overlaySide "bottom") (overlayAlign "start") (role "listbox"))
+    tag Option   EVGElement (props (className "pg-option") (role "option") (a11yFocusable true))
+    tag OptTx    EVGElement (props (className "pg-opttx") (elementType 1))
+}
+
+class PaginationDemo {
+
+    def p1:PaginationCtl (new PaginationCtl())
+    def p2:PaginationCtl (new PaginationCtl())
+    def p3:PaginationCtl (new PaginationCtl())
+    def p4:PaginationCtl (new PaginationCtl())
+    def p5:PaginationCtl (new PaginationCtl())
+    def p6:PaginationCtl (new PaginationCtl())
+    def p7:PaginationCtl (new PaginationCtl())
+    def p8:PaginationCtl (new PaginationCtl())
+    def p9:PaginationCtl (new PaginationCtl())
+    def p10:PaginationCtl (new PaginationCtl())
+    def goto3:InputCtl (new InputCtl())
+    def goto10:InputCtl (new InputCtl())
+    def rows8:SelectCtl (new SelectCtl())
+    def page9:SelectCtl (new SelectCtl())
+    ; What each go-to-page field says is wrong with it, "" when nothing is.
+    def err3:string ""
+    def err10:string ""
+
+    def root@(optional):EVGElement
+    def sheet@(optional):EVGStyleSheet
+    def layout@(optional):EVGLayout
+    def measurer:EVGLayout (new EVGLayout())
+
+    def hovered:string ""
+    def pressed:string ""
+    def focused:string ""
+    def dragField:string ""
+    ; The width the tree was last built for: card 4's end pages and nothing
+    ; else depend on it, so a resize across the phone line rebuilds.
+    def builtNarrow:boolean false
+    ; Set by anything that changes what is drawn; the next ask lays out again.
+    def dirty:boolean true
+
+    def pageW:double 1024.0
+    def pageH:double 1400.0
+
+    Constructor () {
+    }
+
+    fn setUp:void (c:PaginationCtl tid:string count:int page:int span:int boundaries:int) {
+        c.tid = tid
+        c.pages = count
+        c.page = page
+        c.span = span
+        c.boundaries = boundaries
+    }
+
+    fn dress:void (c:InputCtl tid:string) {
+        c.tid = tid
+        c.name = "Go to page"
+        c.kind = "number"
+        c.fontFamily = "Arial"
+        c.fontSize = 14.0
+        ; 56 − 2 × 1 border − 2 × 10 padding.
+        c.boxWidth = 34.0
+        c.value = "1"
+        c.caret = 1
+        c.anchor = 1
+    }
+
+    fn init:void (css:string) {
+        def s (new EVGStyleSheet())
+        s.parse(css)
+        sheet = s
+
+        this.setUp(p1 "pg1" 3 2 3 0)
+        this.setUp(p2 "pg2" 3 2 3 0)
+        this.setUp(p3 "pg3" 10 1 3 0)
+        this.setUp(p4 "pg4" 12 1 1 3)
+        this.setUp(p5 "pg5" 10 1 1 0)
+        this.setUp(p6 "pg6" 10 1 4 0)
+        this.setUp(p7 "pg7" 10 3 4 0)
+        this.setUp(p8 "pg8" 1 1 1 0)
+        p8.total = 100
+        p8.pageSize = 25
+        this.setUp(p9 "pg9" 10 1 1 0)
+        this.setUp(p10 "pg10" 10 1 4 0)
+
+        ; shadcn names every nav "pagination"; ten landmarks on one page with
+        ; one name are ten doors with the same sign (axe landmark-unique), so
+        ; each keeps the word and says which one it is.
+        p1.name = "pagination, hover effect"
+        p2.name = "pagination, circle buttons"
+        p3.name = "pagination, go to page"
+        p4.name = "pagination, in a card"
+        p5.name = "pagination, page info"
+        p6.name = "pagination, ellipsis"
+        p7.name = "pagination, outline buttons"
+        p8.name = "pagination, rows per page"
+        p9.name = "pagination, page select"
+        p10.name = "pagination, compact"
+
+        this.dress(goto3 "pg3-goto")
+        this.dress(goto10 "pg10-goto")
+
+        rows8.tid = "pg8-rows"
+        rows8.name = "Rows per page"
+        rows8.addItem("10" "10" false)
+        rows8.addItem("25" "25" false)
+        rows8.addItem("50" "50" false)
+        rows8.addItem("100" "100" false)
+        rows8.value = "25"
+
+        page9.tid = "pg9-select"
+        page9.name = "Page"
+        def i:int 1
+        while (i <= 10) {
+            page9.addItem((to_string i) ("Page " + (to_string i)) false)
+            i = (i + 1)
+        }
+        page9.value = "1"
+        this.rebuild()
+    }
+
+    ; --- lookups ------------------------------------------------------------------
+
+    fn engine:EVGTextEngine () {
+        return (measurer.getTextEngine())
+    }
+
+    fn ctls:[PaginationCtl] () {
+        def a:[PaginationCtl]
+        push a p1
+        push a p2
+        push a p3
+        push a p4
+        push a p5
+        push a p6
+        push a p7
+        push a p8
+        push a p9
+        push a p10
+        return a
+    }
+
+    ; The controller a control id belongs to, by its "pgN-" prefix.
+    fn ctlOf:PaginationCtl (target:string) {
+        def all:[PaginationCtl] (this.ctls())
+        def i:int ((array_length all) - 1)
+        ; Longest prefix first: "pg10-" before "pg1-".
+        while (i >= 0) {
+            def c:PaginationCtl (itemAt all i)
+            if (c.owns(target)) {
+                return c
+            }
+            i = (i - 1)
+        }
+        return (new PaginationCtl())
+    }
+
+    ; Which card's controller a number, for a check: 1..10.
+    fn ctlAt:PaginationCtl (n:int) {
+        def all:[PaginationCtl] (this.ctls())
+        return (itemAt all (n - 1))
+    }
+
+    fn isField:boolean (tid:string) {
+        return ((tid == goto3.tid) || (tid == goto10.tid))
+    }
+
+    fn fieldFor:InputCtl (tid:string) {
+        if (tid == goto10.tid) {
+            return goto10
+        }
+        return goto3
+    }
+
+    fn ctlOfField:PaginationCtl (tid:string) {
+        if (tid == goto10.tid) {
+            return p10
+        }
+        return p3
+    }
+
+    fn errorOf:string (tid:string) {
+        if (tid == goto10.tid) {
+            return err10
+        }
+        if (tid == goto3.tid) {
+            return err3
+        }
+        return ""
+    }
+
+    fn setError:void (tid:string msg:string) {
+        if (tid == goto10.tid) {
+            err10 = msg
+        }
+        if (tid == goto3.tid) {
+            err3 = msg
+        }
+    }
+
+    fn narrow:boolean () {
+        return (pageW < 600.0)
+    }
+
+    sfn byId:EVGElement (el:EVGElement tid:string) {
+        if (el.id == tid) {
+            return el
+        }
+        def i:int 0
+        while (i < (el.getChildCount())) {
+            def kid:EVGElement (PaginationDemo.byId((el.getChild(i)) tid))
+            if (kid.id == tid) {
+                return kid
+            }
+            i = (i + 1)
+        }
+        return el
+    }
+
+    ; --- icons (Lucide, 24 × 24, stroked) -----------------------------------------
+
+    sfn iconPath:string (name:string) {
+        if (name == "left")  { return "M15 18 L9 12 L15 6" }
+        if (name == "right") { return "M9 18 L15 12 L9 6" }
+        if (name == "first") { return "M17 18 L11 12 L17 6 M7 6 L7 18" }
+        if (name == "last")  { return "M7 18 L13 12 L7 6 M17 6 L17 18" }
+        if (name == "down")  { return "M6 9 L12 15 L18 9" }
+        if (name == "check") { return "M20 6 L9 17 L4 12" }
+        ; MoreHorizontal: three dots.
+        return "M13 12 A1 1 0 1 1 11 12 A1 1 0 1 1 13 12 Z M20 12 A1 1 0 1 1 18 12 A1 1 0 1 1 20 12 Z M6 12 A1 1 0 1 1 4 12 A1 1 0 1 1 6 12 Z"
+    }
+
+    sfn icon:EVGElement (name:string cls:string) {
+        return (tree Pg (Icon (props (className ("pg-icon " + cls)) (svgPath (PaginationDemo.iconPath(name))))))
+    }
+
+    ; --- links --------------------------------------------------------------------
+
+    ; `style`: outline | hover | circle | solid | seg — which of ReUI's looks
+    ; the active page and the hover take.
+    fn pageLink:EVGElement (c:PaginationCtl p:int style:string) {
+        def on:boolean (p == c.page)
+        def cls:string "pg-link pg-sq"
+        def txCls:string "pg-tx"
+        if (style == "seg") {
+            cls = "pg-link pg-sq pg-seg"
+            if on {
+                cls = (cls + " pg-seg-on")
+            }
+        } {
+            cls = (cls + " pg-bd")
+            if (style == "hover") {
+                cls = (cls + " pg-hb")
+            }
+            if on {
+                if (style == "circle") {
+                    cls = (cls + " pg-on pg-round")
+                } {
+                    if (style == "solid") {
+                        cls = (cls + " pg-on-solid")
+                        txCls = "pg-tx pg-tx-solid"
+                    } {
+                        cls = (cls + " pg-on")
+                    }
+                }
+            }
+            if (style == "circle") {
+                cls = (cls + " pg-round")
+            }
+        }
+        def label:string (to_string p)
+        def el (tree Pg (Link (props (id (c.linkTid(p))) (className cls) (a11yLabel label))
+            (Tx (props (className txCls)) label)))
+        if on {
+            el.a11yCurrent = "page"
+        }
+        return el
+    }
+
+    ; Previous / Next / First / Last. `word` is the visible word next to the
+    ; chevron ("" for an icon-only link); the name is always the full one.
+    fn endLink:EVGElement (c:PaginationCtl which:string word:string style:string) {
+        def tid:string (c.prevTid())
+        def name:string "Go to previous page"
+        def iconName:string "left"
+        if (which == "next") {
+            tid = (c.nextTid())
+            name = "Go to next page"
+            iconName = "right"
+        }
+        if (which == "first") {
+            tid = (c.firstTid())
+            name = "Go to first page"
+            iconName = "first"
+        }
+        if (which == "last") {
+            tid = (c.lastTid())
+            name = "Go to last page"
+            iconName = "last"
+        }
+        def off:boolean (c.isDisabled(tid))
+        def cls:string "pg-link"
+        if ((strlen word) > 0) {
+            cls = (cls + " pg-wide")
+        } {
+            cls = (cls + " pg-sq")
+        }
+        if (style == "seg") {
+            cls = (cls + " pg-seg")
+        } {
+            cls = (cls + " pg-bd")
+        }
+        if off {
+            cls = (cls + " pg-off")
+        }
+        def iconCls:string ""
+        def txCls:string "pg-tx pg-word"
+        if off {
+            iconCls = "pg-icon-off"
+            txCls = "pg-tx pg-word pg-tx-off"
+        }
+        def el (tree Pg (Link (props (id tid) (className cls) (a11yLabel name))))
+        el.a11yDisabled = off
+        def ic:EVGElement (PaginationDemo.icon(iconName iconCls))
+        def tx (tree Pg (Tx (props (className txCls)) word))
+        if (which == "next") {
+            if ((strlen word) > 0) {
+                el.addChild(tx)
+            }
+            el.addChild(ic)
+        } {
+            el.addChild(ic)
+            if ((strlen word) > 0) {
+                el.addChild(tx)
+            }
+        }
+        return el
+    }
+
+    fn ellipsisEl:EVGElement (c:PaginationCtl item:string seg:boolean) {
+        def cls:string "pg-ell"
+        if seg {
+            cls = "pg-ell pg-ell-seg"
+        }
+        def el (tree Pg (Ell (props (id (c.ellipsisTid(item))) (className cls))))
+        el.addChild((PaginationDemo.icon("dots" "pg-icon-dots")))
+        return el
+    }
+
+    fn itemOf:EVGElement (kid:EVGElement) {
+        ; Named after what it holds, so a reader's cursor on an item survives
+        ; the list shifting under it.
+        def it (tree Pg (Item (props (id (kid.id + "-li")))))
+        it.addChild(kid)
+        return it
+    }
+
+    ; The numbered run: every item the controller lists, as links and
+    ; ellipses, each in its own list item. In the segmented look a 1px rule
+    ; goes before each item.
+    fn addPages:void (list:EVGElement c:PaginationCtl style:string) {
+        def seg:boolean (style == "seg")
+        def all:[string] (c.items())
+        def i:int 0
+        while (i < (array_length all)) {
+            def it:string (itemAt all i)
+            if seg {
+                list.addChild((tree Pg (Divider)))
+            }
+            if (PaginationCtl.isEllipsis(it)) {
+                list.addChild((this.itemOf((this.ellipsisEl(c it seg)))))
+            } {
+                list.addChild((this.itemOf((this.pageLink(c (?? (to_int it) 0) style)))))
+            }
+            i = (i + 1)
+        }
+    }
+
+    fn navFor:EVGElement (c:PaginationCtl cls:string) {
+        return (tree Pg (Nav (props (id (c.navTid())) (className ("pg-nav " + cls)) (a11yLabel c.name))))
+    }
+
+    fn listFor:EVGElement (c:PaginationCtl cls:string) {
+        return (tree Pg (List (props (id (c.listTid())) (className ("pg-list " + cls)))))
+    }
+
+    ; --- the go-to-page field -----------------------------------------------------
+
+    fn boxFor:EVGElement (c:InputCtl) {
+        def cls:string "pg-box"
+        def bad:boolean ((strlen (this.errorOf(c.tid))) > 0)
+        if bad {
+            cls = "pg-box pg-box-bad"
+        }
+        def box (tree Pg (Box (props (id c.tid) (className cls) (a11yLabel c.name))))
+        box.a11yValue = c.value
+        if bad {
+            box.a11yInvalid = "true"
+            box.a11yDescribedBy = (c.tid + "-error")
+        }
+        def eng:EVGTextEngine (this.engine())
+        if ((focused == c.tid) && (c.hasSelection())) {
+            def s:double (c.caretXAt(eng (c.selStart())))
+            def e:double (c.caretXAt(eng (c.selEnd())))
+            def band (tree Pg (Band))
+            band.left = (EVGUnit.px(((s - c.scrollX) + 10.0)))
+            band.width = (EVGUnit.px((e - s)))
+            box.addChild(band)
+        }
+        box.addChild((tree Pg (Text (props (id (c.tid + "-text"))) (c.glyphText()))))
+        if (focused == c.tid) {
+            def cx:double (c.caretXAt(eng c.caret))
+            def car (tree Pg (Caret))
+            car.left = (EVGUnit.px(((cx - c.scrollX) + 10.0)))
+            box.addChild(car)
+        }
+        return box
+    }
+
+    fn gotoGroup:EVGElement (c:InputCtl) {
+        def g (tree Pg (Group (props (id (c.tid + "-group")) (className "pg-group pg-goto"))
+            (Muted "Go to page")))
+        g.addChild((this.boxFor(c)))
+        return g
+    }
+
+    ; The message under a bad field. Always there, empty when nothing is
+    ; wrong, so the card does not jump when it appears.
+    fn errorEl:EVGElement (c:InputCtl) {
+        def msg:string (this.errorOf(c.tid))
+        if ((strlen msg) == 0) {
+            return (tree Pg (Err (props (id (c.tid + "-error")) (className "pg-err pg-err-empty") (role "")) ""))
+        }
+        return (tree Pg (Err (props (id (c.tid + "-error"))) msg))
+    }
+
+    ; --- the selects ------------------------------------------------------------------
+
+    fn selectEl:EVGElement (sel:SelectCtl cls:string listCls:string) {
+        def wrap (tree Pg (SelWrap (props (id (sel.tid + "-wrap")))))
+        def t (tree Pg (Trigger (props (id (sel.triggerTid())) (className ("pg-trigger " + cls)) (a11yLabel sel.name))))
+        t.a11yHasPopup = "listbox"
+        t.a11yValue = (sel.labelOf(sel.value))
+        t.addChild((tree Pg (TrigTx (sel.labelOf(sel.value)))))
+        t.addChild((tree Pg (Spacer)))
+        t.addChild((PaginationDemo.icon("down" "pg-icon-muted")))
+        wrap.addChild(t)
+        if sel.open {
+            t.a11yExpanded = (EVGA11yTri.yes())
+            t.a11yControls = (sel.contentTid())
+            def list (tree Pg (Listbox (props (id (sel.contentTid())) (className ("pg-listbox " + listCls)) (a11yLabel sel.name))))
+            def i:int 0
+            while (i < (array_length sel.items)) {
+                def it:UiItem (itemAt sel.items i)
+                def ocls:string "pg-option"
+                if (it.value == sel.activeValue) {
+                    ocls = "pg-option pg-option-active"
+                }
+                def row (tree Pg (Option (props (id (sel.itemTid(it.value))) (className ocls) (a11yLabel it.name))))
+                if (it.value == sel.value) {
+                    row.a11ySelected = 2
+                }
+                row.addChild((tree Pg (OptTx it.name)))
+                row.addChild((tree Pg (Spacer)))
+                ; The tick on the CHOSEN row only; the others keep its room.
+                if (it.value == sel.value) {
+                    row.addChild((PaginationDemo.icon("check" "pg-icon-check")))
+                } {
+                    row.addChild((tree Pg (Spacer (props (className "pg-icon-slot")))))
+                }
+                list.addChild(row)
+                i = (i + 1)
+            }
+            wrap.addChild(list)
+        } {
+            t.a11yExpanded = (EVGA11yTri.no())
+        }
+        return wrap
+    }
+
+    ; --- the ten examples ----------------------------------------------------------
+
+    ; 1 and 2: ‹ Previous  1 2 3  Next ›.
+    fn simple:EVGElement (c:PaginationCtl style:string) {
+        def nav:EVGElement (this.navFor(c ""))
+        def list:EVGElement (this.listFor(c ""))
+        list.addChild((this.itemOf((this.endLink(c "prev" "Previous" style)))))
+        this.addPages(list c style)
+        list.addChild((this.itemOf((this.endLink(c "next" "Next" style)))))
+        nav.addChild(list)
+        return nav
+    }
+
+    ; 3 and 10: icon arrows round the pages, then "Go to page" and a box.
+    fn withGoto:EVGElement (c:PaginationCtl f:InputCtl) {
+        def nav:EVGElement (this.navFor(c "pg-nav-goto"))
+        def list:EVGElement (this.listFor(c ""))
+        list.addChild((this.itemOf((this.endLink(c "prev" "" "outline")))))
+        this.addPages(list c "outline")
+        list.addChild((this.itemOf((this.endLink(c "next" "" "outline")))))
+        nav.addChild(list)
+        nav.addChild((this.gotoGroup(f)))
+        def col (tree Pg (Group (props (className "pg-group pg-col"))))
+        col.addChild(nav)
+        col.addChild((this.errorEl(f)))
+        return col
+    }
+
+    ; 4: the numbered run in a bordered pill, the active page filled.
+    fn inCard:EVGElement () {
+        def nav:EVGElement (this.navFor(p4 "pg-pill"))
+        def list:EVGElement (this.listFor(p4 "pg-list-tight"))
+        list.addChild((this.itemOf((this.endLink(p4 "prev" "" "outline")))))
+        this.addPages(list p4 "solid")
+        list.addChild((this.itemOf((this.endLink(p4 "next" "" "outline")))))
+        nav.addChild(list)
+        return nav
+    }
+
+    ; 5: "Page 1 of 10" on the left, Previous / Next on the right.
+    fn pageInfo:EVGElement () {
+        def c:PaginationCtl p5
+        def nav:EVGElement (this.navFor(c "pg-nav-split"))
+        def cur:string (to_string c.page)
+        def cnt:string (to_string (c.pageCount()))
+        def said:string ((("Page " + cur) + " of ") + cnt)
+        nav.addChild((tree Pg (Info (props (id "pg5-info") (a11yLabel said))
+            (Muted "Page")
+            (Strong cur)
+            (Muted "of")
+            (Strong cnt))))
+        def list:EVGElement (this.listFor(c ""))
+        list.addChild((this.itemOf((this.endLink(c "prev" "Previous" "outline")))))
+        list.addChild((this.itemOf((this.endLink(c "next" "Next" "outline")))))
+        nav.addChild(list)
+        return nav
+    }
+
+    ; 7: one outlined, segmented group.
+    fn segmented:EVGElement () {
+        def c:PaginationCtl p7
+        def nav:EVGElement (this.navFor(c ""))
+        def list:EVGElement (this.listFor(c "pg-seglist"))
+        list.addChild((this.itemOf((this.endLink(c "prev" "" "seg")))))
+        this.addPages(list c "seg")
+        list.addChild((tree Pg (Divider)))
+        list.addChild((this.itemOf((this.endLink(c "next" "" "seg")))))
+        nav.addChild(list)
+        return nav
+    }
+
+    ; 8: rows per page, the range, and the four arrows.
+    fn rowsPerPage:EVGElement () {
+        def c:PaginationCtl p8
+        def nav:EVGElement (this.navFor(c "pg-nav-rows"))
+        def left (tree Pg (Group (props (className "pg-group pg-rows"))
+            (Muted "Rows per page")))
+        left.addChild((this.selectEl(rows8 "pg-trigger-rows" "pg-listbox-rows")))
+        nav.addChild(left)
+        def right (tree Pg (Group (props (className "pg-group pg-range"))))
+        right.addChild((tree Pg (Info (props (id "pg8-range") (className "pg-info") (a11yLabel (c.rangeText())))
+            (Muted (c.rangeText())))))
+        def list:EVGElement (this.listFor(c ""))
+        list.addChild((this.itemOf((this.endLink(c "first" "" "outline")))))
+        list.addChild((this.itemOf((this.endLink(c "prev" "" "outline")))))
+        list.addChild((this.itemOf((this.endLink(c "next" "" "outline")))))
+        list.addChild((this.itemOf((this.endLink(c "last" "" "outline")))))
+        right.addChild(list)
+        nav.addChild(right)
+        return nav
+    }
+
+    ; 9: first / previous, a Page select, next / last.
+    fn pageSelect:EVGElement () {
+        def c:PaginationCtl p9
+        def nav:EVGElement (this.navFor(c ""))
+        def list:EVGElement (this.listFor(c ""))
+        list.addChild((this.itemOf((this.endLink(c "first" "" "outline")))))
+        list.addChild((this.itemOf((this.endLink(c "prev" "" "outline")))))
+        list.addChild((this.itemOf((this.selectEl(page9 "pg-trigger-page" "pg-listbox-page")))))
+        list.addChild((this.itemOf((this.endLink(c "next" "" "outline")))))
+        list.addChild((this.itemOf((this.endLink(c "last" "" "outline")))))
+        nav.addChild(list)
+        return nav
+    }
+
+    fn card:EVGElement (n:int caption:string example:EVGElement) {
+        def id:string ("pg-card-" + (to_string n))
+        def stage (tree Pg (Stage (props (id (id + "-stage")))))
+        stage.addChild(example)
+        return (tree Pg (Card (props (id id))
+            (child stage)
+            (Foot (Caption (props (id (id + "-caption"))) caption))))
+    }
+
+    fn pageBody:EVGElement () {
+        ; The controllers' state, mirrored into the views that show it.
+        page9.value = (to_string p9.page)
+        if (this.narrow()) {
+            p4.boundaries = 1
+        } {
+            p4.boundaries = 3
+        }
+        builtNarrow = (this.narrow())
+        def page (tree Pg (Page (props (id "pg-page"))))
+        page.addChild((this.card(1 "Pagination with hover effect." (this.simple(p1 "hover")))))
+        page.addChild((this.card(2 "Pagination with circle buttons." (this.simple(p2 "circle")))))
+        page.addChild((this.card(3 "Pagination with go-to-page input" (this.withGoto(p3 goto3)))))
+        page.addChild((this.card(4 "Numbered pagination in card" (this.inCard()))))
+        page.addChild((this.card(5 "Pagination with page info on left" (this.pageInfo()))))
+        page.addChild((this.card(6 "Pagination with ellipsis indicator" (this.simple(p6 "outline")))))
+        page.addChild((this.card(7 "Pagination with outline style buttons" (this.segmented()))))
+        page.addChild((this.card(8 "Rows per page select with range info and first/prev/next/last icons" (this.rowsPerPage()))))
+        page.addChild((this.card(9 "Page select with first/prev/next/last icons" (this.pageSelect()))))
+        page.addChild((this.card(10 "Compact pagination with go-to-page input" (this.withGoto(p10 goto10)))))
+        return page
+    }
+
+    fn rebuild:void () {
+        root = (this.pageBody())
+        dirty = true
+    }
+
+    ; --- layout -----------------------------------------------------------------------
+
+    fn markStates:void (el:EVGElement) {
+        el.isHovered = ((strlen hovered) > 0) && (el.id == hovered)
+        el.isFocused = ((strlen focused) > 0) && (el.id == focused)
+        el.isPressed = ((strlen pressed) > 0) && (el.id == pressed)
+        def i:int 0
+        while (i < (array_length el.children)) {
+            this.markStates((itemAt el.children i))
+            i = (i + 1)
+        }
+    }
+
+    ; The lowest edge of anything drawn: the cards, and an open list that
+    ; hangs below the last of them.
+    sfn deepestBottom:double (el:EVGElement) {
+        def bottom:double ((el.calculatedY) + (el.calculatedHeight))
+        def i:int 0
+        while (i < (array_length el.children)) {
+            def b:double (PaginationDemo.deepestBottom((itemAt el.children i)))
+            if (b > bottom) {
+                bottom = b
+            }
+            i = (i + 1)
+        }
+        return bottom
+    }
+
+    ; A FRESH TREE for every pass: EVGLayout reads some of its own answers
+    ; from the last pass back as inputs (a flex-grown height, a stretched
+    ; row's inner size — see SeparatorDemo.forgetFlex), so a tree laid out
+    ; twice, at a new page size or a new height, keeps the old sizes.
+    fn layOnce:EVGLayout () {
+        root = (this.pageBody())
+        def r:EVGElement (unwrap root)
+        def s:EVGStyleSheet (unwrap sheet)
+        this.markStates(r)
+        s.setViewport(pageW pageH false)
+        s.applyTree(r "")
+        def lay (new EVGLayout())
+        lay.setPageSize(pageW pageH)
+        lay.layout(r)
+        layout = lay
+        return lay
+    }
+
+    ; Laid out afresh when anything changed, and the page made as tall as what
+    ; is in it (plus the page's bottom padding).
+    fn laidOut:EVGLayout () {
+        if ((this.narrow()) != builtNarrow) {
+            root = (this.pageBody())
+            dirty = true
+        }
+        if (dirty == false) {
+            if layout {
+                return (unwrap layout)
+            }
+        }
+        dirty = false
+        def lay:EVGLayout (this.layOnce())
+        def r:EVGElement (unwrap root)
+        def bottom:double 0.0
+        def i:int 0
+        while (i < (array_length r.children)) {
+            def b:double (PaginationDemo.deepestBottom((itemAt r.children i)))
+            if (b > bottom) {
+                bottom = b
+            }
+            i = (i + 1)
+        }
+        def want:double (to_double (to_int ((bottom + r.box.paddingBottomPx) + 0.999)))
+        if (want != pageH) {
+            pageH = want
+            return (this.layOnce())
+        }
+        return lay
+    }
+
+    ; --- input: the pages ------------------------------------------------------------
+
+    ; Focus moving somewhere else applies a go-to-page field, as blur does.
+    fn moveFocus:void (to:string) {
+        if (to == focused) {
+            return
+        }
+        def was:string focused
+        focused = to
+        if (this.isField(was)) {
+            this.commit(was)
+        }
+    }
+
+    ; A page change made by anything but the field shows in the field.
+    fn syncFields:void () {
+        if (focused != goto3.tid) {
+            this.showPage(goto3 p3)
+        }
+        if (focused != goto10.tid) {
+            this.showPage(goto10 p10)
+        }
+    }
+
+    fn showPage:void (f:InputCtl c:PaginationCtl) {
+        if ((strlen (this.errorOf(f.tid))) > 0) {
+            return
+        }
+        def v:string (to_string c.page)
+        if (f.value != v) {
+            f.value = v
+            f.caret = (strlen v)
+            f.anchor = f.caret
+            f.scrollX = 0.0
+        }
+    }
+
+    ; Apply what a go-to-page field holds: a whole number moves to that page
+    ; (clamped to 1..N, and the field then says where it went); anything else
+    ; leaves the page and marks the field.
+    fn commit:boolean (tid:string) {
+        def f:InputCtl (this.fieldFor(tid))
+        def c:PaginationCtl (this.ctlOfField(tid))
+        if (c.goTo(f.value)) {
+            this.setError(tid "")
+            def v:string (to_string c.page)
+            if (f.value != v) {
+                f.value = v
+                f.caret = (strlen v)
+                f.anchor = f.caret
+                f.ensureCaretVisible((this.engine()))
+            }
+            return true
+        }
+        this.setError(tid ("Enter a page from 1 to " + (to_string (c.pageCount()))))
+        return false
+    }
+
+    fn pressLink:boolean (target:string) {
+        def c:PaginationCtl (this.ctlOf(target))
+        if ((strlen c.tid) == 0) {
+            return false
+        }
+        this.moveFocus(target)
+        c.press(target)
+        this.syncFields()
+        this.rebuild()
+        return true
+    }
+
+    ; --- input: the selects -------------------------------------------------------------
+
+    fn selectOf:SelectCtl (target:string) {
+        if ((target == (page9.triggerTid())) || ((strlen (page9.valueOf(target))) > 0)) {
+            return page9
+        }
+        return rows8
+    }
+
+    fn ownsSelect:boolean (target:string) {
+        if ((target == (rows8.triggerTid())) || ((strlen (rows8.valueOf(target))) > 0)) {
+            return true
+        }
+        if ((target == (page9.triggerTid())) || ((strlen (page9.valueOf(target))) > 0)) {
+            return true
+        }
+        return false
+    }
+
+    fn openSelect:SelectCtl () {
+        if page9.open {
+            return page9
+        }
+        return rows8
+    }
+
+    fn anyOpen:boolean () {
+        return (rows8.open || page9.open)
+    }
+
+    ; What a chosen value does: rows per page resizes card 8's pages, a page
+    ; moves card 9.
+    fn chosen:void (sel:SelectCtl) {
+        if (sel.tid == rows8.tid) {
+            p8.setPageSize((?? (to_int sel.value) 0))
+        }
+        if (sel.tid == page9.tid) {
+            p9.setPage((?? (to_int sel.value) 0))
+        }
+    }
+
+    ; --- input ------------------------------------------------------------------------
+
+    fn press:boolean (target:string) {
+        ; An open list answers every press: a row chooses, anything else
+        ; closes it (a click outside), the trigger toggles.
+        if (this.anyOpen()) {
+            def sel:SelectCtl (this.openSelect())
+            if (target == (sel.triggerTid())) {
+                sel.closeList()
+                this.moveFocus(target)
+                this.rebuild()
+                return true
+            }
+            def act:string (sel.activate(target))
+            if ((strlen act) > 0) {
+                this.chosen(sel)
+                this.moveFocus((sel.triggerTid()))
+                this.rebuild()
+                return true
+            }
+            sel.closeList()
+            this.rebuild()
+            if ((strlen target) == 0) {
+                return true
+            }
+        }
+        if ((target == (rows8.triggerTid())) || (target == (page9.triggerTid()))) {
+            def s2:SelectCtl (this.selectOf(target))
+            this.moveFocus(target)
+            s2.openList()
+            this.rebuild()
+            return true
+        }
+        if (this.isField(target)) {
+            this.moveFocus(target)
+            this.rebuild()
+            return true
+        }
+        if (this.pressLink(target)) {
+            return true
+        }
+        ; Anywhere else: the focus leaves whatever had it.
+        if ((strlen focused) > 0) {
+            this.moveFocus("")
+            this.syncFields()
+            this.rebuild()
+        }
+        return false
+    }
+
+    fn key:boolean (k:string) {
+        return (this.keyWith(k false false))
+    }
+
+    fn keyWith:boolean (k:string shift:boolean ctrl:boolean) {
+        ; The open list takes the keyboard first, Tab included, as Radix's
+        ; select does: SelectCtl says where each key lands.
+        if (this.anyOpen()) {
+            def sel:SelectCtl (this.openSelect())
+            if (k == "Tab") {
+                sel.closeList()
+                focused = (sel.triggerTid())
+                this.rebuild()
+                return false
+            }
+            def was:string sel.value
+            def land:string (sel.keyDown(focused k))
+            if ((strlen land) > 0) {
+                focused = land
+            }
+            if ((sel.open == false) && (sel.value != was)) {
+                this.chosen(sel)
+                this.syncFields()
+            }
+            this.rebuild()
+            return true
+        }
+        if (k == "Tab") {
+            return false
+        }
+        if ((focused == (rows8.triggerTid())) || (focused == (page9.triggerTid()))) {
+            if ((UiCtl.activatesOn(k)) || ((k == "ArrowDown") || (k == "ArrowUp"))) {
+                def s3:SelectCtl (this.selectOf(focused))
+                def landOpen:string (s3.openList())
+                if (landOpen != (s3.contentTid())) {
+                    focused = landOpen
+                }
+                this.rebuild()
+                return true
+            }
+            return false
+        }
+        if (this.isField(focused)) {
+            def f:InputCtl (this.fieldFor(focused))
+            if (k == "Enter") {
+                this.commit(focused)
+                this.rebuild()
+                return true
+            }
+            ; Escape puts back the page the field last applied.
+            if (k == "Escape") {
+                this.setError(focused "")
+                this.showPage(f (this.ctlOfField(focused)))
+                this.rebuild()
+                return true
+            }
+            def before:string f.value
+            f.keyDownWith(focused k shift ctrl)
+            f.ensureCaretVisible((this.engine()))
+            if (f.value != before) {
+                this.setError(focused "")
+            }
+            this.rebuild()
+            return true
+        }
+        if (UiCtl.activatesOn(k)) {
+            def c:PaginationCtl (this.ctlOf(focused))
+            if ((strlen c.tid) > 0) {
+                return (this.pressLink(focused))
+            }
+        }
+        return false
+    }
+
+    fn ownsKey:boolean (k:string) {
+        return false
+    }
+
+    fn type:boolean (ch:string) {
+        if ((this.isField(focused)) == false) {
+            return false
+        }
+        def f:InputCtl (this.fieldFor(focused))
+        def took:boolean (f.typeChar(focused ch))
+        if took {
+            f.ensureCaretVisible((this.engine()))
+            this.setError(focused "")
+            this.rebuild()
+        }
+        return took
+    }
+
+    ; --- the pointer in a field --------------------------------------------------------
+
+    fn fieldOwning:string (target:string) {
+        def n:int (strlen target)
+        if (n > 5) {
+            if ((substring target (n - 5) n) == "-text") {
+                def base:string (substring target 0 (n - 5))
+                if (this.isField(base)) {
+                    return base
+                }
+            }
+        }
+        return target
+    }
+
+    fn fieldBoxOf:EVGElement (target:string) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        return (PaginationDemo.byId(r target))
+    }
+
+    fn indexAt:int (target:string px:double) {
+        def c:InputCtl (this.fieldFor(target))
+        def box:EVGElement (this.fieldBoxOf(target))
+        if (box.id != target) {
+            return -1
+        }
+        return (InputCtl.indexAtPageX((this.engine()) c box px))
+    }
+
+    fn beginSelection:boolean (rawTarget:string px:double extend:boolean) {
+        def target:string (this.fieldOwning(rawTarget))
+        def took:boolean (this.press(target))
+        if (took == false) {
+            return false
+        }
+        if ((this.isField(target)) == false) {
+            dragField = ""
+            return true
+        }
+        def c:InputCtl (this.fieldFor(target))
+        def idx:int (this.indexAt(target px))
+        if (idx < 0) {
+            dragField = ""
+            return true
+        }
+        c.placeCaret(idx extend)
+        dragField = target
+        this.rebuild()
+        return true
+    }
+
+    fn extendSelection:boolean (px:double) {
+        if (dragField == "") {
+            return false
+        }
+        def c:InputCtl (this.fieldFor(dragField))
+        def idx:int (this.indexAt(dragField px))
+        if (idx < 0) {
+            return false
+        }
+        if (idx == c.caret) {
+            return false
+        }
+        c.placeCaret(idx true)
+        this.rebuild()
+        return true
+    }
+
+    fn endSelection:boolean () {
+        dragField = ""
+        return false
+    }
+
+    fn selectWordAt:boolean (rawTarget:string px:double) {
+        def target:string (this.fieldOwning(rawTarget))
+        if ((this.isField(target)) == false) {
+            return false
+        }
+        def c:InputCtl (this.fieldFor(target))
+        def idx:int (this.indexAt(target px))
+        if (idx < 0) {
+            return false
+        }
+        def at:int idx
+        if (at >= (strlen c.value)) {
+            at = ((strlen c.value) - 1)
+        }
+        c.selectWordAt(at)
+        this.rebuild()
+        return true
+    }
+
+    fn pageXOf:double (target:string index:int) {
+        if ((this.isField(target)) == false) {
+            return 0.0
+        }
+        def c:InputCtl (this.fieldFor(target))
+        def box:EVGElement (this.fieldBoxOf(target))
+        if (box.id != target) {
+            return 0.0
+        }
+        def inset:double (box.box.borderWidthPx + box.box.paddingLeftPx)
+        def eng:EVGTextEngine (this.engine())
+        return ((((box.calculatedX) + inset) + (c.caretXAt(eng index))) - c.scrollX)
+    }
+
+    fn cursorAt:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def ids:[string]
+        push ids goto3.tid
+        push ids goto10.tid
+        def i:int 0
+        while (i < (array_length ids)) {
+            def tid:string (itemAt ids i)
+            def box:EVGElement (PaginationDemo.byId(r tid))
+            if (box.id == tid) {
+                def x0:double (box.calculatedX)
+                def y0:double (box.calculatedY)
+                if ((px >= x0) && (px <= (x0 + (box.calculatedWidth)))) {
+                    if ((py >= y0) && (py <= (y0 + (box.calculatedHeight)))) {
+                        return "text"
+                    }
+                }
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    ; --- the platform text-input session ----------------------------------------------
+
+    fn focusedField:string () {
+        if (this.isField(focused)) {
+            return focused
+        }
+        return ""
+    }
+
+    fn fieldStateJson:string (tid:string) {
+        if ((this.isField(tid)) == false) {
+            return "null"
+        }
+        def c:InputCtl (this.fieldFor(tid))
+        def box:EVGElement (this.fieldBoxOf(tid))
+        def out:string "{"
+        out = (out + "\"tid\":" + (EVGA11yTree.jsonString(c.tid)))
+        out = (out + ",\"value\":" + (EVGA11yTree.jsonString(c.value)))
+        out = (out + ",\"selStart\":" + (to_string (c.selStart())))
+        out = (out + ",\"selEnd\":" + (to_string (c.selEnd())))
+        out = (out + ",\"kind\":" + (EVGA11yTree.jsonString(c.kind)))
+        out = (out + ",\"maxLength\":" + (to_string c.maxLength))
+        out = (out + ",\"placeholder\":" + (EVGA11yTree.jsonString(c.placeholder)))
+        if (box.id == tid) {
+            out = (out + ",\"box\":{\"x\":" + (to_string (to_int (box.calculatedX))))
+            out = (out + ",\"y\":" + (to_string (to_int (box.calculatedY))))
+            out = (out + ",\"w\":" + (to_string (to_int (box.calculatedWidth))))
+            out = (out + ",\"h\":" + (to_string (to_int (box.calculatedHeight))) + "}")
+        }
+        return (out + "}")
+    }
+
+    fn applyEdit:boolean (tid:string v:string selStart:int selEnd:int) {
+        if ((this.isField(tid)) == false) {
+            return false
+        }
+        def c:InputCtl (this.fieldFor(tid))
+        def before:string c.value
+        c.applyEdit(v selStart selEnd)
+        c.ensureCaretVisible((this.engine()))
+        if (c.value != before) {
+            this.setError(tid "")
+        }
+        this.rebuild()
+        return true
+    }
+
+    fn setHover:void (id:string) {
+        if (id != hovered) {
+            hovered = id
+            dirty = true
+        }
+    }
+
+    fn setPressed:void (id:string) {
+        pressed = id
+    }
+
+    ; Focus arriving from the page (a Tab, a reader).
+    fn setFocus:void (id:string) {
+        if (id == focused) {
+            return
+        }
+        if (this.anyOpen()) {
+            def sel:SelectCtl (this.openSelect())
+            if (((strlen (sel.valueOf(id))) == 0) && (id != (sel.triggerTid()))) {
+                sel.closeList()
+            }
+        }
+        this.moveFocus(id)
+        this.syncFields()
+        this.rebuild()
+    }
+
+    ; --- what the page asks for ---------------------------------------------------------
+
+    fn displayListJson:string () {
+        def lay:EVGLayout (this.laidOut())
+        def r:EVGElement (unwrap root)
+        def dl (new EVGDisplayList())
+        dl.setTextEngine((lay.getTextEngine()))
+        dl.build(r)
+        return (dl.toJson())
+    }
+
+    fn hitId:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def hit (new EVGHitTest())
+        return (hit.idAt(r px py))
+    }
+
+    fn a11yJson:string (generation:int focusId:string) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Pagination demo" generation focusId))
+        return (t.toJson())
+    }
+
+    fn a11yProblems:[string] () {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Pagination demo" 1 ""))
+        return (t.lint())
+    }
+
+    fn styleErrorCount:int () {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (s.getErrorCount())
+    }
+
+    fn styleErrorAt:string (i:int) {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (s.getError(i))
+    }
+
+    fn widthPx:double () { return pageW }
+
+    fn heightPx:double () {
+        this.laidOut()
+        return pageH
+    }
+
+    ; Card n's items as text ("1 2 3 … 10 11 12"), for a check.
+    fn itemsOf:string (n:int) {
+        def c:PaginationCtl (this.ctlAt(n))
+        return (c.itemsText())
+    }
+
+    fn pageOf:int (n:int) {
+        def c:PaginationCtl (this.ctlAt(n))
+        return c.page
+    }
+
+    fn summary:string () {
+        def out:string ""
+        def i:int 1
+        while (i <= 10) {
+            if (i > 1) {
+                out = (out + ",")
+            }
+            out = (out + (to_string (this.pageOf(i))))
+            i = (i + 1)
+        }
+        return (out + "|" + focused + "|" + (p8.rangeText()))
+    }
+}
