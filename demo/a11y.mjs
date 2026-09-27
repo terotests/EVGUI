@@ -503,6 +503,28 @@ STATES.push(...[
   tree: () => d.a11yJson(gen, d.focused || ""),
 })));
 
+// The rating demo: at rest (images and sliders side by side), and after a
+// click, a hover and a key — the interactive slider moved and focused, the
+// half-star one at 4.5, the ten-star one previewing under the pointer.
+{
+  const { RatingDemo } = require(path.join(ROOT, "gallery/evgui/bin/RatingDemo.cjs"));
+  const rating = atRest(RatingDemo, "rating.css");
+  const ratingBusy = atRest(RatingDemo, "rating.css");
+  ratingBusy.press("rt-rate-star-1-h1");
+  ratingBusy.key("ArrowRight");
+  ratingBusy.press("rt-half-star-4-h0");
+  ratingBusy.setHover("rt-ten-star-8-h1");
+  STATES.push(...[
+    ["rating — six cards at rest", rating, 56],
+    ["rating — set, stepped, focused and previewing", ratingBusy, 57],
+  ].map(([name, d, gen]) => ({
+    name,
+    size: [d.widthPx(), d.heightPx()],
+    lint: () => d.a11yProblems(),
+    tree: () => d.a11yJson(gen, d.focused || ""),
+  })));
+}
+
 const AXE = fs.readFileSync(domRequire.resolve("axe-core"), "utf8");
 
 const html = `<!doctype html><meta charset="utf-8">

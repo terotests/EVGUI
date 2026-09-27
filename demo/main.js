@@ -57,6 +57,8 @@ import { AutocompleteDemo } from "./generated-host.js";
 import { AUTOCOMPLETE_CSS } from "./generated.js";
 import { PaginationDemo } from "./generated-host.js";
 import { PAGINATION_CSS } from "./generated.js";
+import { RatingDemo } from "./generated-host.js";
+import { RATING_CSS } from "./generated.js";
 import { MENUBAR_CSS, TOOLBAR_CSS, SORTABLE_CSS, MOTION_CSS, TABLE_CSS, DROPDOWN_CSS, DIALOG_CSS, TREE_CSS, TIMELINE_CSS, RESIZE_CSS, FORM_CSS, PROFILE_CSS, DASHBOARD_CSS, CALENDAR_CSS, FILTERS_CSS, EVENTCAL_CSS, MESSAGE_CSS, CONTROLS_CSS, OTP_CSS, METADATA_CSS, EFFECTS_CSS, SEPARATOR_CSS, TABS_CSS, EFFECT_PRESETS_CSS } from "./generated.js";
 
 // The default stage width. A demo wider than this says so — the dashboard
@@ -439,6 +441,11 @@ let lastAutocompleteHover = "";
 let pagination = new PaginationDemo();
 pagination.init(PAGINATION_CSS);
 let lastPaginationHover = "";
+// Rating: ReUI's patterns, every row of stars a RatingCtl (value, preview,
+// precision, keys, and role img or slider).
+let rating = new RatingDemo();
+rating.init(RATING_CSS);
+let lastRatingHover = "";
 // ONE DRIVER FOR THE PAGE. It reads the effect instances off whatever display
 // list is being painted, so it works for any demo whose stylesheet declares an
 // effect and costs nothing on the nineteen that do not.
@@ -1441,6 +1448,34 @@ DEMOS.pagination = {
     root: () => null,
   }),
 };
+// Rating. No `ownsTab`: each editable row is one slider, a stop of the
+// page's generic Tab walk; the arrows, Home and End are RatingCtl's.
+DEMOS.rating = {
+  height: () => rating.heightPx(),
+  list: () => rating.displayListJson(),
+  hit: (x, y) => rating.hitId(x, y),
+  a11y: (gen, focus) => rating.a11yJson(gen, focus),
+  cursorAt: (x, y) => rating.cursorAt(x, y),
+  press: (id) => rating.press(id),
+  hover: (id) => {
+    if (id === lastRatingHover) return false;
+    lastRatingHover = id;
+    return rating.setHover(id);
+  },
+  key: (k) => rating.key(k),
+  ownsKey: (k) => rating.ownsKey(k),
+  host: () => ({
+    tick: (dt) => rating.tick(dt),
+    busy: () => rating.busyNow(),
+    setHover: (id) => {
+      if (id === lastRatingHover) return false;
+      lastRatingHover = id;
+      return rating.setHover(id);
+    },
+    setPressed: (id) => rating.setPressed(id),
+    root: () => null,
+  }),
+};
 
 /**
  * Put the floating copy under the pointer, by mutating the element rather than
@@ -1721,6 +1756,7 @@ const INSTANCE = {
   pagination: () => pagination,
 };
 INSTANCE.popover = () => popover;
+INSTANCE.rating = () => rating;
 // A press on the page outside the canvas is outside the popover too, and
 // Radix dismisses on a pointer down outside wherever it lands.
 window.addEventListener("pointerdown", (ev) => {
@@ -1856,6 +1892,8 @@ const NARROW = {
 };
 // `keep`: the popovers open inside the page and need the room it has.
 NARROW.popover = { min: 320, h: "auto", keep: true };
+// The page is as tall as its cards lay out.
+NARROW.rating = { min: 320, h: "own" };
 const NARROW_AT = 600;
 const naturalSize = {};
 const fittedHeight = new Map();
@@ -2577,6 +2615,7 @@ const DEMO_NAMES = ["menubar", "toolbar", "sortable", "table", "tree", "timeline
 DEMO_NAMES.push("popover");
 DEMO_NAMES.push("autocomplete");
 DEMO_NAMES.push("pagination");
+DEMO_NAMES.push("rating");
 const wanted = new URLSearchParams(location.search).get("demo");
 if (wanted && DEMO_NAMES.includes(wanted)) state.which = wanted;
 
@@ -3265,6 +3304,7 @@ window.__resetDemo = (name) => {
   else if (name === "tabs") { tabs = new TabsDemo(); tabs.init(TABS_CSS); lastTabsHover = ""; }
   else if (name === "autocomplete") { autocomplete = new AutocompleteDemo(); autocomplete.init(AUTOCOMPLETE_CSS); lastAutocompleteHover = ""; }
   else if (name === "pagination") { pagination = new PaginationDemo(); pagination.init(PAGINATION_CSS); lastPaginationHover = ""; }
+  else if (name === "rating") { rating = new RatingDemo(); rating.init(RATING_CSS); lastRatingHover = ""; }
   else if (name === "dialog") { dialog = new DialogDemo(); dialog.init(DIALOG_CSS); lastDialogHover = ""; }
   else if (name === "popover") { popover = new PopoverDemo(); popover.init(POPOVER_CSS); lastPopoverHover = ""; }
   else return false;
