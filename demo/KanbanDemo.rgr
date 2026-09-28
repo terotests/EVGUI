@@ -1,0 +1,746 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; KanbanDemo — ReUI's Kanban board
+; =============================================================================
+; The reference is https://reui.io/components/kanban: three equal columns (To
+; Do, In Progress, Done), each a light grey frame with a status icon, a bold
+; title and an outline badge counting its tasks; inside, white task cards with
+; a title and a tinted label. Underneath it is @dnd-kit — one sortable per
+; column in one drag context, the whole card as the handle, a DragOverlay
+; following the pointer and a dashed placeholder where the card will land.
+;
+; THE STATE IS NOT HERE. It is `KanbanCtl` (gallery/evgui/src): one
+; SortableCtl per column — the controller measured against @dnd-kit/sortable —
+; plus the move across columns, the keyboard sensor and the announcements.
+; This file is the look, and the one thing the controller cannot know: where
+; the pointer is over the laid-out board, which decides the column and the
+; index a pointer drag is aiming at.
+;
+; What a drag draws:
+;
+;   pointer   the card's slot becomes a dashed placeholder at the prospective
+;             position, and a copy of the card (no id, so it never answers a
+;             hit test) follows the pointer on top of everything.
+;   keyboard  no copy — nothing is following anything. The card itself is
+;             drawn lifted in its prospective slot, and keeps the focus.
+;
+; The counts are the controller's live counts, so they change as the card
+; crosses from one column to the next, before anything is dropped.
+; =============================================================================
+
+Import "../src/KanbanCtl.rgr"
+Import "../src/SortableCtl.rgr"
+Import "../src/UiCtl.rgr"
+Import "../src/UiTree.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGUnit.rgr"
+Import "pkg:evg/EVGLayout.rgr"
+Import "pkg:evg/EVGDisplayList.rgr"
+Import "pkg:evg/EVGStyleSheet.rgr"
+Import "pkg:evg/EVGTransition.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+Import "pkg:evg/EVGA11yFromTree.rgr"
+Import "pkg:evg/EVGHitTest.rgr"
+Import "pkg:evg/EVGReconcile.rgr"
+
+treefactory Kb {
+    child addChild
+    text  textContent
+
+    tag Page     EVGElement (props (className "kb-page"))
+    tag Panel    EVGElement (props (className "kb-panel"))
+    tag Caption  EVGElement (props (className "kb-caption") (elementType 1) (role "heading") (a11yLevel 2))
+    tag Stage    EVGElement (props (className "kb-stage"))
+    tag Board    EVGElement (props (className "kb-board"))
+    ; A column: a named region, its name carrying the count so a reader hears
+    ; "To Do, 3 tasks" on the way in.
+    tag Column   EVGElement (props (className "kb-col") (role "region"))
+    tag ColHead  EVGElement (props (className "kb-colhead"))
+    ; Lucide's circle / circle-dot / circle-check, drawn. Decoration: the
+    ; region's name already says which column this is.
+    tag ColIcon  EVGElement (props (className "kb-colicon") (tagName "path") (elementType 3) (viewBox "0 0 24 24") (a11yHidden true))
+    tag ColTitle EVGElement (props (className "kb-coltitle") (elementType 1) (a11yHidden true))
+    tag Count    EVGElement (props (className "kb-count") (elementType 1) (a11yHidden true))
+    tag List     EVGElement (props (className "kb-list"))
+    ; The card is the handle, so it carries the role, the tab stop and the
+    ; role description, the three things dnd-kit puts on a draggable.
+    tag Task     EVGElement (props (className "kb-task") (role "button") (a11yFocusable true) (a11yRoleDescription "draggable task"))
+    tag TaskTitle EVGElement (props (className "kb-tasktitle") (elementType 1))
+    tag Badge    EVGElement (props (className "kb-badge") (elementType 1))
+    ; What dnd-kit says out loud. Visible here, as a muted line under the
+    ; board, so a sighted reader can see what a screen reader hears.
+    ; The placeholder's dashed outline. EVG draws box borders solid, so the
+    ; dashes are a stroked path the size of the card: a rounded rectangle with
+    ; `stroke-dasharray`, laid over the slot and hidden from the mirror.
+    tag Dash     EVGElement (props (className "kb-dash") (tagName "path") (elementType 3) (a11yHidden true))
+    tag Live     EVGElement (props (className "kb-live") (elementType 1) (role "status"))
+}
+
+class KanbanDemo {
+
+    def board:KanbanCtl (new KanbanCtl())
+
+    def root@(optional):EVGElement
+    def sheet@(optional):EVGStyleSheet
+    def transitions:EVGTransition (new EVGTransition())
+    def reconciler:EVGReconcile (new EVGReconcile())
+    def layout@(optional):EVGLayout
+    def hovered:string ""
+    def pressed:string ""
+    def focused:string ""
+    def pageW:double 900.0
+    def pageH:double 600.0
+
+    ; The pointer gesture: where it went down, where on the card it grabbed,
+    ; how wide the card was (the overlay is positioned, not laid out, so it has
+    ; no column to take a width from), and where the overlay is now.
+    def pressX:double 0.0
+    def pressY:double 0.0
+    def grabDx:double 0.0
+    def grabDy:double 0.0
+    def grabW:double 0.0
+    def grabH:double 0.0
+    def overlayX:double 0.0
+    def overlayY:double 0.0
+
+    Constructor () {
+    }
+
+    fn init:void (css:string) {
+        def s (new EVGStyleSheet())
+        s.parse(css)
+        sheet = s
+
+        board.tid = "kb"
+        board.name = "Kanban board"
+        board.addColumn("todo" "To Do")
+        board.addColumn("doing" "In Progress")
+        board.addColumn("done" "Done")
+        board.addCard("todo" "1" "Design landing page")
+        board.addCard("todo" "2" "Set up CI/CD pipeline")
+        board.addCard("todo" "3" "Write unit tests")
+        board.addCard("doing" "4" "Implement auth flow")
+        board.addCard("doing" "5" "Create component library")
+        board.addCard("done" "6" "Project kickoff")
+        this.rebuild()
+        this.laidOut()
+    }
+
+    ; --- the data the look needs ------------------------------------------------
+
+    sfn labelOf:string (value:string) {
+        if (value == "1") { return "Design" }
+        if (value == "2") { return "DevOps" }
+        if (value == "3") { return "Testing" }
+        if (value == "4") { return "Backend" }
+        if (value == "5") { return "Frontend" }
+        if (value == "6") { return "Planning" }
+        return ""
+    }
+
+    ; ReUI's badge variants, light: info (violet), warning (amber), success
+    ; (green), primary (neutral grey), destructive (red).
+    sfn toneOf:string (value:string) {
+        if (value == "1") { return "info" }
+        if (value == "2") { return "warning" }
+        if (value == "3") { return "success" }
+        if (value == "4") { return "primary" }
+        if (value == "5") { return "destructive" }
+        if (value == "6") { return "info" }
+        return "primary"
+    }
+
+    sfn colValue:string (i:int) {
+        if (i == 0) { return "todo" }
+        if (i == 1) { return "doing" }
+        return "done"
+    }
+
+    ; Lucide, one `d` each, circles expanded into arcs.
+    sfn iconPath:string (i:int) {
+        def ring:string "M22 12 A10 10 0 1 1 2 12 A10 10 0 1 1 22 12 Z"
+        if (i == 1) {
+            return (ring + " M13 12 A1 1 0 1 1 11 12 A1 1 0 1 1 13 12 Z")
+        }
+        if (i == 2) {
+            return (ring + " M9 12 L11 14 L15 10")
+        }
+        return ring
+    }
+
+    ; --- the look -----------------------------------------------------------------
+
+    ; A rounded rectangle w x h, 10px corners, inset by half the 2px stroke so
+    ; the dashes sit inside the box the way a CSS border does.
+    sfn outlinePath:string (w:double h:double) {
+        def a:string "9"
+        def l:string "1"
+        def t:string "1"
+        def lr:string "10"
+        def tr:string "10"
+        def r:string (to_string (w - 1.0))
+        def b:string (to_string (h - 1.0))
+        def rr:string (to_string (w - 10.0))
+        def br:string (to_string (h - 10.0))
+        def arc:string (" A " + a + " " + a + " 0 0 1 ")
+        return ("M " + lr + " " + t + " H " + rr + arc + r + " " + tr + " V " + br + arc + rr + " " + b + " H " + lr + arc + l + " " + br + " V " + tr + arc + lr + " " + t + " Z")
+    }
+
+    fn taskEl:EVGElement (it:UiItem mode:string floating:boolean) {
+        def value:string it.value
+        def label:string (KanbanDemo.labelOf(value))
+        def cls:string "kb-task"
+        if (mode == "placeholder") {
+            cls = "kb-task kb-task-placeholder"
+        }
+        if (mode == "lifted") {
+            cls = "kb-task kb-task-lifted"
+        }
+        def tid:string (board.cardTid(value))
+        def k:string tid
+        if floating {
+            cls = "kb-task kb-task-overlay"
+            tid = ""
+            k = "overlay"
+        }
+        def t (tree Kb
+            (Task (props (id tid) (key k) (className cls) (a11yLabel (it.name + ", " + label)))
+                (TaskTitle (props (id (tid + "-title")) (key (k + "-title"))) it.name)
+                (Badge (props (id (tid + "-badge")) (key (k + "-badge")) (className ("kb-badge kb-badge-" + (KanbanDemo.toneOf(value))))) label)))
+        if (mode == "placeholder") {
+            ; The slot, not the card: the same box, empty, with the dashes
+            ; drawn over it. Its height is the card's, measured at the press.
+            UiTree.clearChildren(t)
+            if ((grabW > 0.0) && (grabH > 0.0)) {
+                def w:double (to_double (to_int grabW))
+                def h:double (to_double (to_int grabH))
+                UiTree.inline(t "height" ((to_string (to_int h)) + "px"))
+                def dash (tree Kb (Dash (props (id (tid + "-dash")))))
+                dash.viewBox = ("0 0 " + (to_string w) + " " + (to_string h))
+                dash.svgPath = (KanbanDemo.outlinePath(w h))
+                t.addChild(dash)
+            }
+        }
+        if floating {
+            def kids:int (array_length t.children)
+            def j:int 0
+            while (j < kids) {
+                def kid:EVGElement (itemAt t.children j)
+                kid.id = ""
+                j = (j + 1)
+            }
+            t.role = ""
+            t.a11yFocusable = false
+            t.a11yHidden = true
+            return t
+        }
+        t.a11yDescription = (KanbanCtl.dragInstructions())
+        if (value == board.activeValue) {
+            t.a11yPressed = (EVGA11yTri.yes())
+        }
+        return t
+    }
+
+    fn column:EVGElement (ci:int) {
+        def c:SortableCtl (board.colAt(ci))
+        def v:string (KanbanDemo.colValue(ci))
+        def n:int (board.countOf(ci))
+        def noun:string " tasks"
+        if (n == 1) {
+            noun = " task"
+        }
+        def colId:string ("kb-col-" + v)
+        def countTxt:string (to_string n)
+        def col (tree Kb
+            (Column (props (id colId) (a11yLabel (c.name + ", " + (to_string n) + noun)))
+                (ColHead (props (id (colId + "-head")))
+                    (ColIcon (props (id (colId + "-icon")) (className ("kb-colicon kb-colicon-" + v)) (svgPath (KanbanDemo.iconPath(ci)))))
+                    (ColTitle (props (id (colId + "-title"))) c.name)
+                    (Count (props (id (colId + "-count"))) countTxt))))
+        def list (tree Kb (List (props (id (colId + "-list")))))
+        def shown:[UiItem] (board.shown(ci))
+        def ph:int (board.placeholderAt(ci))
+        def mode:string "placeholder"
+        if (board.byPointer == false) {
+            mode = "lifted"
+        }
+        def i:int 0
+        while (i <= (array_length shown)) {
+            if (i == ph) {
+                def src:SortableCtl (board.colAt(board.fromCol))
+                def carried:UiItem (itemAt src.items (src.indexOf(board.activeValue)))
+                list.addChild((this.taskEl(carried mode false)))
+            }
+            if (i < (array_length shown)) {
+                list.addChild((this.taskEl((itemAt shown i) "" false)))
+            }
+            i = (i + 1)
+        }
+        col.addChild(list)
+        return col
+    }
+
+    fn page:EVGElement () {
+        def p (tree Kb (Page (props (id "kb-page"))))
+        def panel (tree Kb
+            (Panel (props (id "kb-panel-board"))
+                (Caption (props (id "kb-panel-board-caption")) "Board")))
+        def stage (tree Kb (Stage (props (id "kb-stage"))))
+        def b (tree Kb (Board (props (id "kb-board") (a11yLabel "Kanban board"))))
+        def i:int 0
+        while (i < (array_length board.cols)) {
+            b.addChild((this.column(i)))
+            i = (i + 1)
+        }
+        stage.addChild(b)
+        def said:string (board.said())
+        if ((strlen said) == 0) {
+            said = "Drag a card, or focus one and press Space to pick it up."
+        }
+        stage.addChild((tree Kb (Live (props (id "kb-live")) said)))
+        panel.addChild(stage)
+        p.addChild(panel)
+        ; The overlay: last, so it paints over everything, and positioned, so
+        ; it leaves the flow alone.
+        if ((board.carrying()) && board.byPointer) {
+            def src:SortableCtl (board.colAt(board.fromCol))
+            def carried:UiItem (itemAt src.items (src.indexOf(board.activeValue)))
+            def ov:EVGElement (this.taskEl(carried "" true))
+            UiTree.inline(ov "left" ((to_string (to_int overlayX)) + "px"))
+            UiTree.inline(ov "top" ((to_string (to_int overlayY)) + "px"))
+            UiTree.inline(ov "width" ((to_string (to_int grabW)) + "px"))
+            p.addChild(ov)
+        }
+        return p
+    }
+
+    sfn keyAll:void (el:EVGElement) {
+        if ((strlen el.id) > 0) {
+            el.key = el.id
+        }
+        def i:int 0
+        while (i < (array_length el.children)) {
+            def kid:EVGElement (itemAt el.children i)
+            KanbanDemo.keyAll(kid)
+            i = (i + 1)
+        }
+    }
+
+    fn rebuild:void () {
+        def next:EVGElement (this.page())
+        KanbanDemo.keyAll(next)
+        if (null? root) {
+            root = next
+            return
+        }
+        reconciler.reconcile((unwrap root) next)
+    }
+
+    fn find@(optional):EVGElement (id:string) {
+        if (null? root) {
+            return root
+        }
+        return (UiTree.findById((unwrap root) id))
+    }
+
+    ; --- the host -------------------------------------------------------------------
+
+    ; The page's own content origin: `left` / `top` on the overlay are measured
+    ; from here.
+    fn originX:double () {
+        def r:EVGElement (unwrap root)
+        def pad:double 0.0
+        if (!null? r.box) {
+            def bx:EVGBox r.box
+            def pl:EVGUnit bx.paddingLeft
+            if (!null? pl) {
+                if pl.isSet {
+                    pad = pl.pixels
+                }
+            }
+        }
+        return (r.calculatedX + pad)
+    }
+
+    fn originY:double () {
+        def r:EVGElement (unwrap root)
+        def pad:double 0.0
+        if (!null? r.box) {
+            def bx:EVGBox r.box
+            def pt:EVGUnit bx.paddingTop
+            if (!null? pt) {
+                if pt.isSet {
+                    pad = pt.pixels
+                }
+            }
+        }
+        return (r.calculatedY + pad)
+    }
+
+    ; The card a hit belongs to: the card itself, or its title or label.
+    fn cardOf:string (target:string) {
+        def v:string (board.valueOf(target))
+        if ((strlen v) == 0) {
+            return ""
+        }
+        def parts:[string] (strsplit v "-")
+        return (board.cardTid((itemAt parts 0)))
+    }
+
+    fn press:boolean (target:string px:double py:double) {
+        this.laidOut()
+        def t:string (board.press((this.cardOf(target))))
+        if ((strlen t) == 0) {
+            return false
+        }
+        focused = t
+        pressX = px
+        pressY = py
+        def hit@(optional):EVGElement (this.find(t))
+        if (!null? hit) {
+            def el:EVGElement (unwrap hit)
+            grabDx = (px - el.calculatedX)
+            grabDy = (py - el.calculatedY)
+            grabW = el.calculatedWidth
+            grabH = el.calculatedHeight
+        }
+        this.rebuild()
+        return true
+    }
+
+    ; The column and index the pointer is aiming at, from the board as it is
+    ; laid out now. The column is the one under the pointer, or the nearest;
+    ; the index is how many of the column's other cards have their middle
+    ; above the pointer. Measured against the drawn cards, placeholder
+    ; included, which is what keeps it from flickering: once the placeholder
+    ; has moved below a card, that card has moved up out from under the
+    ; pointer, and the answer stays the same until the pointer crosses back.
+    fn aimAt:void (px:double py:double) {
+        def best:int -1
+        def bestD:double 1000000000.0
+        def i:int 0
+        while (i < (array_length board.cols)) {
+            def colEl@(optional):EVGElement (this.find(("kb-col-" + (KanbanDemo.colValue(i)))))
+            if (!null? colEl) {
+                def ce:EVGElement (unwrap colEl)
+                def x0:double ce.calculatedX
+                def y0:double ce.calculatedY
+                def x1:double (x0 + ce.calculatedWidth)
+                def y1:double (y0 + ce.calculatedHeight)
+                def dx:double 0.0
+                if (px < x0) {
+                    dx = (x0 - px)
+                }
+                if (px > x1) {
+                    dx = (px - x1)
+                }
+                def dy:double 0.0
+                if (py < y0) {
+                    dy = (y0 - py)
+                }
+                if (py > y1) {
+                    dy = (py - y1)
+                }
+                def d:double ((dx * dx) + (dy * dy))
+                if (d < bestD) {
+                    bestD = d
+                    best = i
+                }
+            }
+            i = (i + 1)
+        }
+        if (best < 0) {
+            return
+        }
+        def shown:[UiItem] (board.shown(best))
+        def idx:int 0
+        def j:int 0
+        while (j < (array_length shown)) {
+            def it:UiItem (itemAt shown j)
+            def cardEl@(optional):EVGElement (this.find((board.cardTid(it.value))))
+            if (!null? cardEl) {
+                def ke:EVGElement (unwrap cardEl)
+                def mid:double (ke.calculatedY + (ke.calculatedHeight / 2.0))
+                if (mid < py) {
+                    idx = (j + 1)
+                }
+            }
+            j = (j + 1)
+        }
+        board.moveOver(best idx)
+    }
+
+    ; A pointer move while the button is down. True when anything changed.
+    fn dragTo:boolean (px:double py:double) {
+        if ((strlen board.pressValue) == 0) {
+            return false
+        }
+        if ((board.carrying()) == false) {
+            def mx:double (px - pressX)
+            def my:double (py - pressY)
+            ; dnd-kit's activation distance: a press that has not travelled is
+            ; still a click.
+            if (((mx * mx) + (my * my)) < 16.0) {
+                return false
+            }
+            board.startDrag()
+        }
+        this.laidOut()
+        overlayX = ((px - grabDx) - (this.originX()))
+        overlayY = ((py - grabDy) - (this.originY()))
+        this.aimAt(px py)
+        this.rebuild()
+        return true
+    }
+
+    fn drop:boolean () {
+        def was:boolean (board.release())
+        pressed = ""
+        this.rebuild()
+        return was
+    }
+
+    fn key:boolean (k:string) {
+        def next:string (board.keyDown(focused k))
+        if ((strlen next) == 0) {
+            return false
+        }
+        focused = next
+        this.rebuild()
+        return true
+    }
+
+    fn ownsKey:boolean (k:string) {
+        return ((strlen (board.valueOf(focused))) > 0)
+    }
+
+    fn setHover:boolean (id:string) {
+        if (id == hovered) {
+            return false
+        }
+        hovered = id
+        return true
+    }
+
+    fn setPressed:void (id:string) {
+        pressed = id
+    }
+
+    fn setFocus:void (id:string) {
+        focused = id
+    }
+
+    fn cursorAt:string (px:double py:double) {
+        if (board.carrying()) {
+            return "grabbing"
+        }
+        def id:string (this.hitId(px py))
+        if ((strlen (this.cardOf(id))) > 0) {
+            return "grab"
+        }
+        return ""
+    }
+
+    ; For checks and the page's probe.
+    fn stateJson:string () {
+        def out:string "{"
+        out = (out + "\"board\":\"" + (board.summary()) + "\"")
+        out = (out + ",\"active\":\"" + board.activeValue + "\"")
+        out = (out + ",\"overCol\":" + (to_string board.overCol))
+        out = (out + ",\"overIndex\":" + (to_string board.overIndex))
+        out = (out + ",\"pointer\":" + (to_string board.byPointer))
+        out = (out + ",\"focused\":\"" + focused + "\"")
+        out = (out + ",\"counts\":[")
+        def i:int 0
+        while (i < (array_length board.cols)) {
+            if (i > 0) {
+                out = (out + ",")
+            }
+            out = (out + (to_string (board.countOf(i))))
+            i = (i + 1)
+        }
+        out = (out + "]")
+        out = (out + ",\"said\":\"" + (board.said()) + "\"")
+        return (out + "}")
+    }
+
+    fn markStates:void (el:EVGElement) {
+        el.isHovered = false
+        el.isPressed = false
+        el.isFocused = false
+        if ((strlen el.id) > 0) {
+            if (el.id == hovered) {
+                el.isHovered = true
+            }
+            if (el.id == pressed) {
+                el.isPressed = true
+            }
+            if (el.id == focused) {
+                el.isFocused = true
+            }
+        }
+        def i:int 0
+        while (i < (array_length el.children)) {
+            def kid:EVGElement (itemAt el.children i)
+            this.markStates(kid)
+            i = (i + 1)
+        }
+    }
+
+    fn contentBottom:double () {
+        def r:EVGElement (unwrap root)
+        def bottom:double 0.0
+        def i:int 0
+        while (i < (r.getChildCount())) {
+            def c:EVGElement (r.getChild(i))
+            ; The overlay goes wherever the pointer takes it; the page does not
+            ; grow to follow it.
+            if (c.key != "overlay") {
+                def b:double (c.calculatedY + c.calculatedHeight)
+                if (b > bottom) {
+                    bottom = b
+                }
+            }
+            i = (i + 1)
+        }
+        def pad:double 0.0
+        if (!null? r.box) {
+            def bx:EVGBox r.box
+            def pb:EVGUnit bx.paddingBottom
+            if (!null? pb) {
+                if pb.isSet {
+                    pad = pb.pixels
+                }
+            }
+        }
+        return (bottom + pad)
+    }
+
+    fn fitHeight:void (lay:EVGLayout) {
+        def want:double (to_double (to_int ((this.contentBottom()) + 0.999)))
+        def diff:double (want - pageH)
+        if ((diff > 0.5) || (diff < -0.5)) {
+            pageH = want
+            def s:EVGStyleSheet (unwrap sheet)
+            def r:EVGElement (unwrap root)
+            UiTree.inline(r "height" ((to_string (to_int pageH)) + "px"))
+            s.setViewport(pageW pageH false)
+            s.applyTree(r "")
+            lay.setPageSize(pageW pageH)
+            lay.layout(r)
+        }
+    }
+
+    fn laidOut:EVGLayout () {
+        def r:EVGElement (unwrap root)
+        def s:EVGStyleSheet (unwrap sheet)
+        UiTree.inline(r "height" ((to_string (to_int pageH)) + "px"))
+        s.setViewport(pageW pageH false)
+        this.markStates(r)
+        s.applyTree(r "")
+        def t:EVGTransition transitions
+        t.reconcileTree(r)
+        if layout {
+            def lay:EVGLayout (unwrap layout)
+            if ((s.layoutClean()) == false) {
+                lay.setPageSize(pageW pageH)
+                lay.layout(r)
+                this.fitHeight(lay)
+            }
+            return lay
+        }
+        KanbanDemo.forgetFlex(r)
+        def fresh (new EVGLayout())
+        fresh.setPageSize(pageW pageH)
+        layout = fresh
+        fresh.layout(r)
+        this.fitHeight(fresh)
+        return fresh
+    }
+
+    sfn forgetFlex:void (el:EVGElement) {
+        el.calculatedFlexHeight = 0.0
+        el.calculatedHeight = 0.0
+        el.calculatedWidth = 0.0
+        el.calculatedInnerHeight = 0.0
+        el.calculatedInnerWidth = 0.0
+        el.hasDefiniteHeight = false
+        el.layoutClean = false
+        def i:int 0
+        while (i < (array_length el.children)) {
+            KanbanDemo.forgetFlex((itemAt el.children i))
+            i = (i + 1)
+        }
+    }
+
+    fn tick:boolean (dtMs:double) {
+        def r:EVGElement (unwrap root)
+        def t:EVGTransition transitions
+        t.advanceTree(r dtMs)
+        return (t.busy(r))
+    }
+
+    fn busyNow:boolean () {
+        def r:EVGElement (unwrap root)
+        def t:EVGTransition transitions
+        return (t.busy(r))
+    }
+
+    fn displayListJson:string () {
+        def lay:EVGLayout (this.laidOut())
+        def r:EVGElement (unwrap root)
+        def dl (new EVGDisplayList())
+        dl.setTextEngine((lay.getTextEngine()))
+        dl.build(r)
+        return (dl.toJson())
+    }
+
+    fn hitId:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def hit (new EVGHitTest())
+        return (hit.idAt(r px py))
+    }
+
+    fn a11yJson:string (generation:int focusId:string) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Kanban demo" generation focusId))
+        return (t.toJson())
+    }
+
+    fn a11yProblems:[string] () {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Kanban demo" 1 ""))
+        def out:[string] (t.lint())
+        def i:int 0
+        while (i < (array_length t.notes)) {
+            push out (itemAt t.notes i)
+            i = (i + 1)
+        }
+        return out
+    }
+
+    fn styleErrorCount:int () {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (s.getErrorCount())
+    }
+
+    fn styleErrorAt:string (i:int) {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (s.getError(i))
+    }
+
+    fn heightPx:double () {
+        this.laidOut()
+        return pageH
+    }
+
+    fn widthPx:double () {
+        return pageW
+    }
+}

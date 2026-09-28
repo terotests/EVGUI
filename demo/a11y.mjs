@@ -539,6 +539,27 @@ STATES.push(...[
   })));
 }
 
+// The kanban board: at rest, and with a card picked up from the keyboard and
+// carried into the next column (aria-pressed on it, the counts moved, the
+// status region saying where it is).
+{
+  const { KanbanDemo } = require(path.join(ROOT, "gallery/evgui/bin/KanbanDemo.cjs"));
+  const kanban = atRest(KanbanDemo, "kanban.css");
+  const kanbanHeld = atRest(KanbanDemo, "kanban.css");
+  kanbanHeld.setFocus("kb-card-1");
+  kanbanHeld.key(" ");
+  kanbanHeld.key("ArrowRight");
+  STATES.push(...[
+    ["kanban — the board at rest", kanban, 70],
+    ["kanban — a card picked up and carried across", kanbanHeld, 71],
+  ].map(([name, d, gen]) => ({
+    name,
+    size: [d.widthPx(), d.heightPx()],
+    lint: () => d.a11yProblems(),
+    tree: () => d.a11yJson(gen, d.focused || ""),
+  })));
+}
+
 const AXE = fs.readFileSync(domRequire.resolve("axe-core"), "utf8");
 
 const html = `<!doctype html><meta charset="utf-8">

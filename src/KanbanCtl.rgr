@@ -1,0 +1,427 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; KanbanCtl — a board of sortable columns, after @dnd-kit's multiple containers
+; =============================================================================
+; ReUI's Kanban (https://reui.io/components/kanban) is @dnd-kit underneath:
+; one SortableContext per column inside one DndContext, the whole card as the
+; handle, a DragOverlay following the pointer and the card's own slot drawn as
+; a dashed placeholder where it will land. So this is ONE SortableCtl PER
+; COLUMN — the controller measured against @dnd-kit/sortable, which owns each
+; column's items and the arrayMove — plus what a board adds on top:
+;
+;   * a move ACROSS columns (SortableCtl.removeAt on one, insertAt on another),
+;   * the target as a (column, index) pair, where index is the card's position
+;     in the target column once it is there — so "position 2 of 3" is read
+;     straight off it, and a drop is one remove and one insert,
+;   * the dnd-kit keyboard sensor: Space / Enter picks up, ArrowUp / ArrowDown
+;     move within the column, ArrowLeft / ArrowRight to the neighbouring
+;     column at the same index (clamped), Space / Enter drops, Escape puts the
+;     card back where it came from,
+;   * announcements for the live region, one per step.
+;
+; NOTHING IS COMMITTED UNTIL THE DROP. While a card is carried the columns
+; keep their items; `shown` says what to draw (the column without the carried
+; card, the placeholder at `overIndex` in `overCol`) and `countOf` what the
+; badges say, so the counts follow the drag and a cancel has nothing to undo.
+; =============================================================================
+
+Import "UiCtl.rgr"
+Import "SortableCtl.rgr"
+Import "pkg:evg/EVGElement.rgr"
+
+class KanbanCtl extends UiCtl {
+    def cols:[SortableCtl]
+    ; The card being carried, "" when none. Where it came from, and where it
+    ; would land if dropped now.
+    def activeValue:string ""
+    def fromCol:int -1
+    def fromIndex:int -1
+    def overCol:int -1
+    def overIndex:int -1
+    ; A pointer press on a card that has not travelled yet: dnd-kit's pointer
+    ; sensor waits for movement, so a click never picks anything up.
+    def pressValue:string ""
+    ; Carried by the pointer (a floating overlay) or by the keyboard (the card
+    ; itself, lifted, in its prospective slot).
+    def byPointer:boolean false
+    def announcement:string ""
+
+    Constructor () {
+        rootEl = (EVGElement.createDiv())
+        def empty:[SortableCtl]
+        cols = empty
+    }
+
+    fn addColumn:void (colValue:string colName:string) {
+        def c (new SortableCtl())
+        c.tid = ((tid + "-col-") + colValue)
+        c.name = colName
+        push cols c
+    }
+
+    fn colAt:SortableCtl (i:int) {
+        return (itemAt cols i)
+    }
+
+    fn colIndexOf:int (colValue:string) {
+        def want:string ((tid + "-col-") + colValue)
+        def i:int 0
+        while (i < (array_length cols)) {
+            def c:SortableCtl (itemAt cols i)
+            if (c.tid == want) {
+                return i
+            }
+            i = (i + 1)
+        }
+        return -1
+    }
+
+    fn addCard:void (colValue:string cardValue:string cardName:string) {
+        def ci:int (this.colIndexOf(colValue))
+        if (ci < 0) {
+            return
+        }
+        def c:SortableCtl (itemAt cols ci)
+        c.addItem(cardValue cardName false)
+    }
+
+    fn cardTid:string (value:string) {
+        return ((tid + "-card-") + value)
+    }
+
+    fn valueOf:string (target:string) {
+        def prefix:string (tid + "-card-")
+        def n:int (strlen prefix)
+        if ((strlen target) <= n) {
+            return ""
+        }
+        if ((substring target 0 n) != prefix) {
+            return ""
+        }
+        return (substring target n (strlen target))
+    }
+
+    ; The column a card is in (committed), -1 for none.
+    fn columnOf:int (value:string) {
+        def i:int 0
+        while (i < (array_length cols)) {
+            def c:SortableCtl (itemAt cols i)
+            if ((c.indexOf(value)) >= 0) {
+                return i
+            }
+            i = (i + 1)
+        }
+        return -1
+    }
+
+    fn nameOf:string (value:string) {
+        def ci:int (this.columnOf(value))
+        if (ci < 0) {
+            return value
+        }
+        def c:SortableCtl (itemAt cols ci)
+        def it:UiItem (itemAt c.items (c.indexOf(value)))
+        return it.name
+    }
+
+    fn carrying:boolean () {
+        return ((strlen activeValue) > 0)
+    }
+
+    ; --- what to draw -----------------------------------------------------------
+
+    ; Column `ci`'s cards as they stand, WITHOUT the carried one. The slot it
+    ; would land in is `placeholderAt(ci)`.
+    fn shown:[UiItem] (ci:int) {
+        def out:[UiItem]
+        def c:SortableCtl (itemAt cols ci)
+        def i:int 0
+        while (i < (array_length c.items)) {
+            def it:UiItem (itemAt c.items i)
+            if (it.value != activeValue) {
+                push out it
+            }
+            i = (i + 1)
+        }
+        return out
+    }
+
+    ; Where the carried card is drawn in column `ci`, -1 when not there.
+    fn placeholderAt:int (ci:int) {
+        if ((this.carrying()) && (ci == overCol)) {
+            return overIndex
+        }
+        return -1
+    }
+
+    ; What the column's badge says — live, so a card dragged across is counted
+    ; in the column it is over, not the one it left.
+    fn countOf:int (ci:int) {
+        def n:int (array_length (this.shown(ci)))
+        if ((this.placeholderAt(ci)) >= 0) {
+            n = (n + 1)
+        }
+        return n
+    }
+
+    ; The committed position of every card, "todo:1,2,3|doing:4,5|done:6" —
+    ; for checks and the page's own state probe.
+    fn summary:string () {
+        def out:string ""
+        def i:int 0
+        while (i < (array_length cols)) {
+            def c:SortableCtl (itemAt cols i)
+            if (i > 0) {
+                out = (out + "|")
+            }
+            out = (out + c.name + ":")
+            def j:int 0
+            while (j < (array_length c.items)) {
+                def it:UiItem (itemAt c.items j)
+                if (j > 0) {
+                    out = (out + ",")
+                }
+                out = (out + it.value)
+                j = (j + 1)
+            }
+            i = (i + 1)
+        }
+        return out
+    }
+
+    ; --- what a reader hears -------------------------------------------------------
+
+    fn said:string () {
+        return announcement
+    }
+
+    fn whereSaid:string (ci:int idx:int) {
+        def c:SortableCtl (itemAt cols ci)
+        def n:int (array_length (this.shown(ci)))
+        if (ci == overCol) {
+            n = (this.countOf(ci))
+        }
+        return ("column " + c.name + ", position " + (to_string (idx + 1)) + " of " + (to_string n))
+    }
+
+    fn announcePickUp:void () {
+        def c:SortableCtl (itemAt cols overCol)
+        announcement = ("Picked up " + (this.nameOf(activeValue)) + ". Column " + c.name + ", position " + (to_string (overIndex + 1)) + " of " + (to_string (this.countOf(overCol))) + ".")
+    }
+
+    fn announceOver:void () {
+        announcement = ((this.nameOf(activeValue)) + " moved to " + (this.whereSaid(overCol overIndex)) + ".")
+    }
+
+    ; --- the gesture ---------------------------------------------------------------
+
+    fn pickUp:void (value:string) {
+        def ci:int (this.columnOf(value))
+        if (ci < 0) {
+            return
+        }
+        def c:SortableCtl (itemAt cols ci)
+        activeValue = value
+        fromCol = ci
+        fromIndex = (c.indexOf(value))
+        overCol = ci
+        overIndex = fromIndex
+        this.announcePickUp()
+    }
+
+    ; Aim the carried card at (ci, idx), idx clamped to the column. True when
+    ; that changed anything.
+    fn moveOver:boolean (ci:int idx:int) {
+        if ((this.carrying()) == false) {
+            return false
+        }
+        if ((ci < 0) || (ci >= (array_length cols))) {
+            return false
+        }
+        def room:int (array_length (this.shown(ci)))
+        def at:int idx
+        if (at > room) {
+            at = room
+        }
+        if (at < 0) {
+            at = 0
+        }
+        if ((ci == overCol) && (at == overIndex)) {
+            return false
+        }
+        overCol = ci
+        overIndex = at
+        this.announceOver()
+        return true
+    }
+
+    fn drop:void () {
+        if ((this.carrying()) == false) {
+            return
+        }
+        def name:string (this.nameOf(activeValue))
+        def src:SortableCtl (itemAt cols fromCol)
+        def moved:UiItem (src.removeAt((src.indexOf(activeValue))))
+        def dst:SortableCtl (itemAt cols overCol)
+        dst.insertAt(moved overIndex)
+        announcement = ("Dropped " + name + " in column " + dst.name + ", position " + (to_string (overIndex + 1)) + " of " + (to_string (array_length dst.items)) + ".")
+        this.clearDrag()
+    }
+
+    fn cancel:void () {
+        if ((this.carrying()) == false) {
+            return
+        }
+        def src:SortableCtl (itemAt cols fromCol)
+        announcement = ("Movement cancelled. " + (this.nameOf(activeValue)) + " returned to column " + src.name + ", position " + (to_string (fromIndex + 1)) + " of " + (to_string (array_length src.items)) + ".")
+        this.clearDrag()
+    }
+
+    fn clearDrag:void () {
+        activeValue = ""
+        fromCol = -1
+        fromIndex = -1
+        overCol = -1
+        overIndex = -1
+        pressValue = ""
+        byPointer = false
+    }
+
+    ; --- the keyboard ---------------------------------------------------------------
+
+    ; dnd-kit's keyboard sensor, extended by one axis: left and right leave the
+    ; column for its neighbour at the same index. Returns the tid focus should
+    ; be on afterwards ("" when the key was not ours); while carrying, focus
+    ; stays on the carried card, which is where the reference keeps it.
+    fn keyDown:string (target:string key:string) {
+        if disabled {
+            return ""
+        }
+        def value:string (this.valueOf(target))
+        if ((strlen value) == 0) {
+            return ""
+        }
+        if (key == "Escape") {
+            if (this.carrying()) {
+                this.cancel()
+                return target
+            }
+            return ""
+        }
+        if (UiCtl.activatesOn(key)) {
+            if (this.carrying()) {
+                this.drop()
+            } {
+                this.pickUp(value)
+                byPointer = false
+            }
+            return target
+        }
+        def dx:int 0
+        def dy:int 0
+        if (key == "ArrowDown") {
+            dy = 1
+        }
+        if (key == "ArrowUp") {
+            dy = -1
+        }
+        if (key == "ArrowRight") {
+            dx = 1
+        }
+        if (key == "ArrowLeft") {
+            dx = -1
+        }
+        if ((dx == 0) && (dy == 0)) {
+            return ""
+        }
+        if (this.carrying()) {
+            if (dy != 0) {
+                def next:int (overIndex + dy)
+                ; No wrap: off the end of a column is not a move.
+                if ((next < 0) || (next >= (this.countOf(overCol)))) {
+                    return ""
+                }
+                this.moveOver(overCol next)
+                return target
+            }
+            def nc:int (overCol + dx)
+            if ((nc < 0) || (nc >= (array_length cols))) {
+                return ""
+            }
+            this.moveOver(nc overIndex)
+            return target
+        }
+        ; Nothing held: the arrows walk the board, so it can be browsed before
+        ; anything is picked up (every card is a Tab stop as well).
+        def ci:int (this.columnOf(value))
+        def c:SortableCtl (itemAt cols ci)
+        def at:int (c.indexOf(value))
+        if (dy != 0) {
+            def to:int (at + dy)
+            if ((to < 0) || (to >= (array_length c.items))) {
+                return ""
+            }
+            def it:UiItem (itemAt c.items to)
+            return (this.cardTid(it.value))
+        }
+        def nc2:int (ci + dx)
+        while ((nc2 >= 0) && (nc2 < (array_length cols))) {
+            def other:SortableCtl (itemAt cols nc2)
+            def len:int (array_length other.items)
+            if (len > 0) {
+                def j:int at
+                if (j >= len) {
+                    j = (len - 1)
+                }
+                def it2:UiItem (itemAt other.items j)
+                return (this.cardTid(it2.value))
+            }
+            nc2 = (nc2 + dx)
+        }
+        return ""
+    }
+
+    ; --- the pointer -------------------------------------------------------------------
+
+    fn press:string (target:string) {
+        if disabled {
+            return ""
+        }
+        def value:string (this.valueOf(target))
+        if ((strlen value) == 0) {
+            return ""
+        }
+        if ((this.columnOf(value)) < 0) {
+            return ""
+        }
+        pressValue = value
+        return target
+    }
+
+    ; The pointer has travelled far enough: the press becomes a drag.
+    fn startDrag:boolean () {
+        if ((strlen pressValue) == 0) {
+            return false
+        }
+        if (this.carrying()) {
+            return false
+        }
+        this.pickUp(pressValue)
+        byPointer = true
+        return true
+    }
+
+    fn release:boolean () {
+        if (this.carrying()) {
+            this.drop()
+            return true
+        }
+        pressValue = ""
+        return false
+    }
+
+    sfn dragInstructions:string () {
+        return "To pick up a task, press space or enter. Use the up and down arrow keys to move it within a column and the left and right arrow keys to move it to another column. Press space or enter again to drop it, or escape to cancel."
+    }
+}

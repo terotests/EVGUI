@@ -162,6 +162,57 @@ class SortableCtl extends UiCtl {
         }
     }
 
+    ; --- moving between lists ----------------------------------------------------
+    ; Two primitives for a board of sortables (KanbanCtl): take an item out of
+    ; one list and put it into another. `moveActive` is these two on the same
+    ; list; a move ACROSS lists is the same arrayMove with the take and the put
+    ; on different arrays, which is what dnd-kit's multiple-containers example
+    ; does in onDragOver.
+
+    ; The item at `at`, taken out; the ones after it shuffle up.
+    fn removeAt:UiItem (at:int) {
+        def moved:UiItem (itemAt items at)
+        def rest:[UiItem]
+        def i:int 0
+        while (i < (array_length items)) {
+            if (i != at) {
+                push rest (itemAt items i)
+            }
+            i = (i + 1)
+        }
+        clear items
+        def k:int 0
+        while (k < (array_length rest)) {
+            push items (itemAt rest k)
+            k = (k + 1)
+        }
+        return moved
+    }
+
+    ; `it` put in at `at` (clamped to the ends); the ones from there shuffle down.
+    fn insertAt:void (it:UiItem at:int) {
+        def rest:[UiItem]
+        def i:int 0
+        while (i < (array_length items)) {
+            push rest (itemAt items i)
+            i = (i + 1)
+        }
+        clear items
+        def placed:boolean false
+        def k:int 0
+        while (k < (array_length rest)) {
+            if ((k == at) && (placed == false)) {
+                push items it
+                placed = true
+            }
+            push items (itemAt rest k)
+            k = (k + 1)
+        }
+        if (placed == false) {
+            push items it
+        }
+    }
+
     fn pickUp:void (value:string) {
         activeValue = value
         ; Over ITSELF to begin with, which is what the reference announces the

@@ -61,6 +61,8 @@ import { RadioGroupDemo } from "./generated-host.js";
 import { RADIO_CSS } from "./generated.js";
 import { RatingDemo } from "./generated-host.js";
 import { RATING_CSS } from "./generated.js";
+import { KanbanDemo } from "./generated-host.js";
+import { KANBAN_CSS } from "./generated.js";
 import { MENUBAR_CSS, TOOLBAR_CSS, SORTABLE_CSS, MOTION_CSS, TABLE_CSS, DROPDOWN_CSS, DIALOG_CSS, TREE_CSS, TIMELINE_CSS, RESIZE_CSS, FORM_CSS, PROFILE_CSS, DASHBOARD_CSS, CALENDAR_CSS, FILTERS_CSS, EVENTCAL_CSS, MESSAGE_CSS, CONTROLS_CSS, OTP_CSS, METADATA_CSS, EFFECTS_CSS, SEPARATOR_CSS, TABS_CSS, EFFECT_PRESETS_CSS } from "./generated.js";
 
 // The default stage width. A demo wider than this says so — the dashboard
@@ -453,6 +455,11 @@ let lastRadioHover = "";
 let rating = new RatingDemo();
 rating.init(RATING_CSS);
 let lastRatingHover = "";
+// Kanban: ReUI's board, a KanbanCtl (one SortableCtl per column plus the
+// moves across them, the keyboard sensor and the announcements).
+let kanban = new KanbanDemo();
+kanban.init(KANBAN_CSS);
+let lastKanbanHover = "";
 // ONE DRIVER FOR THE PAGE. It reads the effect instances off whatever display
 // list is being painted, so it works for any demo whose stylesheet declares an
 // effect and costs nothing on the nineteen that do not.
@@ -1512,6 +1519,40 @@ DEMOS.rating = {
     root: () => null,
   }),
 };
+// Kanban. A gesture like the sortable's: the press arms, the pointer has to
+// travel before a card is picked up, the release drops. Every card is a stop
+// of the page's generic Tab walk; Space / Enter, the arrows and Escape are
+// KanbanCtl's keyboard sensor.
+DEMOS.kanban = {
+  height: () => kanban.heightPx(),
+  list: () => kanban.displayListJson(),
+  hit: (x, y) => kanban.hitId(x, y),
+  a11y: (gen, focus) => kanban.a11yJson(gen, focus),
+  cursorAt: (x, y) => kanban.cursorAt(x, y),
+  press: (id, x, y) => kanban.press(id, x, y),
+  drag: (id, ev) => kanban.dragTo(ev.offsetX, ev.offsetY),
+  drop: () => kanban.drop(),
+  hover: (id) => {
+    if (id === lastKanbanHover) return false;
+    lastKanbanHover = id;
+    return kanban.setHover(id);
+  },
+  key: (k) => kanban.key(k),
+  ownsKey: (k) => kanban.ownsKey(k),
+  animated: true,
+  host: () => ({
+    tick: (dt) => kanban.tick(dt),
+    busy: () => kanban.busyNow(),
+    setHover: (id) => {
+      if (id === lastKanbanHover) return false;
+      lastKanbanHover = id;
+      return kanban.setHover(id);
+    },
+    setPressed: (id) => kanban.setPressed(id),
+    root: () => null,
+  }),
+};
+window.__kbState = () => JSON.parse(kanban.stateJson());
 
 /**
  * Put the floating copy under the pointer, by mutating the element rather than
@@ -1794,6 +1835,7 @@ const INSTANCE = {
 INSTANCE.radio = () => radio;
 INSTANCE.popover = () => popover;
 INSTANCE.rating = () => rating;
+INSTANCE.kanban = () => kanban;
 // A press on the page outside the canvas is outside the popover too, and
 // Radix dismisses on a pointer down outside wherever it lands.
 window.addEventListener("pointerdown", (ev) => {
@@ -1933,6 +1975,8 @@ NARROW.radio = { min: 320, h: "own", grow: true };
 NARROW.popover = { min: 320, h: "auto", keep: true };
 // The page is as tall as its cards lay out.
 NARROW.rating = { min: 320, h: "own" };
+// Laid out at the room (up to its 900): the columns stack on a phone.
+NARROW.kanban = { min: 320, h: "own", grow: true };
 const NARROW_AT = 600;
 const naturalSize = {};
 const fittedHeight = new Map();
@@ -2656,6 +2700,7 @@ DEMO_NAMES.push("autocomplete");
 DEMO_NAMES.push("pagination");
 DEMO_NAMES.push("radio");
 DEMO_NAMES.push("rating");
+DEMO_NAMES.push("kanban");
 const wanted = new URLSearchParams(location.search).get("demo");
 if (wanted && DEMO_NAMES.includes(wanted)) state.which = wanted;
 
@@ -3346,6 +3391,7 @@ window.__resetDemo = (name) => {
   else if (name === "pagination") { pagination = new PaginationDemo(); pagination.init(PAGINATION_CSS); lastPaginationHover = ""; }
   else if (name === "radio") { radio = new RadioGroupDemo(); radio.init(RADIO_CSS); lastRadioHover = ""; }
   else if (name === "rating") { rating = new RatingDemo(); rating.init(RATING_CSS); lastRatingHover = ""; }
+  else if (name === "kanban") { kanban = new KanbanDemo(); kanban.init(KANBAN_CSS); lastKanbanHover = ""; }
   else if (name === "dialog") { dialog = new DialogDemo(); dialog.init(DIALOG_CSS); lastDialogHover = ""; }
   else if (name === "popover") { popover = new PopoverDemo(); popover.init(POPOVER_CSS); lastPopoverHover = ""; }
   else return false;

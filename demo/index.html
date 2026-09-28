@@ -700,6 +700,25 @@
               rules grow with them.
             </p>
           </section>
+          <section data-for="kanban">
+            <h2>what to try</h2>
+            <p class="hint">
+              Press a card and drag it: up and down within its column
+              reorders it, into another column moves it. A copy follows the
+              pointer, a dashed placeholder shows where it will land, and the
+              column counts change as it crosses. Let go to drop it there.
+            </p>
+            <p class="hint">
+              Or Tab to a card and press <strong>Space</strong> (or
+              <strong>Enter</strong>) to pick it up. <strong>Arrow Up /
+              Down</strong> move it within the column, <strong>Arrow Left /
+              Right</strong> to the neighbouring column at the same position;
+              <strong>Space</strong> drops it and <strong>Escape</strong> puts
+              it back where it was. Each step is announced in the status line
+              under the board, e.g. &ldquo;Picked up Design landing page.
+              Column To Do, position 1 of 3.&rdquo;
+            </p>
+          </section>
           <section data-for="rating">
             <h2>what to try</h2>
             <p class="hint">
@@ -1426,6 +1445,12 @@
   "src": "RatingDemo",
   "caption": "RatingCtl · ReUI's Rating, specified from its page",
   "desc": "ReUI's Rating patterns, one card each: the three sizes, a review summary (4.6 with the fifth star filled 60%, and a distribution of yellow progress bars), an interactive rating with its value label, half-star precision, read-only next to editable, and ten stars. The value, the hover preview, the precision, the keys and what the row is to a reader are RatingCtl's: a read-only row is an image named \"Rated 4.6 out of 5 stars\", an editable one a slider (the WAI-ARIA rating-slider choice) with aria-valuetext \"4 out of 5 stars\". reui.io was not reachable from here, so the look is specified from screenshots and the behaviour from ReUI's documented props, not measured."
+ },
+ "kanban": {
+  "title": "Kanban",
+  "src": "KanbanDemo",
+  "caption": "KanbanCtl · one SortableCtl per column · after ReUI's Kanban on @dnd-kit",
+  "desc": "ReUI's Kanban board: To Do, In Progress and Done as three equal columns, each with its status icon, title and a live count, and white task cards with a tinted label. Drag a card within a column to reorder it or across to move it; a copy follows the pointer and a dashed placeholder shows where it will land. The state is KanbanCtl's: one SortableCtl per column (the controller measured against @dnd-kit/sortable) plus the move across columns, a dnd-kit-style keyboard sensor (Space or Enter to pick up and drop, the arrows within and across columns, Escape to cancel) and the announcements in a status region. The move across columns and the keyboard follow dnd-kit's multiple-containers example and ReUI's documented behaviour; they are specified, not measured against the library."
  },
  "pagination": {
   "title": "Pagination",

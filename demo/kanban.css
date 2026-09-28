@@ -1,0 +1,238 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * ReUI's Kanban, as an EVG stylesheet: shadcn's zinc ramp, three columns that
+ * are light grey frames (#fafafa, a 1px #e4e4e7 border, 12px corners), white
+ * task cards with a hairline border, a soft shadow and 10px corners, and
+ * ReUI's light badge tints for the labels.
+ *
+ * Class-first, one token per selector.
+ */
+
+.kb-page {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 16px;
+  padding: 24px;
+  width: 900px;
+  background-color: #ffffff;
+}
+
+/* The pattern's card, as on the other ReUI pages: a caption, the example
+ * under it. */
+.kb-panel {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  width: 100%;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  background-color: #ffffff;
+}
+
+.kb-caption {
+  height: 40px;
+  line-height: 40px;
+  padding: 0 16px;
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 500;
+  border-bottom: 1px solid #f4f4f5;
+}
+
+.kb-stage {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 12px;
+  padding: 24px;
+}
+
+/* grid-cols-3 auto-rows-fr gap-4: three equal columns, equally tall. */
+.kb-board {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 16px;
+  width: 100%;
+}
+
+/* A column: Frame — bg-muted/50, border, rounded-xl, p-2. */
+.kb-col {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0px;
+  gap: 8px;
+  padding: 8px;
+  min-height: 240px;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  background-color: #fafafa;
+}
+
+/* The header: icon, bold title, and the count pushed to the right. */
+.kb-colhead {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
+.kb-colicon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: #71717a;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.kb-coltitle {
+  flex-grow: 1;
+  color: #09090b;
+  font-size: 14px;
+  font-weight: 600;
+  height: 20px;
+  line-height: 20px;
+}
+
+/* Badge variant="outline" size="sm". */
+.kb-count {
+  flex-shrink: 0;
+  height: 20px;
+  line-height: 18px;
+  padding: 0 7px;
+  border: 1px solid #e4e4e7;
+  border-radius: 6px;
+  background-color: #ffffff;
+  color: #09090b;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.kb-list {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 8px;
+  flex-grow: 1;
+}
+
+/* A task: a white Frame, border, rounded-[10px], shadow-xs, p-3. */
+.kb-task {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  flex-shrink: 0;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  background-color: #ffffff;
+  shadow-color: rgba(0, 0, 0, 0.05);
+  shadow-radius: 2px;
+  shadow-offset-y: 1px;
+  cursor: grab;
+  transition: border-color 120ms ease-out, background-color 120ms ease-out;
+}
+
+.kb-task:hover { border-color: #d4d4d8; }
+.kb-task:focus { border-color: #a1a1aa; }
+
+.kb-tasktitle {
+  color: #09090b;
+  font-size: 14px;
+  font-weight: 500;
+  height: 20px;
+  line-height: 20px;
+}
+
+/* Badge size="sm", the light variants. */
+.kb-badge {
+  height: 20px;
+  line-height: 20px;
+  padding: 0 6px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.kb-badge-info        { background-color: #ede9fe; color: #6d28d9; }
+.kb-badge-warning     { background-color: #fef3c7; color: #b45309; }
+.kb-badge-success     { background-color: #dcfce7; color: #15803d; }
+.kb-badge-primary     { background-color: #f4f4f5; color: #3f3f46; }
+.kb-badge-destructive { background-color: #fee2e2; color: #dc2626; }
+
+/* Where the carried card will land: dnd-kit's placeholder, the card's own
+ * box with a dashed 2px outline over bg-muted/10 and its content hidden. */
+.kb-task-placeholder {
+  padding: 0px;
+  border: 0px solid rgba(0, 0, 0, 0);
+  border-radius: 10px;
+  background-color: rgba(113, 113, 122, 0.05);
+  shadow-color: rgba(0, 0, 0, 0);
+}
+.kb-task-placeholder:hover { border-color: rgba(0, 0, 0, 0); }
+.kb-task-placeholder:focus { border-color: rgba(0, 0, 0, 0); }
+
+/* The dashes: a path over the whole slot, drawn 1:1 (its viewBox is the
+ * card's own size in pixels). */
+.kb-dash {
+  position: absolute;
+  left: 0px;
+  top: 0px;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: #a1a1aa;
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+}
+
+/* Carried from the keyboard: the card itself, lifted, in its new slot. */
+.kb-task-lifted {
+  border-color: #a1a1aa;
+  shadow-color: rgba(0, 0, 0, 0.12);
+  shadow-radius: 12px;
+  shadow-offset-y: 4px;
+}
+.kb-task-lifted:focus { border-color: #71717a; }
+
+/* The DragOverlay: follows the pointer, so no easing at all. */
+.kb-task-overlay {
+  position: absolute;
+  transition: none;
+  cursor: grabbing;
+  shadow-color: rgba(0, 0, 0, 0.14);
+  shadow-radius: 16px;
+  shadow-offset-y: 6px;
+}
+
+/* The live region, shown as a muted line under the board. */
+.kb-live {
+  color: #71717a;
+  font-size: 12px;
+  height: 16px;
+  line-height: 16px;
+}
+
+/* --- a phone ------------------------------------------------------------------ */
+
+@media (max-width: 600px) {
+  .kb-page { width: 100%; padding: 12px; gap: 12px; }
+  .kb-stage { padding: 12px; }
+  .kb-board { flex-direction: column; gap: 12px; }
+  .kb-col { flex-grow: 0; flex-basis: auto; min-height: 0px; width: 100%; }
+  .kb-live { height: auto; }
+}
