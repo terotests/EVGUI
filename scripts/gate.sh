@@ -53,6 +53,7 @@ SUITES=(
   ui:pagination:check
   ui:radio:check
   ui:rating:check
+  ui:drawer:check
   ui:dialog:check
   ui:popover:check
   ui:semantics:check

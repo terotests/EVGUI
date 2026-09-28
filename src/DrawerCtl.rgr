@@ -19,12 +19,38 @@
 ; The slide is a `tickCtl` animation: `progress` runs 0 → 1 over
 ; `durationMs`, and the panel is an out-of-flow "free" surface whose x is
 ; derived from it. A host that never ticks sees the panel where it ends up.
+;
+; THE MODAL DRAWER (added for the Drawer demo; every default above is kept,
+; so a host that sets none of the fields below gets the drawer it had).
+; Base UI's Drawer and vaul are a different animal from the side panel: a
+; modal dialog that slides in from ANY edge over a dimmed page, takes the
+; focus, gives it back to its trigger, and can be dragged back towards its
+; edge to dismiss it. The pieces, all opt-in:
+;
+;   side         "left" / "right" as before, and now "top" / "bottom"
+;   modal        true: the panel row says aria-modal, and `tids` owns a
+;                trigger and an overlay, which close it when pressed
+;   description  the panel's accessible description (aria-describedby)
+;   initialFocus the id `openAndFocus` hands the host; the close id if ""
+;   easing       any CSS timing function, "linear" by default. The slide is
+;                a MOVE from where the panel is to where it is going:
+;                `phase` runs 0 → 1 and the eased fraction of that is where
+;                it is, so a close that starts half-open, or a snap-back
+;                from wherever a drag let go, has the same curve as a full
+;                slide and never jumps.
+;   drag         `beginDrag` / `dragTo` / `endDrag`: the panel follows the
+;                pointer towards its edge (never away from it — there is
+;                nothing behind the panel to show), and on release is
+;                dismissed if it went past `dismissFraction` of its size or
+;                was flung faster than `dismissVelocity`, and snaps back
+;                otherwise. vaul's rule, with its 25% threshold.
 ; ============================================================================
 
 Import "UiCtl.rgr"
 Import "UiTree.rgr"
 Import "pkg:evg/EVGElement.rgr"
 Import "pkg:evg/EVGA11yTree.rgr"
+Import "pkg:evg/EVGEasing.rgr"
 
 class DrawerCtl extends UiCtl {
     def open:boolean false
@@ -51,6 +77,30 @@ class DrawerCtl extends UiCtl {
     ; The content id clicked last; the host drains it.
     def picked:string ""
 
+    ; --- the modal drawer (see the header) ---------------------------------
+    def modal:boolean false
+    def description:string ""
+    def initialFocus:string ""
+    ; How tall the page is, for a drawer at the bottom. The host tells it.
+    def pageHeight:double 0.0
+    def easing:string "linear"
+    def easingFn@(optional):EVGEasing
+    def easingFor:string ""
+    ; The move under way: shown fraction from → to, `phase` 0 → 1 through it.
+    def moveFrom:double 0.0
+    def moveTo:double 1.0
+    def phase:double 1.0
+    ; The drag: where it started on its axis, how far the panel has been
+    ; pulled towards its edge (px, never negative), and how fast (px/ms).
+    def dragging:boolean false
+    def dragStart:double 0.0
+    def dragOffset:double 0.0
+    def dragVelocity:double 0.0
+    def dragLastPos:double 0.0
+    def dragLastT:double 0.0
+    def dismissFraction:double 0.25
+    def dismissVelocity:double 0.5
+
     Constructor () {
         rootEl = (EVGElement.createDiv())
     }
@@ -69,6 +119,78 @@ class DrawerCtl extends UiCtl {
 
     fn bodyTid:string () {
         return (tid + "-body")
+    }
+
+    fn triggerTid:string () {
+        return (tid + "-trigger")
+    }
+
+    fn overlayTid:string () {
+        return (tid + "-overlay")
+    }
+
+    fn descTid:string () {
+        return (tid + "-description")
+    }
+
+    fn isVertical:boolean () {
+        return ((side == "top") || (side == "bottom"))
+    }
+
+    ; How far the panel travels: its width, or its height for top and bottom.
+    fn extent:double () {
+        if (this.isVertical()) {
+            if (panelHeight > 0.0) {
+                return panelHeight
+            }
+        }
+        return width
+    }
+
+    fn curve:EVGEasing () {
+        if ((null? easingFn) || (easingFor != easing)) {
+            easingFn = (EVGEasing.parse(easing))
+            easingFor = easing
+        }
+        def e:EVGEasing (unwrap easingFn)
+        return e
+    }
+
+    ; How much of the panel shows, 0 → 1, before any drag: `progress` for a
+    ; linear slide (and for a host that sets `progress` itself), the eased
+    ; point of the move otherwise.
+    fn shown:double () {
+        def p:double progress
+        if ((easing != "linear") && (phase < 1.0)) {
+            def c:EVGEasing (this.curve())
+            p = (moveFrom + ((moveTo - moveFrom) * (c.ease(phase))))
+        }
+        if (p < 0.0) { p = 0.0 }
+        if (p > 1.0) { p = 1.0 }
+        return p
+    }
+
+    ; How far the panel is from where it rests, in px, towards its edge.
+    fn displacement:double () {
+        return (((this.extent()) * (1.0 - (this.shown()))) + dragOffset)
+    }
+
+    ; What the overlay should show of itself, 0 → 1: the panel's own share.
+    fn visibleFraction:double () {
+        def ext:double (this.extent())
+        if (ext <= 0.0) {
+            return (this.shown())
+        }
+        def f:double (1.0 - ((this.displacement()) / ext))
+        if (f < 0.0) { f = 0.0 }
+        if (f > 1.0) { f = 1.0 }
+        return f
+    }
+
+    fn startMove:void (to:double) {
+        moveFrom = progress
+        moveTo = to
+        phase = 0.0
     }
 
     ; The element the host fills. Its children are the host's; `build`
@@ -99,6 +221,9 @@ class DrawerCtl extends UiCtl {
         if (open == false) {
             return false
         }
+        if dragging {
+            return false
+        }
         if closing {
             return true
         }
@@ -108,10 +233,32 @@ class DrawerCtl extends UiCtl {
     ; Slide in. Reopening while closing turns the slide around from where
     ; it is rather than from the edge.
     fn show:void () {
+        if ((open == false) || closing) {
+            progress = (this.shown())
+            this.startMove(1.0)
+        }
         open = true
         closing = false
+        dragging = false
+        dragOffset = 0.0
         picked = ""
         this.build()
+    }
+
+    ; The modal drawer's way in: open, and the id the focus goes to.
+    fn openAndFocus:string () {
+        this.show()
+        if ((strlen initialFocus) > 0) {
+            return initialFocus
+        }
+        return (this.closeTid())
+    }
+
+    ; …and out: the slide starts, and the focus goes back to the trigger
+    ; NOW, as Base UI's does — the panel on its way out is already inert.
+    fn closeAndRestore:string () {
+        this.close()
+        return (this.triggerTid())
     }
 
     ; Slide out, then disappear. `closeNow` skips the slide.
@@ -123,6 +270,12 @@ class DrawerCtl extends UiCtl {
             this.closeNow()
             return
         }
+        if (closing == false) {
+            progress = (this.shown())
+            this.startMove(0.0)
+        }
+        dragging = false
+        dragOffset = 0.0
         closing = true
     }
 
@@ -130,54 +283,181 @@ class DrawerCtl extends UiCtl {
         open = false
         closing = false
         progress = 0.0
+        phase = 1.0
+        dragging = false
+        dragOffset = 0.0
         this.build()
     }
 
     ; Where the panel's left edge is for the current progress: off the
     ; page at 0, flush with the edge at 1.
     fn panelX:double () {
-        def p:double progress
-        if (p < 0.0) { p = 0.0 }
-        if (p > 1.0) { p = 1.0 }
+        if (this.isVertical()) {
+            return 0.0
+        }
+        def d:double (this.displacement())
         if (side == "right") {
             def pw:double pageWidth
             if (pw <= 0.0) {
                 pw = width
             }
-            return (pw - (width * p))
+            return ((pw - width) + d)
         }
-        return ((0.0 - width) + (width * p))
+        return (0.0 - d)
+    }
+
+    ; Where the panel's top edge is: `top` for a side drawer, and off the
+    ; top or the bottom of the page by the slide for the other two.
+    fn panelY:double () {
+        if (side == "top") {
+            return (top - (this.displacement()))
+        }
+        if (side == "bottom") {
+            def ph:double pageHeight
+            if (ph <= 0.0) {
+                ph = (this.extent())
+            }
+            return ((ph - (this.extent())) + (this.displacement()))
+        }
+        return top
     }
 
     fn place:void () {
         panelEl.overlayX = (this.panelX())
-        panelEl.overlayY = top
+        panelEl.overlayY = (this.panelY())
+    }
+
+    ; --- the drag ----------------------------------------------------------------
+
+    ; +1 when the edge is at the larger coordinate (right, bottom).
+    fn edgeSign:double () {
+        if ((side == "right") || (side == "bottom")) {
+            return 1.0
+        }
+        return -1.0
+    }
+
+    fn axisOf:double (x:double y:double) {
+        if (this.isVertical()) {
+            return y
+        }
+        return x
+    }
+
+    ; A press on the panel that may become a drag. Whatever move was under
+    ; way stops where it is, and the pointer takes over from there.
+    fn beginDrag:boolean (x:double y:double tMs:double) {
+        if ((open == false) || closing) {
+            return false
+        }
+        progress = (this.shown())
+        moveFrom = progress
+        moveTo = progress
+        phase = 1.0
+        dragging = true
+        dragStart = (this.axisOf(x y))
+        dragOffset = 0.0
+        dragVelocity = 0.0
+        dragLastPos = dragStart
+        dragLastT = tMs
+        return true
+    }
+
+    ; The pointer moved: the panel follows it towards the edge. True when it
+    ; moved.
+    fn dragTo:boolean (x:double y:double tMs:double) {
+        if (dragging == false) {
+            return false
+        }
+        def pos:double (this.axisOf(x y))
+        def raw:double ((pos - dragStart) * (this.edgeSign()))
+        if (raw < 0.0) {
+            raw = 0.0
+        }
+        def dt:double (tMs - dragLastT)
+        if (dt > 0.0) {
+            def v:double (((pos - dragLastPos) * (this.edgeSign())) / dt)
+            ; A little smoothing: one fast event is not a fling.
+            dragVelocity = ((dragVelocity * 0.3) + (v * 0.7))
+            dragLastT = tMs
+            dragLastPos = pos
+        }
+        if (raw == dragOffset) {
+            return false
+        }
+        dragOffset = raw
+        return true
+    }
+
+    ; The release. "dismiss" when it went far enough or fast enough (the
+    ; slide out carries on from where the panel is), "snap" when it goes
+    ; back, "" when it never moved.
+    fn endDrag:string () {
+        if (dragging == false) {
+            return ""
+        }
+        dragging = false
+        if (dragOffset <= 0.0) {
+            dragOffset = 0.0
+            return ""
+        }
+        def ext:double (this.extent())
+        def far:boolean false
+        if (ext > 0.0) {
+            far = ((dragOffset / ext) >= dismissFraction)
+        }
+        def flung:boolean ((dragVelocity >= dismissVelocity) && (dragOffset > 8.0))
+        def f:double (this.visibleFraction())
+        dragOffset = 0.0
+        progress = f
+        if (far || flung) {
+            closing = true
+            this.startMove(0.0)
+            this.place()
+            return "dismiss"
+        }
+        this.startMove(1.0)
+        this.place()
+        return "snap"
     }
 
     fn tickCtl:string (dtMs:double) {
         if (open == false) {
             return ""
         }
-        def step:double 1.0
-        if (durationMs > 0.0) {
-            step = (dtMs / durationMs)
+        if dragging {
+            return ""
         }
+        if ((closing == false) && ((progress >= 1.0) && (phase >= 1.0))) {
+            return ""
+        }
+        ; The move runs at the full slide's speed: a panel half-way out takes
+        ; half the time to come back.
+        def dist:double (moveTo - moveFrom)
+        if (dist < 0.0) {
+            dist = (0.0 - dist)
+        }
+        def step:double 1.0
+        if ((durationMs > 0.0) && (dist > 0.0)) {
+            step = (dtMs / (durationMs * dist))
+        }
+        phase = (phase + step)
+        if (phase > 1.0) {
+            phase = 1.0
+        }
+        progress = (moveFrom + ((moveTo - moveFrom) * phase))
         if closing {
-            progress = (progress - step)
-            if (progress <= 0.0) {
+            if (phase >= 1.0) {
                 this.closeNow()
                 return ""
             }
             this.place()
             return ""
         }
-        if (progress < 1.0) {
-            progress = (progress + step)
-            if (progress > 1.0) {
-                progress = 1.0
-            }
-            this.place()
+        if (phase >= 1.0) {
+            progress = 1.0
         }
+        this.place()
         return ""
     }
 
@@ -222,6 +502,10 @@ class DrawerCtl extends UiCtl {
         push a (this.titleTid())
         push a (this.closeTid())
         push a (this.bodyTid())
+        if modal {
+            push a (this.triggerTid())
+            push a (this.overlayTid())
+        }
         def i:int 0
         while (i < (array_length contentTids)) {
             push a (itemAt contentTids i)
@@ -255,8 +539,20 @@ class DrawerCtl extends UiCtl {
     }
 
     fn activate:string (target:string) {
+        if (modal && (target == (this.triggerTid()))) {
+            if ((open == false) || closing) {
+                return (this.openAndFocus())
+            }
+            return ""
+        }
         if (open == false) {
             return ""
+        }
+        if (modal && ((target == (this.closeTid())) || (target == (this.overlayTid())))) {
+            if closing {
+                return ""
+            }
+            return (this.closeAndRestore())
         }
         if (target == (this.closeTid())) {
             this.close()
@@ -270,6 +566,9 @@ class DrawerCtl extends UiCtl {
 
     fn keyDown:string (target:string key:string) {
         if (key == "Escape") {
+            if (modal && open) {
+                return (this.closeAndRestore())
+            }
             this.close()
             return ""
         }
@@ -299,7 +598,8 @@ class DrawerCtl extends UiCtl {
         }
         ; A dialog that is not modal: what `aria-modal="false"` says.
         def panelRow:UiRow (UiRow.of((this.panelTid()) (EVGA11yRole.dialog()) title))
-        panelRow.modal = false
+        panelRow.modal = modal
+        panelRow.description = description
         push out panelRow
         def titleRow:UiRow (UiRow.of((this.titleTid()) (EVGA11yRole.none()) ""))
         titleRow.parentTid = (this.panelTid())

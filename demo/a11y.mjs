@@ -539,6 +539,35 @@ STATES.push(...[
   })));
 }
 
+// The drawer demo: closed, and each drawer open and settled — a modal
+// dialog labelled by its title and described by its description, over a
+// page the mirror makes inert.
+{
+  const { DrawerDemo } = require(path.join(ROOT, "gallery/evgui/bin/DrawerDemo.cjs"));
+  const drawerAt = (key) => {
+    const d = atRest(DrawerDemo, "drawer.css");
+    if (key) {
+      d.press(`drw-${key}-trigger`);
+      d.settle();
+      d.displayListJson();
+    }
+    return d;
+  };
+  STATES.push(...[
+    ["drawer — five triggers, closed", drawerAt(""), 80],
+    ["drawer — right drawer open, body scrolling", drawerAt("right"), 81],
+    ["drawer — bottom drawer open (goal stepper)", drawerAt("bottom"), 82],
+    ["drawer — left navigation drawer open", drawerAt("left"), 83],
+    ["drawer — top drawer open", drawerAt("top"), 84],
+    ["drawer — responsive one open (a dialog here)", drawerAt("resp"), 85],
+  ].map(([name, d, gen]) => ({
+    name,
+    size: [d.widthPx(), d.heightPx()],
+    lint: () => d.a11yProblems(),
+    tree: () => d.a11yJson(gen, d.focused || ""),
+  })));
+}
+
 const AXE = fs.readFileSync(domRequire.resolve("axe-core"), "utf8");
 
 const html = `<!doctype html><meta charset="utf-8">

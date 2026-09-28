@@ -1,0 +1,435 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * Drawer, as an EVG stylesheet: ReUI / shadcn's look — zinc greys, a white
+ * panel against an edge of the demo over a dimmed, blurred page.
+ *
+ * Every class here is one DrawerDemo.rgr writes (`drw-*`); DrawerCtl owns the
+ * behaviour — where the panel is, the slide, the drag — and none of the look.
+ * The overlay's dim and blur are written inline by the demo, in step with the
+ * slide; the rule below is what they grow to.
+ */
+
+/* --- the page: one card per pattern ------------------------------------------- */
+
+.drw-page {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 24px;
+  width: 900px;
+  height: 520px;
+  background-color: #ffffff;
+}
+
+.drw-card {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  width: 272px;
+  height: 200px;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  background-color: #ffffff;
+}
+
+.drw-caption {
+  height: 40px;
+  line-height: 40px;
+  padding: 0 16px;
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 500;
+  border-bottom: 1px solid #f4f4f5;
+}
+
+.drw-stage {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-grow: 1;
+  padding: 12px 16px;
+}
+
+.drw-status {
+  color: #15803d;
+  font-size: 12px;
+  font-weight: 500;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+}
+
+/* --- buttons ------------------------------------------------------------------ */
+
+.drw-btn {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid #18181b;
+  border-radius: 8px;
+  background-color: #18181b;
+  cursor: pointer;
+}
+
+.drw-btn-text {
+  color: #09090b;
+  font-size: 14px;
+  font-weight: 500;
+  height: 20px;
+  line-height: 20px;
+  text-align: center;
+}
+.drw-btn-text-on { color: #fafafa; }
+
+.drw-btn-outline {
+  border-color: #e4e4e7;
+  background-color: #ffffff;
+  shadow-color: rgba(0, 0, 0, 0.05);
+  shadow-radius: 2px;
+  shadow-offset-y: 1px;
+}
+.drw-btn-outline:hover { background-color: #f4f4f5; }
+.drw-btn-outline:focus { border-color: #a1a1aa; shadow-color: rgba(161, 161, 170, 0.5); shadow-radius: 3px; shadow-offset-y: 0px; }
+
+.drw-btn-primary:hover { background-color: #27272a; border-color: #27272a; }
+.drw-btn-primary:focus { border-color: #a1a1aa; shadow-color: rgba(161, 161, 170, 0.6); shadow-radius: 3px; }
+
+/* --- the overlay and the panel ------------------------------------------------ */
+
+/* Base UI / ReUI's backdrop: `bg-black/20` and a small backdrop blur. The
+ * demo writes both inline, scaled by how far the panel is in. */
+.drw-overlay {
+  background-color: rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(4px);
+}
+
+.drw-panel {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  background-color: #ffffff;
+  shadow-color: rgba(0, 0, 0, 0.16);
+  shadow-radius: 24px;
+}
+
+/* ReUI's side drawer: full height, `max-w-sm`, rounded on the inner side. */
+.drw-panel-right {
+  border-radius: 16px 0 0 16px;
+  border-left: 1px solid #e4e4e7;
+}
+.drw-panel-left {
+  border-radius: 0 16px 16px 0;
+  border-right: 1px solid #e4e4e7;
+}
+
+/* vaul's bottom sheet: full width, rounded on top, content centred at
+ * `max-w-sm`. */
+.drw-panel-bottom {
+  align-items: center;
+  border-radius: 16px 16px 0 0;
+  border-top: 1px solid #e4e4e7;
+  padding: 0 0 8px 0;
+}
+.drw-panel-top {
+  align-items: center;
+  border-radius: 0 0 16px 16px;
+  border-bottom: 1px solid #e4e4e7;
+  padding: 8px 0 0 0;
+}
+
+/* The grab bar: `mx-auto mt-4 h-2 w-[100px] rounded-full bg-muted`. */
+.drw-handle {
+  width: 100px;
+  height: 6px;
+  margin: 12px 0 0 0;
+  border-radius: 3px;
+  background-color: #e4e4e7;
+  cursor: grab;
+}
+.drw-handle-bottom { margin: 4px 0 12px 0; }
+
+.drw-inner {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+}
+
+.drw-header {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 6px;
+  padding: 16px;
+}
+.drw-header-center { align-items: center; }
+.drw-header-dialog { padding: 0 24px 0 0; }
+
+.drw-title {
+  color: #09090b;
+  font-size: 18px;
+  font-weight: 500;
+  height: 24px;
+  line-height: 24px;
+}
+
+.drw-desc {
+  color: #71717a;
+  font-size: 14px;
+  height: auto;
+  line-height: 20px;
+}
+
+/* The body between the header and the footer: it takes what they leave and
+ * scrolls inside it. No scrollbar is drawn, as on ReUI's page. */
+.drw-scroll {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  padding: 0 16px;
+}
+
+.drw-para {
+  color: #09090b;
+  font-size: 14px;
+  height: auto;
+  line-height: 21px;
+  margin: 0 0 16px 0;
+}
+
+/* `DrawerFooter`: `mt-auto flex flex-col gap-2 p-4`. */
+.drw-footer {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 8px;
+  padding: 16px;
+}
+.drw-footer-row { flex-direction: row; justify-content: flex-end; }
+.drw-footer-end { flex-direction: row; justify-content: flex-end; padding: 0px; }
+
+.drw-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.drw-close-dialog { top: -10px; right: -10px; }
+.drw-close:hover { background-color: #f4f4f5; }
+.drw-close:focus { background-color: #e4e4e7; }
+
+.drw-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: #71717a;
+  stroke-width: 2;
+}
+
+/* --- the goal ------------------------------------------------------------------- */
+
+.drw-goal {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px 8px 16px;
+}
+
+.drw-step {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e4e4e7;
+  border-radius: 16px;
+  background-color: #ffffff;
+  cursor: pointer;
+}
+.drw-step:hover { background-color: #f4f4f5; }
+.drw-step:focus { border-color: #a1a1aa; shadow-color: rgba(161, 161, 170, 0.5); shadow-radius: 3px; }
+.drw-step-off { opacity: 0.5; cursor: default; }
+
+.drw-col {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 2px;
+}
+.drw-col-center { align-items: center; flex-grow: 1; }
+.drw-grow { flex-grow: 1; flex-basis: 0px; min-width: 0px; }
+
+.drw-big {
+  color: #09090b;
+  font-size: 64px;
+  font-weight: 700;
+  height: 72px;
+  line-height: 72px;
+  text-align: center;
+}
+
+.drw-unit {
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 500;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.drw-chart {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 6px;
+  height: 120px;
+  margin: 8px 16px 0 16px;
+}
+
+.drw-bar {
+  flex-grow: 1;
+  flex-basis: 0px;
+  border-radius: 3px 3px 0 0;
+  background-color: rgba(9, 9, 11, 0.85);
+}
+
+/* --- rows ------------------------------------------------------------------------ */
+
+.drw-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.drw-text { color: #09090b; font-size: 14px; height: 20px; line-height: 20px; }
+.drw-strong { font-weight: 500; }
+.drw-muted { color: #71717a; font-size: 13px; }
+
+/* --- navigation ------------------------------------------------------------------ */
+
+.drw-nav {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 2px;
+  padding: 0 8px;
+}
+
+.drw-nav-item {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.drw-nav-item:hover { background-color: #f4f4f5; }
+.drw-nav-item:focus { background-color: #f4f4f5; shadow-color: rgba(161, 161, 170, 0.6); shadow-radius: 2px; }
+.drw-nav-item-on { background-color: #f4f4f5; }
+
+.drw-footer-user { border-top: 1px solid #f4f4f5; }
+
+.drw-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 16px;
+  background-color: #e4e4e7;
+}
+.drw-avatar-text { font-size: 12px; font-weight: 600; text-align: center; }
+
+/* --- notifications --------------------------------------------------------------- */
+
+.drw-list { gap: 12px; padding: 0 16px 8px 16px; }
+
+.drw-note {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.drw-dot {
+  width: 8px;
+  height: 8px;
+  margin: 6px 0 0 0;
+  border-radius: 4px;
+  background-color: #0ea5e9;
+}
+.drw-dot-read { background-color: #e4e4e7; }
+
+/* --- settings -------------------------------------------------------------------- */
+
+.drw-settings { gap: 16px; padding: 0 16px 8px 16px; }
+.drw-setting { gap: 16px; }
+
+.drw-switch {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  width: 36px;
+  height: 20px;
+  padding: 0 2px;
+  border-radius: 10px;
+  background-color: #e4e4e7;
+  cursor: pointer;
+}
+.drw-switch-on { background-color: #18181b; justify-content: flex-end; }
+.drw-switch:focus { shadow-color: rgba(161, 161, 170, 0.8); shadow-radius: 3px; }
+
+.drw-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background-color: #ffffff;
+}
+
+/* The responsive card's dialog form: shadcn's DialogContent. */
+.drw-settings-flush { padding: 0px; }
+.drw-dialog {
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+}
+
+/* --- narrow -------------------------------------------------------------------- */
+
+@media (max-width: 600px) {
+  .drw-page { width: 100%; height: 100%; padding: 16px; gap: 12px; }
+  .drw-card { height: 130px; }
+  .drw-caption { height: auto; line-height: 16px; padding: 10px 12px; }
+  .drw-stage { padding: 8px; gap: 6px; }
+  .drw-btn { padding: 0 12px; }
+  .drw-footer-row { flex-direction: column; justify-content: flex-start; }
+  .drw-chart { height: 90px; }
+}

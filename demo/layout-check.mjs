@@ -93,6 +93,7 @@ const DEMOS = [
   ["PaginationDemo", "pagination.css"],
   ["RadioGroupDemo", "radio.css"],
   ["RatingDemo", "rating.css"],
+  ["DrawerDemo", "drawer.css"],
 ];
 
 const rect = (e) => ({

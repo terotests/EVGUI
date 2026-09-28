@@ -41,6 +41,7 @@ DEMOS.push("AutocompleteDemo");
 DEMOS.push("PaginationDemo");
 DEMOS.push("RadioGroupDemo");
 DEMOS.push("RatingDemo");
+DEMOS.push("DrawerDemo");
 for (const name of DEMOS) {
   if (!fs.existsSync(path.join(UI, "bin", name + ".cjs"))) {
     console.error(`compiled ${name} missing — run \`npm run ui:demo:build\` first`);
@@ -82,6 +83,7 @@ fs.writeFileSync(
     'export { PaginationDemo } from "../bin/PaginationDemo.cjs";\n' +
     'export { RadioGroupDemo } from "../bin/RadioGroupDemo.cjs";\n' +
     'export { RatingDemo } from "../bin/RatingDemo.cjs";\n' +
+    'export { DrawerDemo } from "../bin/DrawerDemo.cjs";\n' +
     // The whole modules too, as a list: the browser's text measurer is
     // installed into every one of them (`lib/evg/gl/evg-measure.js`),
     // because two copies of a class are two classes and each compiled demo
@@ -126,6 +128,7 @@ fs.writeFileSync(
     `export const PAGINATION_CSS = ${css("pagination.css")};\n` +
     `export const RADIO_CSS = ${css("radio.css")};\n` +
     `export const RATING_CSS = ${css("rating.css")};\n` +
+    `export const DRAWER_CSS = ${css("drawer.css")};\n` +
     // NOT ONE OF THIS DIRECTORY'S STYLESHEETS: the presets live with the
     // effects they configure, in `lib/evg/gl`, and are read from there by the
     // contact sheet and by the pixel gate as well. The page carries the FILE,

@@ -1,0 +1,1449 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; DrawerDemo — ReUI's Drawer patterns, one card each
+; =============================================================================
+; Five cards, as on https://reui.io/components/drawer (Base UI's Drawer, and
+; shadcn's vaul drawer before it): a trigger each, and pressing it slides a
+; panel in from an edge of the demo over a dimmed, blurred page. The canvas
+; is the "app": the panels cover it, the side ones full height.
+;
+;   Right drawer    ReUI's "Right Drawer": Move Goal, a description, ten
+;                   paragraphs that scroll inside, Submit and Cancel pinned
+;   Bottom drawer   shadcn's Move Goal: a handle, − 350 +, Calories/day, a
+;                   little bar chart, Submit / Cancel
+;   Left drawer     a navigation list; picking a section closes it
+;   Top drawer      notifications, handle at the bottom edge
+;   Responsive      a dialog when the demo is wider than 768px, a bottom
+;                   drawer below that — the same content and the same state
+;
+; THE BEHAVIOUR IS THE CONTROLLER'S. Each drawer is a `DrawerCtl` with
+; `modal` on: open and closed, where the focus goes on open and back to on
+; close, Escape, the overlay press, the slide (an eased move from wherever the
+; panel is, 300ms ease-out for a full one) and the drag — the panel follows
+; the pointer towards its edge and is dismissed past a quarter of its size or
+; on a fling, and snaps back otherwise. This file draws ReUI's tree from the
+; controllers' ids, places the panel where the controller says, and owns what
+; a controller cannot know: the Tab ring (trapped while a drawer is open, as
+; Base UI's FocusScope is), the scrolling body, and the goal and switches.
+;
+; The slide is the controller's clock, not a stylesheet transition: a drag
+; has to put the panel exactly under the pointer, every frame, and let go of
+; it anywhere, and a transition would chase the pointer instead.
+; =============================================================================
+
+Import "../src/DrawerCtl.rgr"
+Import "../src/UiCtl.rgr"
+Import "../src/UiTree.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGUnit.rgr"
+Import "pkg:evg/EVGLayout.rgr"
+Import "pkg:evg/EVGDisplayList.rgr"
+Import "pkg:evg/EVGStyleSheet.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+Import "pkg:evg/EVGA11yFromTree.rgr"
+Import "pkg:evg/EVGHitTest.rgr"
+
+treefactory Dw {
+    child addChild
+    text  textContent
+
+    tag Page     EVGElement (props (className "drw-page"))
+    tag Card     EVGElement (props (className "drw-card"))
+    tag Caption  EVGElement (props (className "drw-caption") (elementType 1))
+    tag Stage    EVGElement (props (className "drw-stage"))
+    tag Trigger  EVGElement (props (className "drw-btn drw-btn-outline") (role "button") (a11yFocusable true) (a11yHasPopup "dialog"))
+    tag BtnTx    EVGElement (props (className "drw-btn-text") (elementType 1))
+    tag Status   EVGElement (props (className "drw-status") (elementType 1) (role "status"))
+
+    tag Overlay  EVGElement (props (className "drw-overlay"))
+    tag Panel    EVGElement (props (className "drw-panel"))
+    tag Handle   EVGElement (props (className "drw-handle") (a11yHidden true))
+    tag Inner    EVGElement (props (className "drw-inner"))
+    tag Header   EVGElement (props (className "drw-header"))
+    tag Title    EVGElement (props (className "drw-title") (elementType 1) (role "heading") (a11yLevel 2))
+    tag Desc     EVGElement (props (className "drw-desc") (elementType 1) (role "text"))
+    tag Scroll   EVGElement (props (className "drw-scroll") (role "region") (a11yFocusable true))
+    tag Para     EVGElement (props (className "drw-para") (elementType 1) (role "text"))
+    tag Footer   EVGElement (props (className "drw-footer"))
+    tag Button   EVGElement (props (className "drw-btn") (role "button") (a11yFocusable true))
+    tag Close    EVGElement (props (className "drw-close") (role "button") (a11yFocusable true) (a11yLabel "Close"))
+    tag Icon     EVGElement (props (className "drw-icon") (tagName "path") (elementType 3) (viewBox "0 0 24 24") (a11yHidden true))
+    tag Row      EVGElement (props (className "drw-row"))
+    tag Col      EVGElement (props (className "drw-col"))
+    tag Text     EVGElement (props (className "drw-text") (elementType 1))
+    tag Box      EVGElement (props (className "drw-box"))
+
+    ; --- the goal ---
+    tag Goal     EVGElement (props (className "drw-goal"))
+    tag Step     EVGElement (props (className "drw-step") (role "button") (a11yFocusable true))
+    tag Big      EVGElement (props (className "drw-big") (elementType 1) (role "status"))
+    tag Unit     EVGElement (props (className "drw-unit") (elementType 1))
+    tag Chart    EVGElement (props (className "drw-chart") (a11yHidden true))
+    tag Bar      EVGElement (props (className "drw-bar"))
+
+    ; --- navigation ---
+    tag Nav      EVGElement (props (className "drw-nav") (role "navigation"))
+    tag NavItem  EVGElement (props (className "drw-nav-item") (role "button") (a11yFocusable true))
+
+    ; --- notifications, switches ---
+    tag Note     EVGElement (props (className "drw-note"))
+    tag Dot      EVGElement (props (className "drw-dot") (a11yHidden true))
+    tag Switch   EVGElement (props (className "drw-switch") (role "switch") (a11yFocusable true))
+    tag Thumb    EVGElement (props (className "drw-thumb") (a11yHidden true))
+}
+
+class DrawerDemo {
+
+    def rightDr:DrawerCtl (new DrawerCtl())
+    def bottomDr:DrawerCtl (new DrawerCtl())
+    def leftDr:DrawerCtl (new DrawerCtl())
+    def topDr:DrawerCtl (new DrawerCtl())
+    def respDr:DrawerCtl (new DrawerCtl())
+
+    def root@(optional):EVGElement
+    def sheet@(optional):EVGStyleSheet
+    def layout@(optional):EVGLayout
+
+    def hovered:string ""
+    def pressed:string ""
+    def focused:string ""
+
+    ; The goal (shadcn: 350, 200..400 in tens) and what was submitted.
+    def goal:int 350
+    def savedGoal:int 350
+    def rightStatus:string ""
+    def bottomStatus:string ""
+    def leftStatus:string ""
+    def topStatus:string ""
+    def respStatus:string ""
+    ; The left drawer's sections, and the one that is current.
+    def section:string "dashboard"
+    ; The notifications, read or not.
+    def unread:boolean true
+    ; The responsive card's switches: what they show, and what was saved.
+    def swEmail:boolean true
+    def swPush:boolean false
+    def swNews:boolean true
+    def savedEmail:boolean true
+    def savedPush:boolean false
+    def savedNews:boolean true
+
+    ; The right drawer's scrolling body, and how far it can go.
+    def bodyScroll:double 0.0
+    def bodyMax:double 0.0
+    ; A press on a panel that may become a drag, and whether it has moved.
+    def dragFrom:string ""
+    def dragMoved:boolean false
+
+    def pageW:double 900.0
+    def pageH:double 520.0
+    ; The page size the tree was built at: the page resizes the demo from
+    ; outside, and a tree built for another width has the wrong card widths.
+    def builtW:double 0.0
+    def builtH:double 0.0
+
+    Constructor () {
+    }
+
+    fn dress:void (d:DrawerCtl tid:string name:string title:string desc:string side:string) {
+        d.tid = tid
+        d.name = name
+        d.title = title
+        d.description = desc
+        d.side = side
+        d.modal = true
+        d.easing = "ease-out"
+        d.durationMs = 300.0
+    }
+
+    fn init:void (css:string) {
+        def s (new EVGStyleSheet())
+        s.parse(css)
+        sheet = s
+        this.dress(rightDr "drw-right" "Right Drawer" "Move Goal" "Set your daily activity goal." "right")
+        rightDr.initialFocus = "drw-right-body"
+        this.dress(bottomDr "drw-bottom" "Open Drawer" "Move Goal" "Set your daily activity goal." "bottom")
+        bottomDr.initialFocus = "drw-bottom-dec"
+        this.dress(leftDr "drw-left" "Menu" "Acme Inc." "Jump to a section of the workspace." "left")
+        this.dress(topDr "drw-top" "Notifications" "Notifications" "You have 3 unread messages." "top")
+        topDr.initialFocus = "drw-top-read"
+        this.dress(respDr "drw-resp" "Edit preferences" "Notification settings" "Choose what we tell you about." "bottom")
+        respDr.initialFocus = "drw-resp-sw-email"
+        this.rebuild()
+    }
+
+    ; --- lookups ----------------------------------------------------------------
+
+    fn all:[DrawerCtl] () {
+        def a:[DrawerCtl]
+        push a rightDr
+        push a bottomDr
+        push a leftDr
+        push a topDr
+        push a respDr
+        return a
+    }
+
+    fn keyOf:string (d:DrawerCtl) {
+        return (substring d.tid 4 (strlen d.tid))
+    }
+
+    ; Which drawer is on the page, sliding out included: "right", "bottom",
+    ; "left", "top", "resp" or "".
+    fn openWhich:string () {
+        def a:[DrawerCtl] (this.all())
+        def i:int 0
+        while (i < (array_length a)) {
+            def d:DrawerCtl (itemAt a i)
+            if d.open {
+                return (this.keyOf(d))
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    ; Open and staying: not on its way out. The page is inert only then.
+    fn activeWhich:string () {
+        def w:string (this.openWhich())
+        if ((strlen w) == 0) {
+            return ""
+        }
+        def d:DrawerCtl (this.ctlOf(w))
+        if d.closing {
+            return ""
+        }
+        return w
+    }
+
+    fn ctlOf:DrawerCtl (w:string) {
+        if (w == "right") {
+            return rightDr
+        }
+        if (w == "bottom") {
+            return bottomDr
+        }
+        if (w == "left") {
+            return leftDr
+        }
+        if (w == "top") {
+            return topDr
+        }
+        return respDr
+    }
+
+    fn isNarrow:boolean () {
+        return (pageW < 600.0)
+    }
+
+    ; The responsive card is a dialog on a wide demo and a drawer on a narrow
+    ; one — decided on the demo's own width, the one its layout knows.
+    fn respIsDialog:boolean () {
+        return (pageW >= 768.0)
+    }
+
+    fn sideWidth:double (want:double) {
+        def cap:double (pageW * 0.85)
+        if (want > cap) {
+            return (to_double (to_int cap))
+        }
+        return want
+    }
+
+    sfn byId:EVGElement (el:EVGElement tid:string) {
+        if (el.id == tid) {
+            return el
+        }
+        def i:int 0
+        while (i < (el.getChildCount())) {
+            def kid:EVGElement (DrawerDemo.byId((el.getChild(i)) tid))
+            if (kid.id == tid) {
+                return kid
+            }
+            i = (i + 1)
+        }
+        return el
+    }
+
+    sfn begins:boolean (s:string prefix:string) {
+        def n:int (strlen prefix)
+        if ((strlen s) < n) {
+            return false
+        }
+        return ((substring s 0 n) == prefix)
+    }
+
+    ; --- the pieces -------------------------------------------------------------
+
+    fn button:EVGElement (id:string label:string variant:string) {
+        def txCls:string "drw-btn-text"
+        if (variant == "primary") {
+            txCls = "drw-btn-text drw-btn-text-on"
+        }
+        return (tree Dw
+            (Button (props (id id) (className ("drw-btn drw-btn-" + variant)) (a11yLabel label))
+                (BtnTx (props (className txCls)) label)))
+    }
+
+    fn trigger:EVGElement (d:DrawerCtl) {
+        def el (tree Dw
+            (Trigger (props (id (d.triggerTid())) (a11yLabel d.name))
+                (BtnTx d.name)))
+        if (d.open && (d.closing == false)) {
+            el.a11yExpanded = (EVGA11yTri.yes())
+        } {
+            el.a11yExpanded = (EVGA11yTri.no())
+        }
+        return el
+    }
+
+    fn card:EVGElement (key:string caption:string d:DrawerCtl status:string) {
+        def c (tree Dw
+            (Card (props (id ("drw-card-" + key)))
+                (Caption caption)))
+        ; Two to a row on a phone, the width written because a percentage of
+        ; a wrapping row is not something the layout shares out.
+        if (this.isNarrow()) {
+            UiTree.inline(c "width" ((to_string (to_int ((pageW - 44.0) / 2.0))) + "px"))
+        }
+        def st (tree Dw (Stage (child (this.trigger(d)))))
+        st.addChild((tree Dw (Status (props (id ("drw-status-" + key))) status)))
+        c.addChild(st)
+        return c
+    }
+
+    fn icon:EVGElement (path:string) {
+        return (tree Dw (Icon (props (svgPath path))))
+    }
+
+    fn closeX:EVGElement (d:DrawerCtl) {
+        return (tree Dw
+            (Close (props (id (d.closeTid())))
+                (Icon (props (svgPath "M18 6 L6 18 M6 6 L18 18")))))
+    }
+
+    fn header:EVGElement (d:DrawerCtl) {
+        return (tree Dw
+            (Header (props (id (d.tid + "-header")))
+                (Title (props (id (d.titleTid()))) d.title)
+                (Desc (props (id (d.descTid()))) d.description)))
+    }
+
+    ; The surface: role, modality, labelling, and where the controller says
+    ; the slide has got to. On its way out it is already gone for a reader —
+    ; the focus is back on the trigger, and a modal still in the tree would
+    ; hide that trigger from them.
+    fn panel:EVGElement (d:DrawerCtl) {
+        def p (tree Dw (Panel (props (id (d.panelTid())) (className ("drw-panel drw-panel-" + d.side)))))
+        if d.closing {
+            p.a11yHidden = true
+        } {
+            p.role = "dialog"
+            p.a11yModal = true
+            p.a11yLabel = d.title
+            p.a11yLabelledBy = (d.titleTid())
+            p.a11yDescribedBy = (d.descTid())
+            p.a11yDescription = d.description
+        }
+        UiTree.surface(p "free" "start")
+        p.overlayX = (d.panelX())
+        p.overlayY = (d.panelY())
+        if ((d.side == "left") || (d.side == "right")) {
+            p.width = (EVGUnit.px(d.width))
+            p.height = (EVGUnit.px(pageH))
+        } {
+            p.width = (EVGUnit.px(pageW))
+        }
+        return p
+    }
+
+    ; The dim and the blur behind, as much of them as the panel is in.
+    fn overlay:EVGElement (d:DrawerCtl) {
+        def o (tree Dw (Overlay (props (id (d.overlayTid())))))
+        UiTree.backdrop(o)
+        def f:double (d.visibleFraction())
+        def a:double ((to_double (to_int (f * 100.0))) / 1000.0)
+        def b:double ((to_double (to_int (f * 40.0))) / 10.0)
+        UiTree.inline(o "background-color" ("rgba(0, 0, 0, " + (to_string a) + ")"))
+        UiTree.inline(o "backdrop-filter" ("blur(" + (to_string b) + "px)"))
+        return o
+    }
+
+    ; A top or bottom sheet's content column: vaul's `max-w-sm`, centred,
+    ; or the whole width on a page narrower than that. In px, because a
+    ; percentage width under a sheet sized after the layout came out short.
+    fn sizeInner:void (el:EVGElement want:double) {
+        def w:double want
+        if (w > pageW) {
+            w = pageW
+        }
+        UiTree.inline(el "width" ((to_string (to_int w)) + "px"))
+    }
+
+    fn lorem:string () {
+        return "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
+    }
+
+    ; ReUI's Right Drawer, as it is.
+    fn rightPanel:EVGElement () {
+        def d:DrawerCtl rightDr
+        def p:EVGElement (this.panel(d))
+        p.addChild((this.header(d)))
+        def sc (tree Dw (Scroll (props (id "drw-right-body") (a11yLabel "Goal details"))))
+        sc.scrollTop = bodyScroll
+        def i:int 0
+        while (i < 10) {
+            sc.addChild((tree Dw (Para (props (id ("drw-right-p" + (to_string i)))) (this.lorem()))))
+            i = (i + 1)
+        }
+        p.addChild(sc)
+        def foot (tree Dw (Footer (props (id "drw-right-footer"))))
+        foot.addChild((this.button("drw-right-submit" "Submit" "primary")))
+        foot.addChild((this.button((d.closeTid()) "Cancel" "outline")))
+        p.addChild(foot)
+        return p
+    }
+
+    fn bars:[int] () {
+        def v:[int]
+        push v 400
+        push v 300
+        push v 200
+        push v 300
+        push v 200
+        push v 278
+        push v 189
+        push v 239
+        push v 300
+        push v 200
+        push v 278
+        push v 189
+        push v 349
+        return v
+    }
+
+    fn stepBtn:EVGElement (id:string label:string path:string off:boolean) {
+        def b (tree Dw (Step (props (id id) (a11yLabel label))))
+        if off {
+            b.a11yDisabled = true
+            b.className = "drw-step drw-step-off"
+        }
+        b.addChild((this.icon(path)))
+        return b
+    }
+
+    ; shadcn's drawer demo: the handle, − 350 +, and the week in bars.
+    fn bottomPanel:EVGElement () {
+        def d:DrawerCtl bottomDr
+        def p:EVGElement (this.panel(d))
+        p.addChild((tree Dw (Handle (props (id "drw-bottom-handle")))))
+        def inner (tree Dw (Inner (props (id "drw-bottom-inner"))))
+        this.sizeInner(inner 384.0)
+        def head:EVGElement (this.header(d))
+        head.className = "drw-header drw-header-center"
+        inner.addChild(head)
+        def g (tree Dw (Goal (props (id "drw-bottom-goal"))))
+        g.addChild((this.stepBtn("drw-bottom-dec" "Decrease" "M5 12 L19 12" (goal <= 200))))
+        def goalText:string (to_string goal)
+        def mid (tree Dw
+            (Col (props (id "drw-bottom-value") (className "drw-col drw-col-center"))
+                (Big (props (id "drw-bottom-number") (a11yLabel (goalText + " calories per day"))) goalText)
+                (Unit (props (id "drw-bottom-unit")) "Calories/day")))
+        g.addChild(mid)
+        g.addChild((this.stepBtn("drw-bottom-inc" "Increase" "M5 12 L19 12 M12 5 L12 19" (goal >= 400))))
+        inner.addChild(g)
+        def ch (tree Dw (Chart (props (id "drw-bottom-chart"))))
+        def chartH:int 120
+        if (this.isNarrow()) {
+            chartH = 90
+        }
+        def v:[int] (this.bars())
+        def i:int 0
+        while (i < (array_length v)) {
+            def b (tree Dw (Bar (props (id ("drw-bottom-bar" + (to_string i))))))
+            b.height = (EVGUnit.px((to_double (idiv ((itemAt v i) * chartH) 400))))
+            ch.addChild(b)
+            i = (i + 1)
+        }
+        inner.addChild(ch)
+        def foot (tree Dw (Footer (props (id "drw-bottom-footer"))))
+        foot.addChild((this.button("drw-bottom-submit" "Submit" "primary")))
+        foot.addChild((this.button((d.closeTid()) "Cancel" "outline")))
+        inner.addChild(foot)
+        p.addChild(inner)
+        return p
+    }
+
+    fn sections:[string] () {
+        def a:[string]
+        push a "dashboard|Dashboard|M3 3 L10 3 L10 10 L3 10 Z M14 3 L21 3 L21 10 L14 10 Z M14 14 L21 14 L21 21 L14 21 Z M3 14 L10 14 L10 21 L3 21 Z"
+        push a "projects|Projects|M3 6 L9 6 L11 8 L21 8 L21 19 L3 19 Z"
+        push a "team|Team|M16 21 L16 19 C16 16.8 14.2 15 12 15 L6 15 C3.8 15 2 16.8 2 19 L2 21 M9 11 C11.2 11 13 9.2 13 7 C13 4.8 11.2 3 9 3 C6.8 3 5 4.8 5 7 C5 9.2 6.8 11 9 11 Z M22 21 L22 19 C22 17.2 20.8 15.6 19 15.1"
+        push a "calendar|Calendar|M4 5 L20 5 L20 21 L4 21 Z M4 10 L20 10 M8 3 L8 7 M16 3 L16 7"
+        push a "documents|Documents|M14 3 L6 3 L6 21 L18 21 L18 7 Z M14 3 L14 7 L18 7 M9 13 L15 13 M9 17 L15 17"
+        push a "reports|Reports|M4 20 L4 10 M10 20 L10 4 M16 20 L16 13 M2 20 L22 20"
+        push a "settings|Settings|M12 15 C13.7 15 15 13.7 15 12 C15 10.3 13.7 9 12 9 C10.3 9 9 10.3 9 12 C9 13.7 10.3 15 12 15 Z M12 2 L12 5 M12 19 L12 22 M2 12 L5 12 M19 12 L22 12 M4.9 4.9 L7 7 M17 17 L19.1 19.1 M4.9 19.1 L7 17 M17 7 L19.1 4.9"
+        return a
+    }
+
+    fn part:string (row:string n:int) {
+        def at:int 0
+        def start:int 0
+        def i:int 0
+        while (i < (strlen row)) {
+            if ((substring row i (i + 1)) == "|") {
+                if (at == n) {
+                    return (substring row start i)
+                }
+                at = (at + 1)
+                start = (i + 1)
+            }
+            i = (i + 1)
+        }
+        if (at == n) {
+            return (substring row start (strlen row))
+        }
+        return ""
+    }
+
+    fn navTid:string (key:string) {
+        return ("drw-left-nav-" + key)
+    }
+
+    fn sectionLabel:string (key:string) {
+        def a:[string] (this.sections())
+        def i:int 0
+        while (i < (array_length a)) {
+            def row:string (itemAt a i)
+            if ((this.part(row 0)) == key) {
+                return (this.part(row 1))
+            }
+            i = (i + 1)
+        }
+        return key
+    }
+
+    fn leftPanel:EVGElement () {
+        def d:DrawerCtl leftDr
+        def p:EVGElement (this.panel(d))
+        p.addChild((this.header(d)))
+        def nav (tree Dw (Nav (props (id "drw-left-nav") (a11yLabel "Workspace"))))
+        def a:[string] (this.sections())
+        def i:int 0
+        while (i < (array_length a)) {
+            def row:string (itemAt a i)
+            def key:string (this.part(row 0))
+            def label:string (this.part(row 1))
+            def it (tree Dw (NavItem (props (id (this.navTid(key))) (a11yLabel label))))
+            if (key == section) {
+                it.className = "drw-nav-item drw-nav-item-on"
+                it.a11yCurrent = "page"
+            }
+            it.addChild((this.icon((this.part(row 2)))))
+            it.addChild((tree Dw (Text (props (id ((this.navTid(key)) + "-text"))) label)))
+            nav.addChild(it)
+            i = (i + 1)
+        }
+        p.addChild(nav)
+        def foot (tree Dw (Footer (props (id "drw-left-footer") (className "drw-footer drw-footer-user"))))
+        foot.addChild((tree Dw
+            (Row (props (id "drw-left-user") (className "drw-row drw-user"))
+                (Box (props (className "drw-avatar")) (Text (props (className "drw-text drw-avatar-text")) "SC"))
+                (Col (Text (props (className "drw-text drw-strong")) "shadcn") (Text (props (className "drw-text drw-muted")) "m@example.com")))))
+        p.addChild(foot)
+        p.addChild((this.closeX(d)))
+        return p
+    }
+
+    fn topPanel:EVGElement () {
+        def d:DrawerCtl topDr
+        def p:EVGElement (this.panel(d))
+        def inner (tree Dw (Inner (props (id "drw-top-inner"))))
+        this.sizeInner(inner 560.0)
+        def head:EVGElement (this.header(d))
+        if (unread == false) {
+            def desc:EVGElement (DrawerDemo.byId(head (d.descTid())))
+            desc.textContent = "You are all caught up."
+        }
+        inner.addChild(head)
+        def notes:[string] ([] _:string ("Your call has been confirmed.|1 hour ago" "You have a new message!|1 hour ago" "Your subscription is expiring soon!|2 hours ago"))
+        def list (tree Dw (Col (props (id "drw-top-list") (className "drw-col drw-list"))))
+        def i:int 0
+        while (i < (array_length notes)) {
+            def row:string (itemAt notes i)
+            def n (tree Dw (Note (props (id ("drw-top-note" + (to_string i))))))
+            def dot (tree Dw (Dot))
+            if (unread == false) {
+                dot.className = "drw-dot drw-dot-read"
+            }
+            n.addChild(dot)
+            n.addChild((tree Dw
+                (Col
+                    (Text (props (className "drw-text drw-strong")) (this.part(row 0)))
+                    (Text (props (className "drw-text drw-muted")) (this.part(row 1))))))
+            list.addChild(n)
+            i = (i + 1)
+        }
+        inner.addChild(list)
+        def foot (tree Dw (Footer (props (id "drw-top-footer") (className "drw-footer drw-footer-row"))))
+        foot.addChild((this.button("drw-top-read" "Mark all as read" "primary")))
+        foot.addChild((this.button((d.closeTid()) "Close" "outline")))
+        inner.addChild(foot)
+        p.addChild(inner)
+        p.addChild((tree Dw (Handle (props (id "drw-top-handle") (className "drw-handle drw-handle-bottom")))))
+        return p
+    }
+
+    fn switchRow:EVGElement (key:string label:string hint:string on:boolean) {
+        def sw (tree Dw (Switch (props (id ("drw-resp-sw-" + key)) (a11yLabel label))))
+        def th (tree Dw (Thumb))
+        if on {
+            sw.a11yChecked = (EVGA11yTri.yes())
+            sw.className = "drw-switch drw-switch-on"
+            th.className = "drw-thumb drw-thumb-on"
+        } {
+            sw.a11yChecked = (EVGA11yTri.no())
+        }
+        sw.addChild(th)
+        def r (tree Dw
+            (Row (props (id ("drw-resp-row-" + key)) (className "drw-row drw-setting"))
+                (Col (props (className "drw-col drw-grow"))
+                    (Text (props (className "drw-text drw-strong")) label)
+                    (Text (props (className "drw-text drw-muted")) hint))))
+        r.addChild(sw)
+        return r
+    }
+
+    fn respBody:EVGElement () {
+        def c (tree Dw (Col (props (id "drw-resp-list") (className "drw-col drw-settings"))))
+        c.addChild((this.switchRow("email" "Email digests" "A summary of the week, on Mondays." swEmail)))
+        c.addChild((this.switchRow("push" "Push notifications" "Mentions and replies, as they happen." swPush)))
+        c.addChild((this.switchRow("news" "Product updates" "New features, once a month." swNews)))
+        return c
+    }
+
+    ; The same content twice over: a centred dialog, or a bottom drawer.
+    fn respPanel:EVGElement () {
+        def d:DrawerCtl respDr
+        if (this.respIsDialog()) {
+            def c (tree Dw (Panel (props (id (d.panelTid())) (className "drw-panel drw-dialog"))))
+            if d.closing {
+                c.a11yHidden = true
+            } {
+                c.role = "dialog"
+                c.a11yModal = true
+                c.a11yLabel = d.title
+                c.a11yLabelledBy = (d.titleTid())
+                c.a11yDescribedBy = (d.descTid())
+                c.a11yDescription = d.description
+            }
+            UiTree.surface(c "center" "center")
+            c.width = (EVGUnit.px(425.0))
+            UiTree.inline(c "opacity" (to_string ((to_double (to_int ((d.visibleFraction()) * 100.0))) / 100.0)))
+            def head:EVGElement (this.header(d))
+            head.className = "drw-header drw-header-dialog"
+            c.addChild(head)
+            def rb:EVGElement (this.respBody())
+            rb.className = "drw-col drw-settings drw-settings-flush"
+            c.addChild(rb)
+            def foot (tree Dw (Footer (props (id "drw-resp-footer") (className "drw-footer drw-footer-end"))))
+            foot.addChild((this.button("drw-resp-cancel" "Cancel" "outline")))
+            foot.addChild((this.button("drw-resp-save" "Save" "primary")))
+            c.addChild(foot)
+            def x:EVGElement (this.closeX(d))
+            x.className = "drw-close drw-close-dialog"
+            c.addChild(x)
+            return c
+        }
+        def p:EVGElement (this.panel(d))
+        p.addChild((tree Dw (Handle (props (id "drw-resp-handle")))))
+        def inner (tree Dw (Inner (props (id "drw-resp-inner"))))
+        this.sizeInner(inner 384.0)
+        inner.addChild((this.header(d)))
+        inner.addChild((this.respBody()))
+        def foot2 (tree Dw (Footer (props (id "drw-resp-footer"))))
+        foot2.addChild((this.button("drw-resp-save" "Save" "primary")))
+        foot2.addChild((this.button("drw-resp-cancel" "Cancel" "outline")))
+        inner.addChild(foot2)
+        p.addChild(inner)
+        return p
+    }
+
+    fn pageBody:EVGElement () {
+        def p (tree Dw (Page (props (id "drw-page"))))
+        p.addChild((this.card("right" "Right drawer, scrolling body" rightDr rightStatus)))
+        p.addChild((this.card("bottom" "Bottom drawer with a handle" bottomDr bottomStatus)))
+        p.addChild((this.card("left" "Left navigation drawer" leftDr leftStatus)))
+        p.addChild((this.card("top" "Top drawer" topDr topStatus)))
+        p.addChild((this.card("resp" "Responsive: dialog or drawer" respDr respStatus)))
+        ; Last, so the scrim is over every card and the panel over the scrim.
+        def w:string (this.openWhich())
+        if ((strlen w) > 0) {
+            def d:DrawerCtl (this.ctlOf(w))
+            p.addChild((this.overlay(d)))
+            if (w == "right") {
+                p.addChild((this.rightPanel()))
+            }
+            if (w == "bottom") {
+                p.addChild((this.bottomPanel()))
+            }
+            if (w == "left") {
+                p.addChild((this.leftPanel()))
+            }
+            if (w == "top") {
+                p.addChild((this.topPanel()))
+            }
+            if (w == "resp") {
+                p.addChild((this.respPanel()))
+            }
+        }
+        return p
+    }
+
+    ; The page size goes to every controller: where "right" and "bottom" are,
+    ; and how wide a side panel may be.
+    fn sizeCtls:void () {
+        rightDr.pageWidth = pageW
+        rightDr.pageHeight = pageH
+        rightDr.width = (this.sideWidth(384.0))
+        rightDr.panelHeight = pageH
+        leftDr.pageWidth = pageW
+        leftDr.pageHeight = pageH
+        leftDr.width = (this.sideWidth(300.0))
+        leftDr.panelHeight = pageH
+        bottomDr.pageWidth = pageW
+        bottomDr.pageHeight = pageH
+        bottomDr.width = pageW
+        topDr.pageWidth = pageW
+        topDr.pageHeight = pageH
+        topDr.width = pageW
+        respDr.pageWidth = pageW
+        respDr.pageHeight = pageH
+        respDr.width = pageW
+    }
+
+    fn rebuild:void () {
+        this.sizeCtls()
+        builtW = pageW
+        builtH = pageH
+        root = (this.pageBody())
+    }
+
+    ; --- layout -----------------------------------------------------------------
+
+    fn markStates:void (el:EVGElement) {
+        el.isHovered = ((strlen hovered) > 0) && (el.id == hovered)
+        el.isFocused = ((strlen focused) > 0) && (el.id == focused)
+        el.isPressed = ((strlen pressed) > 0) && (el.id == pressed)
+        def i:int 0
+        while (i < (el.getChildCount())) {
+            this.markStates((el.getChild(i)))
+            i = (i + 1)
+        }
+    }
+
+    ; Laid out afresh on every ask. Two things are only known after a layout,
+    ; and each may take a second pass: how tall a top or bottom panel came
+    ; out (the controller slides it by its own height), and how far the right
+    ; drawer's body can scroll.
+    fn laidOut:EVGLayout () {
+        if ((builtW != pageW) || (builtH != pageH)) {
+            this.rebuild()
+        }
+        def r:EVGElement (unwrap root)
+        def s:EVGStyleSheet (unwrap sheet)
+        this.markStates(r)
+        s.setViewport(pageW pageH false)
+        s.applyTree(r "")
+        def lay (new EVGLayout())
+        lay.setPageSize(pageW pageH)
+        lay.layout(r)
+        layout = lay
+        def again:boolean false
+        def w:string (this.openWhich())
+        if ((strlen w) > 0) {
+            def d:DrawerCtl (this.ctlOf(w))
+            def pn:EVGElement (DrawerDemo.byId(r (d.panelTid())))
+            if ((pn.id == (d.panelTid())) && (d.isVertical())) {
+                def h:double pn.calculatedHeight
+                def dh:double (h - d.panelHeight)
+                if ((dh > 0.5) || (dh < -0.5)) {
+                    d.panelHeight = h
+                    again = true
+                }
+                def y:double (d.panelY())
+                if ((pn.overlayY != y) && (((this.respIsDialog()) == false) || (w != "resp"))) {
+                    pn.overlayY = y
+                    pn.overlayX = (d.panelX())
+                    again = true
+                }
+            }
+        }
+        if (w == "left") {
+            this.fillBetween(r lay "drw-left-nav" "drw-left-header" "drw-left-footer")
+        }
+        if (w == "right") {
+            this.fillBetween(r lay "drw-right-body" "drw-right-header" "drw-right-footer")
+            def vp:EVGElement (DrawerDemo.byId(r "drw-right-body"))
+            if (vp.id == "drw-right-body") {
+                def mx:double (vp.scrollHeight - (vp.clientHeight()))
+                if (mx < 0.0) {
+                    mx = 0.0
+                }
+                bodyMax = mx
+                if (bodyScroll > mx) {
+                    bodyScroll = mx
+                }
+                if (vp.scrollTop != bodyScroll) {
+                    vp.scrollTop = bodyScroll
+                    again = true
+                }
+            }
+        }
+        if again {
+            lay.layout(r)
+        }
+        return lay
+    }
+
+    ; A side panel's middle is what its header and footer leave of the page's
+    ; height, so the footer is pinned to the bottom edge. Written as a height
+    ; after a first layout has measured the two.
+    fn fillBetween:void (r:EVGElement lay:EVGLayout midId:string headId:string footId:string) {
+        def s:EVGStyleSheet (unwrap sheet)
+        def mid:EVGElement (DrawerDemo.byId(r midId))
+        def hd:EVGElement (DrawerDemo.byId(r headId))
+        def ft:EVGElement (DrawerDemo.byId(r footId))
+        if (((mid.id != midId) || (hd.id != headId)) || (ft.id != footId)) {
+            return
+        }
+        def bh:double ((pageH - hd.calculatedHeight) - ft.calculatedHeight)
+        if (bh < 40.0) {
+            bh = 40.0
+        }
+        def dbh:double (bh - mid.calculatedHeight)
+        if ((dbh > 0.5) || (dbh < -0.5)) {
+            UiTree.inline(mid "height" ((to_string (to_int bh)) + "px"))
+            s.applyTree(r "")
+            lay.layout(r)
+        }
+    }
+
+    ; --- the clock --------------------------------------------------------------
+
+    fn tick:boolean (dtMs:double) {
+        def w:string (this.openWhich())
+        if ((strlen w) == 0) {
+            return false
+        }
+        def d:DrawerCtl (this.ctlOf(w))
+        if ((d.animating()) == false) {
+            return false
+        }
+        d.tickCtl(dtMs)
+        this.rebuild()
+        return (d.animating())
+    }
+
+    fn busyNow:boolean () {
+        def w:string (this.openWhich())
+        if ((strlen w) == 0) {
+            return false
+        }
+        def d:DrawerCtl (this.ctlOf(w))
+        return (d.animating())
+    }
+
+    ; Run the clock to rest, for a host (or a check) with no frames to give.
+    fn settle:void () {
+        def n:int 0
+        while ((this.busyNow()) && (n < 200)) {
+            this.tick(16.0)
+            n = (n + 1)
+        }
+    }
+
+    ; --- opening and closing ------------------------------------------------------
+
+    fn openFrom:boolean (target:string) {
+        def a:[DrawerCtl] (this.all())
+        def i:int 0
+        while (i < (array_length a)) {
+            def d:DrawerCtl (itemAt a i)
+            if (target == (d.triggerTid())) {
+                this.prepare((this.keyOf(d)))
+                def next:string (d.activate(target))
+                if ((strlen next) > 0) {
+                    focused = next
+                    this.rebuild()
+                    return true
+                }
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    ; What each drawer starts from: the goal and the switches as last saved,
+    ; the body at its top.
+    fn prepare:void (w:string) {
+        if (w == "right") {
+            bodyScroll = 0.0
+            rightStatus = ""
+        }
+        if (w == "bottom") {
+            goal = savedGoal
+            bottomStatus = ""
+        }
+        if (w == "left") {
+            leftStatus = ""
+            leftDr.initialFocus = (this.navTid(section))
+        }
+        if (w == "top") {
+            topStatus = ""
+        }
+        if (w == "resp") {
+            swEmail = savedEmail
+            swPush = savedPush
+            swNews = savedNews
+            respStatus = ""
+        }
+    }
+
+    fn closeOpen:void () {
+        def w:string (this.activeWhich())
+        if ((strlen w) == 0) {
+            return
+        }
+        def d:DrawerCtl (this.ctlOf(w))
+        focused = (d.closeAndRestore())
+        dragFrom = ""
+        this.rebuild()
+    }
+
+    fn setGoal:boolean (v:int) {
+        def g:int v
+        if (g < 200) {
+            g = 200
+        }
+        if (g > 400) {
+            g = 400
+        }
+        if (g == goal) {
+            return false
+        }
+        goal = g
+        ; A step button that has just become disabled hands the focus to its
+        ; partner, as a disabled <button> would lose it.
+        if ((focused == "drw-bottom-dec") && (goal <= 200)) {
+            focused = "drw-bottom-inc"
+        }
+        if ((focused == "drw-bottom-inc") && (goal >= 400)) {
+            focused = "drw-bottom-dec"
+        }
+        this.rebuild()
+        return true
+    }
+
+    ; --- the Tab ring ---------------------------------------------------------------
+
+    fn ring:[string] () {
+        def r:[string]
+        def w:string (this.activeWhich())
+        if (w == "right") {
+            push r "drw-right-body"
+            push r "drw-right-submit"
+            push r (rightDr.closeTid())
+            return r
+        }
+        if (w == "bottom") {
+            if (goal > 200) {
+                push r "drw-bottom-dec"
+            }
+            if (goal < 400) {
+                push r "drw-bottom-inc"
+            }
+            push r "drw-bottom-submit"
+            push r (bottomDr.closeTid())
+            return r
+        }
+        if (w == "left") {
+            def a:[string] (this.sections())
+            def i:int 0
+            while (i < (array_length a)) {
+                push r (this.navTid((this.part((itemAt a i) 0))))
+                i = (i + 1)
+            }
+            push r (leftDr.closeTid())
+            return r
+        }
+        if (w == "top") {
+            push r "drw-top-read"
+            push r (topDr.closeTid())
+            return r
+        }
+        if (w == "resp") {
+            push r "drw-resp-sw-email"
+            push r "drw-resp-sw-push"
+            push r "drw-resp-sw-news"
+            if (this.respIsDialog()) {
+                push r "drw-resp-cancel"
+                push r "drw-resp-save"
+                push r (respDr.closeTid())
+            } {
+                push r "drw-resp-save"
+                push r "drw-resp-cancel"
+            }
+            return r
+        }
+        def a2:[DrawerCtl] (this.all())
+        def j:int 0
+        while (j < (array_length a2)) {
+            def d:DrawerCtl (itemAt a2 j)
+            push r (d.triggerTid())
+            j = (j + 1)
+        }
+        return r
+    }
+
+    ; Trapped while a drawer is open: past either end comes round to the other.
+    ; Otherwise past either end the Tab is the page's.
+    fn tab:boolean (back:boolean) {
+        def r:[string] (this.ring())
+        def n:int (array_length r)
+        def trapped:boolean ((strlen (this.activeWhich())) > 0)
+        def at:int -1
+        def i:int 0
+        while (i < n) {
+            if ((itemAt r i) == focused) {
+                at = i
+            }
+            i = (i + 1)
+        }
+        def next:int (at + 1)
+        if back {
+            next = (at - 1)
+        }
+        if (at < 0) {
+            next = 0
+            if back {
+                next = (n - 1)
+            }
+        }
+        if trapped {
+            if (next < 0) {
+                next = (n - 1)
+            }
+            if (next >= n) {
+                next = 0
+            }
+        }
+        if ((next < 0) || (next >= n)) {
+            focused = ""
+            this.rebuild()
+            return false
+        }
+        focused = (itemAt r next)
+        this.rebuild()
+        return true
+    }
+
+    ; --- input ------------------------------------------------------------------
+
+    ; Inside the open panel: its own ids all start with the drawer's tid.
+    fn inPanel:boolean (d:DrawerCtl target:string) {
+        if ((target == (d.overlayTid())) || (target == (d.triggerTid()))) {
+            return false
+        }
+        return (DrawerDemo.begins(target (d.tid + "-")))
+    }
+
+    ; A press. Controls act on it, as the page's buttons all do; anywhere
+    ; else on the panel it may become a drag (`pointerDown`).
+    fn press:boolean (target:string) {
+        def w:string (this.openWhich())
+        if ((strlen w) == 0) {
+            if (this.openFrom(target)) {
+                return true
+            }
+            if (focused != "") {
+                focused = ""
+                this.rebuild()
+                return true
+            }
+            return false
+        }
+        def d:DrawerCtl (this.ctlOf(w))
+        ; On its way out the panel is inert, and so is the page under it.
+        if d.closing {
+            return false
+        }
+        if ((target == (d.overlayTid())) || (target == (d.closeTid()))) {
+            this.closeOpen()
+            return true
+        }
+        if (w == "right") {
+            if (target == "drw-right-submit") {
+                this.closeOpen()
+                rightStatus = "Goal submitted."
+                this.rebuild()
+                return true
+            }
+            if ((target == "drw-right-body") || (DrawerDemo.begins(target "drw-right-p"))) {
+                focused = "drw-right-body"
+                this.rebuild()
+                return true
+            }
+        }
+        if (w == "bottom") {
+            if (target == "drw-bottom-dec") {
+                if (goal > 200) {
+                    focused = target
+                    this.setGoal((goal - 10))
+                }
+                return true
+            }
+            if (target == "drw-bottom-inc") {
+                if (goal < 400) {
+                    focused = target
+                    this.setGoal((goal + 10))
+                }
+                return true
+            }
+            if (target == "drw-bottom-submit") {
+                savedGoal = goal
+                this.closeOpen()
+                bottomStatus = ("Goal set: " + (to_string savedGoal) + " calories/day.")
+                this.rebuild()
+                return true
+            }
+        }
+        if (w == "left") {
+            def a:[string] (this.sections())
+            def i:int 0
+            while (i < (array_length a)) {
+                def key:string (this.part((itemAt a i) 0))
+                def nt:string (this.navTid(key))
+                if ((target == nt) || (target == (nt + "-text"))) {
+                    section = key
+                    this.closeOpen()
+                    leftStatus = ("Current section: " + (this.sectionLabel(key)) + ".")
+                    this.rebuild()
+                    return true
+                }
+                i = (i + 1)
+            }
+        }
+        if (w == "top") {
+            if (target == "drw-top-read") {
+                unread = false
+                this.closeOpen()
+                topStatus = "All notifications marked as read."
+                this.rebuild()
+                return true
+            }
+        }
+        if (w == "resp") {
+            if (target == "drw-resp-sw-email") {
+                swEmail = (swEmail == false)
+                focused = target
+                this.rebuild()
+                return true
+            }
+            if (target == "drw-resp-sw-push") {
+                swPush = (swPush == false)
+                focused = target
+                this.rebuild()
+                return true
+            }
+            if (target == "drw-resp-sw-news") {
+                swNews = (swNews == false)
+                focused = target
+                this.rebuild()
+                return true
+            }
+            if (target == "drw-resp-save") {
+                savedEmail = swEmail
+                savedPush = swPush
+                savedNews = swNews
+                this.closeOpen()
+                respStatus = "Preferences saved."
+                this.rebuild()
+                return true
+            }
+            if (target == "drw-resp-cancel") {
+                this.closeOpen()
+                return true
+            }
+        }
+        return false
+    }
+
+    ; Is this a control, which a press activates, rather than a surface a
+    ; drag can start from?
+    fn isControl:boolean (target:string) {
+        def r:[string] (this.ring())
+        def i:int 0
+        while (i < (array_length r)) {
+            def id:string (itemAt r i)
+            if ((id == target) && (id != "drw-right-body")) {
+                return true
+            }
+            i = (i + 1)
+        }
+        if (DrawerDemo.begins(target "drw-left-nav-")) {
+            return true
+        }
+        return false
+    }
+
+    ; The pointer protocol the page uses for a demo with a gesture: down, move
+    ; and up. A press on the panel's surface (its header, its text, the
+    ; handle) is held as a possible drag; a press on a control acts at once.
+    fn pointerDown:boolean (target:string px:double py:double tMs:double) {
+        dragFrom = ""
+        dragMoved = false
+        def w:string (this.activeWhich())
+        if ((strlen w) > 0) {
+            def d:DrawerCtl (this.ctlOf(w))
+            if (((this.inPanel(d target)) && ((this.isControl(target)) == false)) && ((w != "resp") || ((this.respIsDialog()) == false))) {
+                this.press(target)
+                if (d.beginDrag(px py tMs)) {
+                    dragFrom = w
+                    return true
+                }
+            }
+        }
+        return (this.press(target))
+    }
+
+    fn pointerMove:boolean (px:double py:double tMs:double) {
+        if ((strlen dragFrom) == 0) {
+            return false
+        }
+        def d:DrawerCtl (this.ctlOf(dragFrom))
+        if (d.dragTo(px py tMs)) {
+            dragMoved = true
+            this.rebuild()
+            return true
+        }
+        return false
+    }
+
+    ; The release: dismissed past the threshold (the focus goes back to the
+    ; trigger then, as any other close), snapped back otherwise.
+    fn pointerUp:boolean () {
+        if ((strlen dragFrom) == 0) {
+            return false
+        }
+        def d:DrawerCtl (this.ctlOf(dragFrom))
+        dragFrom = ""
+        def how:string (d.endDrag())
+        if (how == "dismiss") {
+            focused = (d.triggerTid())
+        }
+        this.rebuild()
+        return ((strlen how) > 0)
+    }
+
+    fn scrollBody:boolean (to:double) {
+        def v:double to
+        if (v > bodyMax) {
+            v = bodyMax
+        }
+        if (v < 0.0) {
+            v = 0.0
+        }
+        if (v == bodyScroll) {
+            return false
+        }
+        bodyScroll = v
+        this.rebuild()
+        return true
+    }
+
+    ; The wheel. With the right drawer open it scrolls the body wherever the
+    ; pointer is; with any drawer open the page behind does not scroll, so the
+    ; gesture is taken even when there is nothing to move. Closed, the page
+    ; has it back.
+    fn scrollBy:boolean (dy:double) {
+        def w:string (this.activeWhich())
+        if ((strlen w) == 0) {
+            return false
+        }
+        if (w == "right") {
+            this.scrollBody((bodyScroll + dy))
+        }
+        return true
+    }
+
+    fn key:boolean (k:string) {
+        return (this.keyWith(k false false))
+    }
+
+    fn ownsKey:boolean (k:string) {
+        return false
+    }
+
+    fn keyWith:boolean (k:string shift:boolean ctrl:boolean) {
+        if (k == "Tab") {
+            return (this.tab(shift))
+        }
+        def w:string (this.activeWhich())
+        if (k == "Escape") {
+            if ((strlen w) == 0) {
+                return false
+            }
+            def d:DrawerCtl (this.ctlOf(w))
+            focused = (d.keyDown(focused k))
+            dragFrom = ""
+            this.rebuild()
+            return true
+        }
+        if (focused == "drw-right-body") {
+            if (k == "ArrowDown") {
+                return (this.scrollBody((bodyScroll + 40.0)))
+            }
+            if (k == "ArrowUp") {
+                return (this.scrollBody((bodyScroll - 40.0)))
+            }
+            if ((k == "PageDown") || (k == " ")) {
+                return (this.scrollBody((bodyScroll + 240.0)))
+            }
+            if (k == "PageUp") {
+                return (this.scrollBody((bodyScroll - 240.0)))
+            }
+            if (k == "Home") {
+                return (this.scrollBody(0.0))
+            }
+            if (k == "End") {
+                return (this.scrollBody(bodyMax))
+            }
+            return false
+        }
+        ; The navigation list: the arrows walk it, as a menu of links would.
+        if ((w == "left") && (DrawerDemo.begins(focused "drw-left-nav-"))) {
+            if ((k == "ArrowDown") || (k == "ArrowUp")) {
+                def a:[string] (this.sections())
+                def n:int (array_length a)
+                def at:int 0
+                def i:int 0
+                while (i < n) {
+                    if ((this.navTid((this.part((itemAt a i) 0)))) == focused) {
+                        at = i
+                    }
+                    i = (i + 1)
+                }
+                if (k == "ArrowDown") {
+                    at = ((at + 1) % n)
+                } {
+                    at = (((at - 1) + n) % n)
+                }
+                focused = (this.navTid((this.part((itemAt a at) 0))))
+                this.rebuild()
+                return true
+            }
+        }
+        if (UiCtl.activatesOn(k)) {
+            if ((strlen focused) > 0) {
+                return (this.press(focused))
+            }
+        }
+        return false
+    }
+
+    fn setHover:void (id:string) {
+        hovered = id
+        this.rebuild()
+    }
+
+    fn setPressed:void (id:string) {
+        pressed = id
+    }
+
+    ; Focus arriving from the page (a reader, a Tab into the mirror). While a
+    ; drawer is open only its own controls may take it: the page is inert.
+    fn setFocus:void (id:string) {
+        if ((strlen id) == 0) {
+            focused = ""
+            return
+        }
+        def r:[string] (this.ring())
+        def i:int 0
+        while (i < (array_length r)) {
+            if ((itemAt r i) == id) {
+                focused = id
+                return
+            }
+            i = (i + 1)
+        }
+    }
+
+    fn cursorAt:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def hit (new EVGHitTest())
+        return (hit.cursorAt(r px py))
+    }
+
+    ; --- what the page asks for -------------------------------------------------
+
+    fn displayListJson:string () {
+        def lay:EVGLayout (this.laidOut())
+        def r:EVGElement (unwrap root)
+        def dl (new EVGDisplayList())
+        dl.setTextEngine((lay.getTextEngine()))
+        dl.build(r)
+        return (dl.toJson())
+    }
+
+    fn hitId:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def hit (new EVGHitTest())
+        return (hit.idAt(r px py))
+    }
+
+    fn a11yJson:string (generation:int focusId:string) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Drawer demo" generation focusId))
+        return (t.toJson())
+    }
+
+    fn a11yProblems:[string] () {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Drawer demo" 1 ""))
+        return (t.lint())
+    }
+
+    fn styleErrorCount:int () {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (s.getErrorCount())
+    }
+
+    fn styleErrorAt:string (i:int) {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (s.getError(i))
+    }
+
+    fn widthPx:double () {
+        return pageW
+    }
+
+    fn heightPx:double () {
+        return pageH
+    }
+
+    fn summary:string () {
+        def w:string (this.openWhich())
+        if (w == "") {
+            w = "closed"
+        }
+        return (w + "|" + focused + "|" + (to_string goal) + "|" + section)
+    }
+}
