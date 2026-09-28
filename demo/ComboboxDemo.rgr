@@ -1,0 +1,1077 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; ComboboxDemo — ReUI's Combobox, one card per pattern
+; =============================================================================
+; ReUI's Combobox is Base UI's Combobox in shadcn's clothes: an input that
+; filters a listbox under it, where — unlike the Autocomplete — the VALUE is
+; the item chosen from the list, not the text. Typing only filters; Escape,
+; Enter with nothing highlighted and leaving the box all put the chosen
+; label back. Six cards:
+;
+;   Basic             "Select framework…", a chevron trigger, a ✓ on the
+;                     chosen row, "No framework found."
+;   Groups            fruits and vegetables under muted headings, a hairline
+;                     between the sections
+;   Multiple          chips inside the box with ×; Backspace in the empty box
+;                     takes the last one; the list stays open on a pick
+;   With avatars      people, an initials avatar and an e-mail under the name
+;   Clear / disabled  a × that empties the choice, and a row that cannot be
+;                     chosen
+;   Creatable         typing a label that is not there offers Create "…"
+;
+; THE BEHAVIOUR IS NOT WRITTEN HERE. Each box is a `ComboboxCtl` in its
+; default (combobox) mode — the controller measured against Base UI's
+; Combobox, which the form's "Find a customer" and the metadata card use —
+; with its opt-in `hoverHighlight` and `loopFocus` (Base UI's default) on.
+; The filter, the highlight walk, Enter / Escape / Tab, the chips and the
+; tree with its roles are the controller's. This file dresses the tree (the
+; caret, the chevron, the ✓, the avatars, the separators), routes the pointer
+; and the page's text session to it, and — for the creatable card — keeps the
+; "Create" row in step with the query.
+; =============================================================================
+
+Import "../src/ComboboxCtl.rgr"
+Import "../src/InputCtl.rgr"
+Import "../src/UiCtl.rgr"
+Import "../src/UiTree.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGUnit.rgr"
+Import "pkg:evg/EVGLayout.rgr"
+Import "pkg:evg/EVGDisplayList.rgr"
+Import "pkg:evg/EVGStyleSheet.rgr"
+Import "pkg:evg/EVGTransition.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+Import "pkg:evg/EVGA11yFromTree.rgr"
+Import "pkg:evg/EVGHitTest.rgr"
+Import "pkg:evg/EVGTextEngine.rgr"
+
+treefactory Cb {
+    child addChild
+    text  textContent
+
+    tag Page     EVGElement (props (className "cb-page"))
+    tag Card     EVGElement (props (className "cb-card"))
+    tag Caption  EVGElement (props (className "cb-caption") (elementType 1) (role "heading") (a11yLevel 2))
+    tag Stage    EVGElement (props (className "cb-stage"))
+    tag Field    EVGElement (props (className "cb-field"))
+    ; The input carries the label as its name; the drawn one is not read twice.
+    tag Label    EVGElement (props (className "cb-label") (elementType 1) (a11yHidden true))
+    tag Hint     EVGElement (props (className "cb-hint") (elementType 1) (a11yHidden true))
+    tag Band     EVGElement (props (className "cb-band") (a11yHidden true))
+    ; Decoration inside a row: the option's name is the row's own.
+    tag Text     EVGElement (props (className "cb-item-text") (elementType 1) (a11yHidden true))
+    tag Sub      EVGElement (props (className "cb-item-sub") (elementType 1) (a11yHidden true))
+    tag Lines    EVGElement (props (className "cb-item-lines") (a11yHidden true))
+    tag Avatar   EVGElement (props (className "cb-avatar") (elementType 1) (a11yHidden true))
+    tag Slot     EVGElement (props (className "cb-check-slot") (a11yHidden true))
+    tag Sep      EVGElement (props (className "cb-sep") (a11yHidden true))
+    tag Icon     EVGElement (props (className "cb-icon") (tagName "path") (elementType 3) (viewBox "0 0 24 24") (a11yHidden true))
+}
+
+class ComboboxDemo {
+
+    def basic:ComboboxCtl (new ComboboxCtl())
+    def grouped:ComboboxCtl (new ComboboxCtl())
+    def multi:ComboboxCtl (new ComboboxCtl())
+    def people:ComboboxCtl (new ComboboxCtl())
+    def clearable:ComboboxCtl (new ComboboxCtl())
+    def creatable:ComboboxCtl (new ComboboxCtl())
+
+    def root@(optional):EVGElement
+    def sheet@(optional):EVGStyleSheet
+    def layout@(optional):EVGLayout
+    def measurer:EVGLayout (new EVGLayout())
+
+    def hovered:string ""
+    def pressed:string ""
+    def focused:string ""
+    def dragField:string ""
+
+    ; The people card's second lines, parallel to its items.
+    def emails:[string]
+    ; The creatable card's labels (the ones it came with and the ones made),
+    ; and the "Create" row it shows now ("" for none) with its query.
+    def labels:[string]
+    def createLabel:string ""
+    def createQuery:string ""
+    def created:int 0
+
+    def pageW:double 900.0
+    def pageH:double 640.0
+    def boxFont:string "Arial"
+    def boxFontSize:double 14.0
+
+    Constructor () {
+        def e:[string]
+        emails = e
+        def l:[string]
+        labels = l
+    }
+
+    sfn createValue:string () {
+        return "cb-create-new"
+    }
+
+    fn ctls:[ComboboxCtl] () {
+        def a:[ComboboxCtl]
+        push a basic
+        push a grouped
+        push a multi
+        push a people
+        push a clearable
+        push a creatable
+        return a
+    }
+
+    fn dress:void (c:ComboboxCtl tid:string label:string placeholder:string empty:string) {
+        c.tid = tid
+        c.name = label
+        c.placeholder = placeholder
+        c.emptyText = empty
+        c.showClear = false
+        c.hoverHighlight = true
+        c.loopFocus = true
+        def inner:InputCtl (unwrap c.input)
+        inner.tid = (c.inputTid())
+        inner.fontFamily = boxFont
+        inner.fontSize = boxFontSize
+        inner.boxWidth = 260.0
+    }
+
+    fn addAll:void (c:ComboboxCtl names:[string]) {
+        def i:int 0
+        while (i < (array_length names)) {
+            def n:string (itemAt names i)
+            c.addItem((ComboboxDemo.slug(n)) n false)
+            i = (i + 1)
+        }
+    }
+
+    ; An id-safe value from a label: lower case, letters and digits, dashes.
+    sfn slug:string (s:string) {
+        def low:string (to_lowercase s)
+        def out:string ""
+        def i:int 0
+        def n:int (strlen low)
+        while (i < n) {
+            def ch:string (substring low i (i + 1))
+            if ((indexOf "abcdefghijklmnopqrstuvwxyz0123456789" ch) >= 0) {
+                out = (out + ch)
+            } {
+                if (((strlen out) > 0) && ((substring out ((strlen out) - 1) (strlen out)) != "-")) {
+                    out = (out + "-")
+                }
+            }
+            i = (i + 1)
+        }
+        return out
+    }
+
+    fn init:void (css:string) {
+        def s (new EVGStyleSheet())
+        s.parse(css)
+        sheet = s
+
+        this.dress(basic "cb-basic" "Framework" "Select framework…" "No framework found.")
+        this.addAll(basic ([] _:string ("Next.js" "SvelteKit" "Nuxt.js" "Remix" "Astro")))
+
+        this.dress(grouped "cb-groups" "Produce" "Select produce…" "No produce found.")
+        grouped.addGroupedItem("apple" "Apple" "Fruits")
+        grouped.addGroupedItem("banana" "Banana" "Fruits")
+        grouped.addGroupedItem("blueberry" "Blueberry" "Fruits")
+        grouped.addGroupedItem("grapes" "Grapes" "Fruits")
+        grouped.addGroupedItem("pineapple" "Pineapple" "Fruits")
+        grouped.addGroupedItem("aubergine" "Aubergine" "Vegetables")
+        grouped.addGroupedItem("broccoli" "Broccoli" "Vegetables")
+        grouped.addGroupedItem("carrot" "Carrot" "Vegetables")
+        grouped.addGroupedItem("leek" "Leek" "Vegetables")
+
+        this.dress(multi "cb-multi" "Frameworks" "Select frameworks…" "No framework found.")
+        multi.multiple = true
+        this.addAll(multi ([] _:string ("Next.js" "SvelteKit" "Nuxt.js" "Remix" "Astro" "Gatsby" "Qwik")))
+        push multi.values "next-js"
+        push multi.values "sveltekit"
+
+        this.dress(people "cb-users" "Assignee" "Select user…" "No user found.")
+        this.addAll(people ([] _:string ("Olivia Martin" "Jackson Lee" "Isabella Nguyen" "William Kim" "Sofia Davis")))
+        emails = ([] _:string ("olivia.martin@email.com" "jackson.lee@email.com" "isabella.nguyen@email.com" "will@email.com" "sofia.davis@email.com"))
+
+        this.dress(clearable "cb-clear" "Status" "Select status…" "No status found.")
+        clearable.showClear = true
+        clearable.addItem("backlog" "Backlog" false)
+        clearable.addItem("todo" "Todo" false)
+        clearable.addItem("in-progress" "In Progress" false)
+        clearable.addItem("done" "Done" false)
+        clearable.addItem("canceled" "Canceled" true)
+        clearable.value = "in-progress"
+        clearable.settleText()
+
+        this.dress(creatable "cb-create" "Label" "Select or create a label…" "No label found.")
+        labels = ([] _:string ("Bug" "Documentation" "Enhancement" "Question"))
+        this.syncCreate()
+
+        this.rebuild()
+    }
+
+    ; --- the creatable card -----------------------------------------------------
+
+    ; The row a query asks for: Create "<query>" while the query is not one of
+    ; the labels already there (case-insensitive), "" otherwise.
+    fn wantedCreate:string () {
+        def q:string (trim (creatable.query()))
+        if ((strlen q) == 0) {
+            return ""
+        }
+        def low:string (to_lowercase q)
+        def i:int 0
+        while (i < (array_length labels)) {
+            if ((to_lowercase (itemAt labels i)) == low) {
+                return ""
+            }
+            i = (i + 1)
+        }
+        return ("Create \"" + q + "\"")
+    }
+
+    ; Put the items back as the labels plus the Create row, keeping the
+    ; highlight where it was when that row is still there.
+    fn fillCreatable:void (want:string) {
+        def keep:string creatable.activeValue
+        creatable.clearItems()
+        this.addAll(creatable labels)
+        if ((strlen want) > 0) {
+            creatable.addItem((ComboboxDemo.createValue()) want false)
+        }
+        if ((creatable.indexOfValue(keep)) >= 0) {
+            creatable.activeValue = keep
+        }
+        createLabel = want
+    }
+
+    fn syncCreate:void () {
+        def want:string (this.wantedCreate())
+        if ((strlen want) > 0) {
+            createQuery = (trim (creatable.query()))
+        }
+        if ((want != createLabel) || ((array_length creatable.items) == 0)) {
+            this.fillCreatable(want)
+            creatable.build()
+        }
+    }
+
+    ; The Create row was chosen: the query becomes a label, and the choice.
+    fn afterCreatable:void () {
+        if (creatable.value != (ComboboxDemo.createValue())) {
+            this.syncCreate()
+            return
+        }
+        def name:string createQuery
+        push labels name
+        created = (created + 1)
+        this.fillCreatable("")
+        creatable.value = (ComboboxDemo.slug(name))
+        if ((strlen creatable.value) == 0) {
+            creatable.value = ("label-" + (to_string created))
+            ; The slug of a label with no letters; give it a name to find.
+            creatable.clearItems()
+            this.addAll(creatable labels)
+        }
+        creatable.settleText()
+        creatable.build()
+    }
+
+    ; --- lookups ----------------------------------------------------------------
+
+    fn engine:EVGTextEngine () {
+        return (measurer.getTextEngine())
+    }
+
+    ; The controller owning an id, or a blank one (tid "") when none does.
+    fn ctlFor:ComboboxCtl (target:string) {
+        if ((strlen target) == 0) {
+            return (new ComboboxCtl())
+        }
+        def all:[ComboboxCtl] (this.ctls())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:ComboboxCtl (itemAt all i)
+            if (c.owns(target)) {
+                return c
+            }
+            if (target == (c.tid + "-group")) {
+                return c
+            }
+            i = (i + 1)
+        }
+        return (new ComboboxCtl())
+    }
+
+    fn isInput:boolean (tid:string) {
+        if ((strlen tid) == 0) {
+            return false
+        }
+        def c:ComboboxCtl (this.ctlFor(tid))
+        return ((strlen c.tid) > 0) && (tid == (c.inputTid()))
+    }
+
+    fn isChip:boolean (tid:string) {
+        if ((strlen tid) == 0) {
+            return false
+        }
+        def c:ComboboxCtl (this.ctlFor(tid))
+        if ((strlen c.tid) == 0) {
+            return false
+        }
+        return ((strlen (c.chipValueOf(tid))) > 0)
+    }
+
+    ; A hit on the text run, the caret, the chip strip or the bordered group
+    ; around the box is a hit on the box.
+    fn fieldOwning:string (target:string) {
+        def c:ComboboxCtl (this.ctlFor(target))
+        if ((strlen c.tid) == 0) {
+            return target
+        }
+        def inp:string (c.inputTid())
+        if ((target == (inp + "-text")) || (target == (inp + "-caret")) || (target == (c.tid + "-group")) || (target == (c.chipsTid()))) {
+            return inp
+        }
+        return target
+    }
+
+    sfn byId:EVGElement (el:EVGElement tid:string) {
+        if (el.id == tid) {
+            return el
+        }
+        def i:int 0
+        while (i < (array_length el.children)) {
+            def kid:EVGElement (ComboboxDemo.byId((itemAt el.children i) tid))
+            if (kid.id == tid) {
+                return kid
+            }
+            i = (i + 1)
+        }
+        return el
+    }
+
+    ; --- the look ---------------------------------------------------------------
+
+    ; Lucide, 24 × 24, stroked.
+    sfn iconPath:string (name:string) {
+        if (name == "down")  { return "M6 9 L12 15 L18 9" }
+        if (name == "check") { return "M20 6 L9 17 L4 12" }
+        if (name == "x")     { return "M18 6 L6 18 M6 6 L18 18" }
+        if (name == "plus")  { return "M5 12 L19 12 M12 5 L12 19" }
+        return ""
+    }
+
+    sfn icon:EVGElement (name:string cls:string) {
+        return (tree Cb (Icon (props (className ("cb-icon " + cls)) (svgPath (ComboboxDemo.iconPath(name))))))
+    }
+
+    ; A text leaf the controller built becomes a box holding an icon.
+    sfn iconInto:void (el:EVGElement name:string cls:string) {
+        UiTree.clearChildren(el)
+        el.textContent = ""
+        el.elementType = 0
+        el.addChild((ComboboxDemo.icon(name cls)))
+    }
+
+    sfn initials:string (name:string) {
+        def out:string ""
+        def take:boolean true
+        def i:int 0
+        def n:int (strlen name)
+        while (i < n) {
+            def ch:string (substring name i (i + 1))
+            if (ch == " ") {
+                take = true
+            } {
+                if (take && ((strlen out) < 2)) {
+                    out = (out + ch)
+                }
+                take = false
+            }
+            i = (i + 1)
+        }
+        return out
+    }
+
+    ; The caret and the selection band inside the controller's box, placed by
+    ; measurement, as the autocomplete's are.
+    fn dressBox:void (c:ComboboxCtl) {
+        def inner:InputCtl (unwrap c.input)
+        def box:EVGElement (unwrap inner.rootEl)
+        def txt:EVGElement (unwrap inner.textEl)
+        def car:EVGElement (unwrap inner.caretEl)
+        def eng:EVGTextEngine (this.engine())
+        def hasFocus:boolean (focused == (c.inputTid()))
+        def kids:[EVGElement]
+        if hasFocus {
+            inner.ensureCaretVisible(eng)
+            if (inner.hasSelection()) {
+                def a:double (inner.caretXAt(eng (inner.selStart())))
+                def b:double (inner.caretXAt(eng (inner.selEnd())))
+                def band (tree Cb (Band (props (id ((c.inputTid()) + "-band")))))
+                band.left = (EVGUnit.px((a - inner.scrollX)))
+                band.width = (EVGUnit.px((b - a)))
+                push kids band
+            }
+        }
+        push kids txt
+        if (hasFocus && ((inner.hasSelection()) == false)) {
+            def cx:double (inner.caretXAt(eng inner.caret))
+            car.left = (EVGUnit.px((cx - inner.scrollX)))
+            push kids car
+        }
+        box.children = kids
+        ; aria-controls while the list is there — ARIA 1.2 wants it on an
+        ; expanded combobox, and the tree has no other field for it.
+        box.a11yControls = ""
+        if c.open {
+            box.a11yControls = (c.contentTid())
+        }
+        def g:EVGElement (unwrap c.groupEl)
+        if (hasFocus || ((strlen (c.chipValueOf(focused))) > 0)) {
+            UiTree.addClass(g "cb-group-focus")
+        }
+    }
+
+    ; The controller draws its buttons as text (▾, ×); ReUI's are Lucide's
+    ; chevron and X. Rows get their ✓, avatar and second line; sections a
+    ; hairline between them.
+    fn dressParts:void (c:ComboboxCtl) {
+        if (c.showTrigger) {
+            ComboboxDemo.iconInto((unwrap c.triggerEl) "down" "cb-icon-muted")
+            if c.multiple {
+                UiTree.addClass((unwrap c.triggerEl) "cb-trigger-corner")
+            }
+        }
+        if (c.showsClear()) {
+            ComboboxDemo.iconInto((unwrap c.clearEl) "x" "cb-icon-muted")
+        }
+        if c.multiple {
+            def i:int 0
+            while (i < (array_length c.values)) {
+                def v:string (itemAt c.values i)
+                def chips:EVGElement (unwrap c.chipsEl)
+                def x:EVGElement (ComboboxDemo.byId(chips (c.chipRemoveTid(v))))
+                if (x.id == (c.chipRemoveTid(v))) {
+                    ComboboxDemo.iconInto(x "x" "cb-icon-chip")
+                }
+                i = (i + 1)
+            }
+        }
+        if (c.open == false) {
+            return
+        }
+        def j:int 0
+        while (j < (array_length c.items)) {
+            def it:UiItem (itemAt c.items j)
+            this.dressRow(c it j)
+            j = (j + 1)
+        }
+        ; A separator before every section but the first.
+        def content:EVGElement (unwrap c.contentEl)
+        def kids:[EVGElement]
+        def seen:int 0
+        def k:int 0
+        while (k < (array_length content.children)) {
+            def kid:EVGElement (itemAt content.children k)
+            if (UiTree.hasClass(kid "ui-combobox-section")) {
+                if (seen > 0) {
+                    push kids (tree Cb (Sep))
+                }
+                seen = (seen + 1)
+            }
+            push kids kid
+            k = (k + 1)
+        }
+        content.children = kids
+    }
+
+    fn dressRow:void (c:ComboboxCtl it:UiItem at:int) {
+        def el:EVGElement (unwrap it.el)
+        UiTree.clearChildren(el)
+        el.textContent = ""
+        el.elementType = 0
+        if (it.value == (ComboboxDemo.createValue())) {
+            el.addChild((ComboboxDemo.icon("plus" "cb-icon-lead")))
+            el.addChild((tree Cb (Text it.name)))
+            return
+        }
+        if (c.tid == people.tid) {
+            UiTree.addClass(el "cb-item-tall")
+            el.addChild((tree Cb (Avatar (ComboboxDemo.initials(it.name)))))
+            def lines (tree Cb (Lines (Text it.name)))
+            if (at < (array_length emails)) {
+                def mail:string (itemAt emails at)
+                lines.addChild((tree Cb (Sub mail)))
+            }
+            el.addChild(lines)
+        } {
+            el.addChild((tree Cb (Text it.name)))
+        }
+        def slot (tree Cb (Slot))
+        if (c.isChosen(it.value)) {
+            slot.addChild((ComboboxDemo.icon("check" "cb-icon-check")))
+        }
+        el.addChild(slot)
+    }
+
+    ; The line under a box: what the combobox's VALUE is, which is the chosen
+    ; item and never the text.
+    fn valueLine:string (c:ComboboxCtl) {
+        if c.multiple {
+            if ((array_length c.values) == 0) {
+                return "value: []"
+            }
+            def out:string "value: ["
+            def i:int 0
+            while (i < (array_length c.values)) {
+                if (i > 0) {
+                    out = (out + ", ")
+                }
+                out = (out + "\"" + (itemAt c.values i) + "\"")
+                i = (i + 1)
+            }
+            return (out + "]")
+        }
+        if ((strlen c.value) == 0) {
+            return "value: null"
+        }
+        return ("value: \"" + c.value + "\"")
+    }
+
+    fn card:EVGElement (c:ComboboxCtl title:string) {
+        UiTree.dress(c)
+        this.dressBox(c)
+        this.dressParts(c)
+        def body:EVGElement (unwrap c.rootEl)
+        def field (tree Cb (Field (Label c.name)))
+        field.addChild(body)
+        field.addChild((tree Cb (Hint (props (id (c.tid + "-value"))) (this.valueLine(c)))))
+        return (tree Cb
+            (Card (props (id (c.tid + "-card")))
+                (Caption (props (id (c.tid + "-caption"))) title)
+                (Stage (child field))))
+    }
+
+    fn pageBody:EVGElement () {
+        def page (tree Cb (Page (props (id "cb-page"))))
+        page.addChild((this.card(basic "Basic")))
+        page.addChild((this.card(grouped "With groups and separators")))
+        page.addChild((this.card(multi "Multiple selection with chips")))
+        page.addChild((this.card(people "With avatars and a second line")))
+        page.addChild((this.card(clearable "With clear button and a disabled item")))
+        page.addChild((this.card(creatable "Creatable")))
+        return page
+    }
+
+    fn rebuild:void () {
+        def fieldW:double 320.0
+        if (pageW < 600.0) {
+            fieldW = (pageW - 58.0)
+        }
+        def all:[ComboboxCtl] (this.ctls())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:ComboboxCtl (itemAt all i)
+            def inner:InputCtl (unwrap c.input)
+            if c.multiple {
+                inner.boxWidth = 120.0
+            } {
+                inner.boxWidth = (fieldW - 60.0)
+            }
+            i = (i + 1)
+        }
+        root = (this.pageBody())
+    }
+
+    ; --- layout -----------------------------------------------------------------
+
+    fn markStates:void (el:EVGElement) {
+        el.isHovered = ((strlen hovered) > 0) && (el.id == hovered)
+        el.isFocused = ((strlen focused) > 0) && (el.id == focused)
+        el.isPressed = ((strlen pressed) > 0) && (el.id == pressed)
+        def i:int 0
+        while (i < (array_length el.children)) {
+            this.markStates((itemAt el.children i))
+            i = (i + 1)
+        }
+    }
+
+    sfn forgetFlex:void (el:EVGElement) {
+        el.calculatedFlexHeight = 0.0
+        el.calculatedHeight = 0.0
+        el.calculatedWidth = 0.0
+        el.calculatedInnerHeight = 0.0
+        el.calculatedInnerWidth = 0.0
+        el.hasDefiniteHeight = false
+        el.layoutClean = false
+        def i:int 0
+        while (i < (array_length el.children)) {
+            ComboboxDemo.forgetFlex((itemAt el.children i))
+            i = (i + 1)
+        }
+    }
+
+    sfn deepBottom:double (el:EVGElement top:boolean) {
+        def b:double 0.0
+        if (top == false) {
+            b = ((el.calculatedY) + (el.calculatedHeight))
+        }
+        def i:int 0
+        while (i < (array_length el.children)) {
+            def k:double (ComboboxDemo.deepBottom((itemAt el.children i) false))
+            if (k > b) {
+                b = k
+            }
+            i = (i + 1)
+        }
+        return b
+    }
+
+    ; Where an open list ends when it opens DOWNWARDS; the page grows to hold
+    ; it, so every list opens under its box as on ReUI's page.
+    fn popupBottom:double (floor:double) {
+        def b:double floor
+        def all:[ComboboxCtl] (this.ctls())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:ComboboxCtl (itemAt all i)
+            if c.open {
+                def g:EVGElement (unwrap c.groupEl)
+                def pop:EVGElement (unwrap c.contentEl)
+                def under:double ((((g.calculatedY) + (g.calculatedHeight)) + 4.0) + (pop.calculatedHeight))
+                if (under > b) {
+                    b = under
+                }
+            }
+            i = (i + 1)
+        }
+        return b
+    }
+
+    fn laidOut:EVGLayout () {
+        def r:EVGElement (unwrap root)
+        def s:EVGStyleSheet (unwrap sheet)
+        this.markStates(r)
+        ComboboxDemo.forgetFlex(r)
+        r.height = (EVGUnit.px(pageH))
+        s.setViewport(pageW pageH false)
+        s.applyTree(r "")
+        def lay (new EVGLayout())
+        lay.setPageSize(pageW pageH)
+        lay.layout(r)
+        def need:double (to_double (to_int (((this.popupBottom((ComboboxDemo.deepBottom(r true)))) + 24.0) + 0.999)))
+        if (need < 320.0) {
+            need = 320.0
+        }
+        if ((need > (pageH + 0.5)) || (need < (pageH - 0.5))) {
+            pageH = need
+            ComboboxDemo.forgetFlex(r)
+            r.height = (EVGUnit.px(pageH))
+            s.setViewport(pageW pageH false)
+            s.applyTree(r "")
+            def sized (new EVGLayout())
+            sized.setPageSize(pageW pageH)
+            sized.layout(r)
+            layout = sized
+            return sized
+        }
+        layout = lay
+        return lay
+    }
+
+    fn tick:boolean (dtMs:double) {
+        return false
+    }
+
+    fn busyNow:boolean () {
+        return false
+    }
+
+    ; --- focus ------------------------------------------------------------------
+
+    ; Focus moving from one box to anything else closes that box's list and
+    ; puts its chosen label back — the controller's `commitBlur`.
+    fn moveFocus:void (id:string) {
+        if ((strlen focused) > 0) {
+            def was:ComboboxCtl (this.ctlFor(focused))
+            def now:ComboboxCtl (this.ctlFor(id))
+            if (((strlen was.tid) > 0) && (was.tid != now.tid)) {
+                was.onBlur(focused)
+                if (was.tid == creatable.tid) {
+                    this.afterCreatable()
+                }
+            }
+        }
+        focused = id
+    }
+
+    fn setFocus:void (id:string) {
+        this.moveFocus(id)
+        def c:ComboboxCtl (this.ctlFor(id))
+        if ((strlen c.tid) > 0) {
+            c.onFocus(id)
+        }
+        this.rebuild()
+    }
+
+    ; After anything that may have changed a box.
+    fn after:void (c:ComboboxCtl) {
+        if (c.tid == creatable.tid) {
+            this.afterCreatable()
+        }
+    }
+
+    ; --- input ------------------------------------------------------------------
+
+    fn press:boolean (rawTarget:string) {
+        def target:string (this.fieldOwning(rawTarget))
+        def c:ComboboxCtl (this.ctlFor(target))
+        if ((strlen c.tid) == 0) {
+            this.moveFocus("")
+            this.rebuild()
+            return true
+        }
+        this.moveFocus(target)
+        def landed:string (c.activate(target))
+        if ((strlen landed) > 0) {
+            focused = landed
+        }
+        if (focused != (c.inputTid())) {
+            ; Only the box takes focus; a press on a row, the trigger, the
+            ; clear button, a chip or the popup's padding leaves it there.
+            focused = (c.inputTid())
+            c.chipFocus = ""
+        }
+        this.after(c)
+        this.rebuild()
+        return true
+    }
+
+    fn key:boolean (k:string) {
+        return (this.keyWith(k false false))
+    }
+
+    fn keyWith:boolean (k:string shift:boolean ctrl:boolean) {
+        if (k == "Tab") {
+            ; The page's Tab walk; `setFocus` closes the list on the way out.
+            return false
+        }
+        def onInput:boolean (this.isInput(focused))
+        if ((onInput == false) && ((this.isChip(focused)) == false)) {
+            return false
+        }
+        def c:ComboboxCtl (this.ctlFor(focused))
+        if (onInput && ((strlen k) == 1) && (ctrl == false)) {
+            c.typeChar(focused k)
+        } {
+            def landed:string (c.keyDownWith(focused k shift ctrl))
+            if ((strlen landed) > 0) {
+                focused = landed
+            }
+        }
+        def inner:InputCtl (unwrap c.input)
+        inner.ensureCaretVisible((this.engine()))
+        this.after(c)
+        this.rebuild()
+        return true
+    }
+
+    ; The keys the editing session hands back while a box has the focus: the
+    ; arrows walk the list, and in the chip box Backspace in the empty box
+    ; takes the last chip and ArrowLeft at its start steps onto the chips.
+    fn ownsKey:boolean (k:string) {
+        if ((this.isInput(focused)) == false) {
+            return false
+        }
+        if ((k == "ArrowDown") || (k == "ArrowUp")) {
+            return true
+        }
+        def c:ComboboxCtl (this.ctlFor(focused))
+        if (c.multiple && ((array_length c.values) > 0)) {
+            def inner:InputCtl (unwrap c.input)
+            if ((k == "Backspace") && ((strlen inner.value) == 0)) {
+                return true
+            }
+            if ((k == "ArrowLeft") && (inner.caret == 0) && (inner.anchor == 0)) {
+                return true
+            }
+        }
+        return false
+    }
+
+    fn type:boolean (ch:string) {
+        if ((this.isInput(focused)) == false) {
+            return false
+        }
+        def c:ComboboxCtl (this.ctlFor(focused))
+        def took:boolean (c.typeChar(focused ch))
+        if took {
+            this.after(c)
+            this.rebuild()
+        }
+        return took
+    }
+
+    ; --- the pointer in a box ---------------------------------------------------
+
+    fn indexAt:int (target:string px:double) {
+        def c:ComboboxCtl (this.ctlFor(target))
+        def inner:InputCtl (unwrap c.input)
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def box:EVGElement (ComboboxDemo.byId(r target))
+        if (box.id != target) {
+            return -1
+        }
+        return (InputCtl.indexAtPageX((this.engine()) inner box px))
+    }
+
+    fn beginSelection:boolean (rawTarget:string px:double extend:boolean) {
+        def target:string (this.fieldOwning(rawTarget))
+        this.press(target)
+        if ((this.isInput(target)) == false) {
+            dragField = ""
+            return true
+        }
+        def idx:int (this.indexAt(target px))
+        if (idx < 0) {
+            dragField = ""
+            return true
+        }
+        def c:ComboboxCtl (this.ctlFor(target))
+        def inner:InputCtl (unwrap c.input)
+        inner.placeCaret(idx extend)
+        c.applyEdit(target inner.value (inner.selStart()) (inner.selEnd()))
+        dragField = target
+        this.rebuild()
+        return true
+    }
+
+    fn extendSelection:boolean (px:double) {
+        if (dragField == "") {
+            return false
+        }
+        def idx:int (this.indexAt(dragField px))
+        if (idx < 0) {
+            return false
+        }
+        def c:ComboboxCtl (this.ctlFor(dragField))
+        def inner:InputCtl (unwrap c.input)
+        if (idx == inner.caret) {
+            return false
+        }
+        inner.placeCaret(idx true)
+        this.rebuild()
+        return true
+    }
+
+    fn endSelection:boolean () {
+        dragField = ""
+        return false
+    }
+
+    fn selectWordAt:boolean (rawTarget:string px:double) {
+        def target:string (this.fieldOwning(rawTarget))
+        if ((this.isInput(target)) == false) {
+            return false
+        }
+        def idx:int (this.indexAt(target px))
+        if (idx < 0) {
+            return false
+        }
+        def c:ComboboxCtl (this.ctlFor(target))
+        def inner:InputCtl (unwrap c.input)
+        def at:int idx
+        if (at >= (strlen inner.value)) {
+            at = ((strlen inner.value) - 1)
+        }
+        inner.selectWordAt(at)
+        this.rebuild()
+        return true
+    }
+
+    fn cursorAt:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def all:[ComboboxCtl] (this.ctls())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:ComboboxCtl (itemAt all i)
+            def box:EVGElement (ComboboxDemo.byId(r (c.inputTid())))
+            if (box.id == (c.inputTid())) {
+                def x0:double (box.calculatedX)
+                def y0:double (box.calculatedY)
+                if ((px >= x0) && (px <= (x0 + (box.calculatedWidth)))) {
+                    if ((py >= y0) && (py <= (y0 + (box.calculatedHeight)))) {
+                        return "text"
+                    }
+                }
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    ; --- the platform text-input session ----------------------------------------
+
+    fn focusedField:string () {
+        if (this.isInput(focused)) {
+            return focused
+        }
+        return ""
+    }
+
+    fn fieldStateJson:string (tid:string) {
+        if ((this.isInput(tid)) == false) {
+            return "null"
+        }
+        def c:ComboboxCtl (this.ctlFor(tid))
+        def inner:InputCtl (unwrap c.input)
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def box:EVGElement (ComboboxDemo.byId(r tid))
+        def out:string "{"
+        out = (out + "\"tid\":" + (EVGA11yTree.jsonString(tid)))
+        out = (out + ",\"value\":" + (EVGA11yTree.jsonString(inner.value)))
+        out = (out + ",\"selStart\":" + (to_string (inner.selStart())))
+        out = (out + ",\"selEnd\":" + (to_string (inner.selEnd())))
+        out = (out + ",\"kind\":" + (EVGA11yTree.jsonString(inner.kind)))
+        out = (out + ",\"maxLength\":" + (to_string inner.maxLength))
+        out = (out + ",\"placeholder\":" + (EVGA11yTree.jsonString(inner.placeholder)))
+        if (box.id == tid) {
+            out = (out + ",\"box\":{\"x\":" + (to_string (to_int (box.calculatedX))))
+            out = (out + ",\"y\":" + (to_string (to_int (box.calculatedY))))
+            out = (out + ",\"w\":" + (to_string (to_int (box.calculatedWidth))))
+            out = (out + ",\"h\":" + (to_string (to_int (box.calculatedHeight))) + "}")
+        }
+        return (out + "}")
+    }
+
+    fn applyEdit:boolean (tid:string v:string selStart:int selEnd:int) {
+        if ((this.isInput(tid)) == false) {
+            return false
+        }
+        def c:ComboboxCtl (this.ctlFor(tid))
+        def took:boolean (c.applyEdit(tid v selStart selEnd))
+        def inner:InputCtl (unwrap c.input)
+        inner.ensureCaretVisible((this.engine()))
+        this.after(c)
+        this.rebuild()
+        return took
+    }
+
+    fn setHover:void (id:string) {
+        hovered = id
+        def c:ComboboxCtl (this.ctlFor(id))
+        if ((strlen c.tid) > 0) {
+            c.hover(id)
+        }
+        this.rebuild()
+    }
+
+    fn setPressed:void (id:string) {
+        pressed = id
+    }
+
+    ; What the page names as a box's aria-activedescendant and
+    ; aria-autocomplete.
+    fn activeDescendant:string (tid:string) {
+        def c:ComboboxCtl (this.ctlFor(tid))
+        if (((strlen c.tid) > 0) && (tid == (c.inputTid()))) {
+            return (c.activeOptionTid())
+        }
+        return ""
+    }
+
+    fn ariaAutocomplete:string (tid:string) {
+        def c:ComboboxCtl (this.ctlFor(tid))
+        if (((strlen c.tid) == 0) || (tid != (c.inputTid()))) {
+            return ""
+        }
+        return "list"
+    }
+
+    ; --- what the page asks for -------------------------------------------------
+
+    fn displayListJson:string () {
+        def lay:EVGLayout (this.laidOut())
+        def r:EVGElement (unwrap root)
+        def dl (new EVGDisplayList())
+        dl.setTextEngine((lay.getTextEngine()))
+        dl.build(r)
+        return (dl.toJson())
+    }
+
+    fn hitId:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def hit (new EVGHitTest())
+        return (hit.idAt(r px py))
+    }
+
+    fn a11yJson:string (generation:int focusId:string) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Combobox demo" generation focusId))
+        return (t.toJson())
+    }
+
+    fn a11yProblems:[string] () {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Combobox demo" 1 ""))
+        return (t.lint())
+    }
+
+    fn styleErrorCount:int () {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (array_length s.errors)
+    }
+
+    fn styleErrorAt:string (i:int) {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (itemAt s.errors i)
+    }
+
+    fn widthPx:double () { return pageW }
+
+    fn heightPx:double () {
+        this.laidOut()
+        return pageH
+    }
+
+    ; Each box's VALUE (not its text), then the focus.
+    fn summary:string () {
+        def out:string ""
+        def all:[ComboboxCtl] (this.ctls())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:ComboboxCtl (itemAt all i)
+            if (i > 0) {
+                out = (out + "|")
+            }
+            if c.multiple {
+                def k:int 0
+                while (k < (array_length c.values)) {
+                    if (k > 0) {
+                        out = (out + ",")
+                    }
+                    out = (out + (itemAt c.values k))
+                    k = (k + 1)
+                }
+            } {
+                out = (out + c.value)
+            }
+            i = (i + 1)
+        }
+        return (out + "|" + focused)
+    }
+}

@@ -589,6 +589,35 @@ STATES.push(...[
   })));
 }
 
+// The combobox demo: six closed boxes (one prefilled, two chips in the
+// multiple one), the basic list open with a row highlighted and a ✓ on the
+// chosen one, and the chip box open on a third pick — a multiselectable
+// listbox beside a toolbar of chips with their remove buttons.
+{
+  const { ComboboxDemo } = require(path.join(ROOT, "gallery/evgui/bin/ComboboxDemo.cjs"));
+  const combobox = atRest(ComboboxDemo, "combobox.css");
+  const comboboxOpen = atRest(ComboboxDemo, "combobox.css");
+  comboboxOpen.press("cb-basic-input");
+  comboboxOpen.key("ArrowDown");
+  comboboxOpen.key("Enter");
+  comboboxOpen.press("cb-basic-input");
+  comboboxOpen.key("ArrowDown");
+  const comboboxChips = atRest(ComboboxDemo, "combobox.css");
+  comboboxChips.press("cb-multi-input");
+  comboboxChips.press("cb-multi-item-remix");
+  comboboxChips.key("ArrowDown");
+  STATES.push(...[
+    ["combobox — six boxes, closed", combobox, 90],
+    ["combobox — list open, a row highlighted, one chosen", comboboxOpen, 91],
+    ["combobox — multiple open with three chips", comboboxChips, 92],
+  ].map(([name, d, gen]) => ({
+    name,
+    size: [d.widthPx(), d.heightPx()],
+    lint: () => d.a11yProblems(),
+    tree: () => d.a11yJson(gen, d.focused || ""),
+  })));
+}
+
 const AXE = fs.readFileSync(domRequire.resolve("axe-core"), "utf8");
 
 const html = `<!doctype html><meta charset="utf-8">

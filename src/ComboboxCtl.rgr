@@ -99,6 +99,14 @@
 ;       by their heading), a `limit` with a "N more" line, a `loading` state,
 ;       the matching part of each label as its own run (`emphasis`), and no
 ;       trigger or no clear button (`showTrigger`, `showClear`).
+;
+; --- OPT-IN OPTIONS, EITHER MODE (off by default) ---------------------------
+;
+;   From Base UI's documented Combobox, not from combobox.json: `hoverHighlight`
+;   (the pointer over a row highlights it, as the autocomplete always does),
+;   `loopFocus` (an arrow past either end takes the highlight back to the
+;   input and the next one wraps — Base UI's default; the measured hosts keep
+;   the stop at the ends) and `showClear` false (no Combobox.Clear part).
 ; =============================================================================
 
 Import "UiCtl.rgr"
@@ -134,6 +142,13 @@ class ComboboxCtl extends UiCtl {
     def inlineComplete:boolean false
     def showTrigger:boolean true
     def showClear:boolean true
+    ; --- combobox options, off by default (the measured behaviour) ---
+    ; The pointer over a row highlights it, as Base UI's Combobox does; the
+    ; measured hosts (form, metadata) route no hover, so it is opt-in.
+    def hoverHighlight:boolean false
+    ; Base UI's `loopFocus`: an arrow past the last (or first) row takes the
+    ; highlight back to the input, and the next one onto the other end.
+    def loopFocus:boolean false
     def emphasis:boolean false
     ; At most this many rows (0: all), and a line saying how many more match.
     def limit:int 0
@@ -464,7 +479,8 @@ class ComboboxCtl extends UiCtl {
         if multiple {
             return false
         }
-        return ((strlen input.value) > 0)
+        ; `showClear` off: a box drawn without Base UI's Combobox.Clear part.
+        return (showClear && ((strlen input.value) > 0))
     }
 
     ; What the box shows when nothing is being typed: the chosen label, or
@@ -767,7 +783,7 @@ class ComboboxCtl extends UiCtl {
     ; The pointer over a row highlights it — and only that: an inline box's
     ; text follows the keyboard, not the mouse.
     fn hover:string (target:string) {
-        if (autocomplete == false) {
+        if ((autocomplete == false) && (hoverHighlight == false)) {
             return ""
         }
         if (open == false) {
@@ -1062,13 +1078,18 @@ class ComboboxCtl extends UiCtl {
         def next:string (this.firstEnabled(vis (from + delta) delta))
         if ((strlen next) > 0) {
             activeValue = next
+        } {
+            if loopFocus {
+                ; Off the end and back to the input; the next arrow wraps.
+                activeValue = ""
+            }
         }
         this.build()
         return (this.inputTid())
     }
 
     ; The first enabled row at or after `from`, walking by `delta`; "" when
-    ; the walk runs off the end. No wrap: Base UI's loopFocus is off by default.
+    ; the walk runs off the end. The wrap, when `loopFocus` is on, is the caller's.
     fn firstEnabled:string (vis:[UiItem] from:int delta:int) {
         def i:int from
         while ((i >= 0) && (i < (array_length vis))) {

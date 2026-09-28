@@ -831,6 +831,27 @@
               <strong>&uarr;</strong> / <strong>&darr;</strong> instead.
             </p>
           </section>
+          <section data-for="combobox">
+            <h2>what to try</h2>
+            <p class="hint">
+              Click <strong>Framework</strong>: the list opens under the box.
+              <strong>&darr;</strong> / <strong>&uarr;</strong> or the pointer
+              highlight a row (past the last one the arrows go back to the box,
+              then wrap), <strong>Enter</strong> or a click chooses it and a
+              &check; marks it. Type <em>zz</em>: &ldquo;No framework
+              found.&rdquo; &mdash; then <strong>Escape</strong> or
+              <strong>Tab</strong>: the box goes back to the chosen label,
+              because the value is the item, not the text.
+            </p>
+            <p class="hint">
+              In <strong>Frameworks</strong> a pick adds a chip and the list
+              stays open; <strong>Backspace</strong> in the empty box takes the
+              last chip, <strong>&larr;</strong> steps onto the chips and
+              Delete removes one. <strong>Status</strong> has a &times; that
+              clears it and a Canceled row you cannot choose. Type a new word
+              into <strong>Label</strong> and pick <em>Create &ldquo;&hellip;&rdquo;</em>.
+            </p>
+          </section>
           <section data-for="autocomplete">
             <h2>what to try</h2>
             <p class="hint">
@@ -1469,6 +1490,12 @@
   "src": "DrawerDemo",
   "caption": "DrawerCtl · after Base UI's Drawer and vaul, ReUI's look",
   "desc": "ReUI's Drawer patterns, one card each: the Right Drawer (Move Goal, ten paragraphs scrolling inside, Submit and Cancel pinned), shadcn's bottom drawer with a handle, a goal stepper and a bar chart, a left navigation drawer, a top drawer, and a responsive one that is a dialog on a wide demo and a drawer on a narrow one. Each is a modal DrawerCtl: open and closed, the focus in and back to the trigger, Escape and the overlay press, the 300ms ease-out slide from its edge and the drag towards that edge that dismisses past a quarter of the panel or on a fling and snaps back otherwise. The page behind is dimmed and blurred (backdrop-filter) and inert, and the demo traps Tab. The behaviour follows Base UI's and vaul's documented Drawer; there is no recorded trace of either, so it is specified, not measured."
+ },
+ "combobox": {
+  "title": "Combobox",
+  "src": "ComboboxDemo",
+  "caption": "ComboboxCtl · measured against Base UI's Combobox, ReUI's look",
+  "desc": "ReUI's Combobox patterns, one card each: basic with a chevron and a check on the chosen row, groups with separators, multiple selection with chips in the box, people with avatars and e-mails, a clear button with a disabled row, and a creatable list that offers Create \"…\" for a new label. Unlike the Autocomplete the value is the chosen item, not the text: typing only filters, and Escape, Enter with nothing highlighted or leaving the box put the chosen label back. Every box is a ComboboxCtl in its default mode, the controller whose filtering, highlight, Enter / Escape / Backspace and chip rules were measured against Base UI's Combobox; hover highlighting and the wrapping arrows (Base UI's loopFocus) are opt-in options written from Base UI's documentation, and the Create row is the demo's, kept in step with the query. reui.io was not reachable from here, so the look follows shadcn's source rather than a capture; the text is edited on the page's text session."
  },
  "rating": {
   "title": "Rating",

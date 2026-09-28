@@ -55,6 +55,7 @@ SUITES=(
   ui:rating:check
   ui:kanban:check
   ui:drawer:check
+  ui:combobox:demo
   ui:dialog:check
   ui:popover:check
   ui:semantics:check
