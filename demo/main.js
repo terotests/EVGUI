@@ -386,6 +386,7 @@ let lastFiltersHover = "";
 // pixels and nothing else.
 const eventcal = new EventCalDemo();
 eventcal.init(EVENTCAL_CSS);
+eventcal.useClock(new Date().getFullYear(), new Date().getMonth() + 1, new Date().getDate(), new Date().getHours() * 60 + new Date().getMinutes(), -new Date().getTimezoneOffset());
 let lastEventcalHover = "";
 
 // The chat transcript. It had a headless render entry and its own gate and was
@@ -1058,7 +1059,14 @@ const DEMOS = {
     list: () => eventcal.displayListJson(),
     hit: (x, y) => eventcal.hitId(x, y),
     a11y: (gen, focus) => eventcal.a11yJson(gen, focus),
-    press: (id) => eventcal.press(id),
+    // A gesture: a press on an event, its bottom edge or an empty slot arms a
+    // move, a resize or a create; anything else is a click at once.
+    press: (id, x, y) => eventcal.pointerDown(id, x, y),
+    drag: (id, ev) => eventcal.pointerMove(ev.offsetX, ev.offsetY),
+    drop: () => eventcal.pointerUp(),
+    scroll: (dy) => eventcal.scrollBy(dy),
+    cursorAt: (x, y) => eventcal.cursorAt(x, y),
+    width: () => eventcal.widthPx(),
     hover: (id) => {
       if (id === lastEventcalHover) return false;
       lastEventcalHover = id;
@@ -2077,6 +2085,15 @@ NARROW.kanban = { min: 320, h: "own", grow: true };
 NARROW.drawer = { min: 320, h: "auto", keep: true };
 // The page grows under an open list, so its height is the demo's own.
 NARROW.combobox = { min: 320, h: "own" };
+// Laid out at the room (up to its 1000), and as tall as its three cards lay out.
+NARROW.eventcal = { min: 320, h: "own", grow: true };
+window.__ecBox = (id) => {
+  const f = (e) => { if (e.id === id) return e; for (const k of e.children) { const r = f(k); if (r) return r; } return null; };
+  const e = f(eventcal.root);
+  return e ? { x: e.calculatedX, y: e.calculatedY, w: e.calculatedWidth, h: e.calculatedHeight, pw: eventcal.pageW } : null;
+};
+window.__ecHit = (x, y) => eventcal.hitId(x, y);
+window.__ecState = () => ({ focus: eventcal.focused, a: eventcal.statusOf(1), b: eventcal.statusOf(2), view: eventcal.boardA.view, lang: eventcal.boardA.lang });
 const NARROW_AT = 600;
 const naturalSize = {};
 const fittedHeight = new Map();

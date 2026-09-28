@@ -1,0 +1,413 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; EcI18n — the event calendar's six languages
+; =============================================================================
+; ReUI's calendar takes a date-fns locale; here the same words are tables. The
+; calendar's own labels (Today, All day, No events, "+N more" and the view
+; names) come from the pattern's translations; weekday and month names and the
+; date formats are what `Intl.DateTimeFormat` gives for each locale, written
+; out so the Node checks and the page draw the same strings.
+;
+; Arabic is the one right-to-left locale: `isRtl` is what turns the card
+; around.
+; =============================================================================
+
+class EcI18n {
+
+    sfn codes:[string] () {
+        return ([] _:string ( "en" "de" "fr" "es" "ja" "ar" ))
+    }
+
+    sfn names:[string] () {
+        return ([] _:string ( "English" "Deutsch" "Français" "Español" "日本語" "العربية" ))
+    }
+
+    sfn isRtl:boolean (lang:string) {
+        return (lang == "ar")
+    }
+
+    sfn pick:string (lang:string en:string de:string fr:string es:string ja:string ar:string) {
+        if (lang == "de") { return de }
+        if (lang == "fr") { return fr }
+        if (lang == "es") { return es }
+        if (lang == "ja") { return ja }
+        if (lang == "ar") { return ar }
+        return en
+    }
+
+    sfn today:string (lang:string) {
+        return (EcI18n.pick(lang "Today" "Heute" "Aujourd'hui" "Hoy" "今日" "اليوم"))
+    }
+
+    sfn allDay:string (lang:string) {
+        return (EcI18n.pick(lang "All day" "Ganztägig" "Journée entière" "Todo el día" "終日" "طوال اليوم"))
+    }
+
+    sfn noEvents:string (lang:string) {
+        return (EcI18n.pick(lang "No events" "Keine Termine" "Aucun événement" "Sin eventos" "予定なし" "لا توجد أحداث"))
+    }
+
+    sfn more:string (lang:string n:int) {
+        def ns:string (to_string n)
+        return (EcI18n.pick(lang ("+" + ns + " more") ("+" + ns + " weitere") ("+" + ns + " autres") ("+" + ns + " más") ("他" + ns + "件") ("+" + ns + " المزيد")))
+    }
+
+    ; The view switcher's names. `ndays` carries its count.
+    sfn viewName:string (lang:string v:string n:int) {
+        def ns:string (to_string n)
+        if (v == "month") { return (EcI18n.pick(lang "Month" "Monat" "Mois" "Mes" "月" "شهر")) }
+        if (v == "week") { return (EcI18n.pick(lang "Week" "Woche" "Semaine" "Semana" "週" "أسبوع")) }
+        if (v == "day") { return (EcI18n.pick(lang "Day" "Tag" "Jour" "Día" "日" "يوم")) }
+        if (v == "ndays") { return (EcI18n.pick(lang (ns + " days") (ns + " Tage") (ns + " jours") (ns + " días") (ns + "日間") (ns + " أيام"))) }
+        if (v == "agenda") { return (EcI18n.pick(lang "Agenda" "Agenda" "Agenda" "Agenda" "予定" "جدول الأعمال")) }
+        return (EcI18n.pick(lang "Resource" "Zeitraster" "Grille horaire" "Cuadrícula" "タイムグリッド" "شبكة زمنية"))
+    }
+
+    ; --- names -----------------------------------------------------------------
+
+    sfn monthName:string (lang:string m:int) {
+        def i:int (m - 1)
+        if (lang == "de") { return (itemAt ([] _:string ( "Januar" "Februar" "März" "April" "Mai" "Juni" "Juli" "August" "September" "Oktober" "November" "Dezember" )) i) }
+        if (lang == "fr") { return (itemAt ([] _:string ( "janvier" "février" "mars" "avril" "mai" "juin" "juillet" "août" "septembre" "octobre" "novembre" "décembre" )) i) }
+        if (lang == "es") { return (itemAt ([] _:string ( "enero" "febrero" "marzo" "abril" "mayo" "junio" "julio" "agosto" "septiembre" "octubre" "noviembre" "diciembre" )) i) }
+        if (lang == "ja") { return ((to_string m) + "月") }
+        if (lang == "ar") { return (itemAt ([] _:string ( "يناير" "فبراير" "مارس" "أبريل" "مايو" "يونيو" "يوليو" "أغسطس" "سبتمبر" "أكتوبر" "نوفمبر" "ديسمبر" )) i) }
+        return (itemAt ([] _:string ( "January" "February" "March" "April" "May" "June" "July" "August" "September" "October" "November" "December" )) i)
+    }
+
+    sfn monthShort:string (lang:string m:int) {
+        def i:int (m - 1)
+        if (lang == "de") { return (itemAt ([] _:string ( "Jan." "Feb." "März" "Apr." "Mai" "Juni" "Juli" "Aug." "Sept." "Okt." "Nov." "Dez." )) i) }
+        if (lang == "fr") { return (itemAt ([] _:string ( "janv." "févr." "mars" "avr." "mai" "juin" "juil." "août" "sept." "oct." "nov." "déc." )) i) }
+        if (lang == "es") { return (itemAt ([] _:string ( "ene" "feb" "mar" "abr" "may" "jun" "jul" "ago" "sept" "oct" "nov" "dic" )) i) }
+        if ((lang == "ja") || (lang == "ar")) { return (EcI18n.monthName(lang m)) }
+        return (itemAt ([] _:string ( "Jan" "Feb" "Mar" "Apr" "May" "Jun" "Jul" "Aug" "Sep" "Oct" "Nov" "Dec" )) i)
+    }
+
+    sfn dayName:string (lang:string dow:int) {
+        if (lang == "de") { return (itemAt ([] _:string ( "Sonntag" "Montag" "Dienstag" "Mittwoch" "Donnerstag" "Freitag" "Samstag" )) dow) }
+        if (lang == "fr") { return (itemAt ([] _:string ( "dimanche" "lundi" "mardi" "mercredi" "jeudi" "vendredi" "samedi" )) dow) }
+        if (lang == "es") { return (itemAt ([] _:string ( "domingo" "lunes" "martes" "miércoles" "jueves" "viernes" "sábado" )) dow) }
+        if (lang == "ja") { return (itemAt ([] _:string ( "日曜日" "月曜日" "火曜日" "水曜日" "木曜日" "金曜日" "土曜日" )) dow) }
+        if (lang == "ar") { return (itemAt ([] _:string ( "الأحد" "الاثنين" "الثلاثاء" "الأربعاء" "الخميس" "الجمعة" "السبت" )) dow) }
+        return (itemAt ([] _:string ( "Sunday" "Monday" "Tuesday" "Wednesday" "Thursday" "Friday" "Saturday" )) dow)
+    }
+
+    sfn dayShort:string (lang:string dow:int) {
+        if (lang == "de") { return (itemAt ([] _:string ( "So" "Mo" "Di" "Mi" "Do" "Fr" "Sa" )) dow) }
+        if (lang == "fr") { return (itemAt ([] _:string ( "dim." "lun." "mar." "mer." "jeu." "ven." "sam." )) dow) }
+        if (lang == "es") { return (itemAt ([] _:string ( "dom" "lun" "mar" "mié" "jue" "vie" "sáb" )) dow) }
+        if (lang == "ja") { return (itemAt ([] _:string ( "日" "月" "火" "水" "木" "金" "土" )) dow) }
+        if (lang == "ar") { return (EcI18n.dayName(lang dow)) }
+        return (itemAt ([] _:string ( "Sun" "Mon" "Tue" "Wed" "Thu" "Fri" "Sat" )) dow)
+    }
+
+    ; --- dates -------------------------------------------------------------------
+
+    sfn ymd:[int] (days:int) {
+        def p:[int] ([] _:int ( 0 0 0 ))
+        UiDate.fromDays(days p)
+        return p
+    }
+
+    ; "September 2026", "septiembre de 2026", "2026年9月".
+    sfn monthTitle:string (lang:string days:int) {
+        def p:[int] (EcI18n.ymd(days))
+        def y:string (to_string (itemAt p 0))
+        def mn:string (EcI18n.monthName(lang (itemAt p 1)))
+        if (lang == "es") { return (mn + " de " + y) }
+        if (lang == "ja") { return (y + "年" + mn) }
+        return (mn + " " + y)
+    }
+
+    ; "Monday, September 28, 2026" and its five translations.
+    sfn dayTitle:string (lang:string days:int) {
+        def p:[int] (EcI18n.ymd(days))
+        def y:string (to_string (itemAt p 0))
+        def d:string (to_string (itemAt p 2))
+        def mn:string (EcI18n.monthName(lang (itemAt p 1)))
+        def wd:string (EcI18n.dayName(lang (UiDate.weekday(days))))
+        if (lang == "de") { return (wd + ", " + d + ". " + mn + " " + y) }
+        if (lang == "fr") { return (wd + " " + d + " " + mn + " " + y) }
+        if (lang == "es") { return (wd + ", " + d + " de " + mn + " de " + y) }
+        if (lang == "ja") { return (y + "年" + mn + d + "日 " + wd) }
+        if (lang == "ar") { return (wd + "، " + d + " " + mn + " " + y) }
+        return (wd + ", " + mn + " " + d + ", " + y)
+    }
+
+    ; "Sep 27 – Oct 3, 2026", or "27. Sept. – 3. Okt. 2026".
+    sfn rangeTitle:string (lang:string a:int b:int) {
+        def p:[int] (EcI18n.ymd(a))
+        def q:[int] (EcI18n.ymd(b))
+        def y:string (to_string (itemAt q 0))
+        def da:string (to_string (itemAt p 2))
+        def db:string (to_string (itemAt q 2))
+        def ma:string (EcI18n.monthShort(lang (itemAt p 1)))
+        def mb:string (EcI18n.monthShort(lang (itemAt q 1)))
+        if (lang == "en") { return (ma + " " + da + " – " + mb + " " + db + ", " + y) }
+        if (lang == "de") { return (da + ". " + ma + " – " + db + ". " + mb + " " + y) }
+        if (lang == "ja") { return (y + "年" + ma + da + "日 – " + mb + db + "日") }
+        return (da + " " + ma + " – " + db + " " + mb + " " + y)
+    }
+
+    ; "Mon, Sep 28" — an agenda day's heading.
+    sfn shortDate:string (lang:string days:int) {
+        def p:[int] (EcI18n.ymd(days))
+        def d:string (to_string (itemAt p 2))
+        def wd:string (EcI18n.dayShort(lang (UiDate.weekday(days))))
+        def mn:string (EcI18n.monthShort(lang (itemAt p 1)))
+        if (lang == "en") { return (wd + ", " + mn + " " + d) }
+        if (lang == "de") { return (wd + ", " + d + ". " + mn) }
+        if (lang == "ja") { return (mn + d + "日 (" + wd + ")") }
+        return (wd + " " + d + " " + mn)
+    }
+
+    ; --- clock times ---------------------------------------------------------------
+
+    sfn pad2:string (n:int) {
+        if (n < 10) {
+            return ("0" + (to_string n))
+        }
+        return (to_string n)
+    }
+
+    ; "9:00 AM" in English, "09:00" elsewhere. Minutes from midnight; 1440 is
+    ; the end of the day and reads as midnight.
+    sfn time:string (lang:string minutes:int) {
+        def m:int minutes
+        while (m >= 1440) {
+            m = (m - 1440)
+        }
+        while (m < 0) {
+            m = (m + 1440)
+        }
+        def h:int (idiv m 60)
+        def mm:int (m - (h * 60))
+        if (lang == "en") {
+            def ap:string "AM"
+            if (h >= 12) {
+                ap = "PM"
+            }
+            def h12:int (h % 12)
+            if (h12 == 0) {
+                h12 = 12
+            }
+            return ((to_string h12) + ":" + (EcI18n.pad2(mm)) + " " + ap)
+        }
+        if (lang == "ja") {
+            return ((to_string h) + ":" + (EcI18n.pad2(mm)))
+        }
+        return ((EcI18n.pad2(h)) + ":" + (EcI18n.pad2(mm)))
+    }
+
+    ; An hour label for the gutter: "9 AM" or "09:00".
+    sfn hour:string (lang:string h:int) {
+        if (lang == "en") {
+            def ap:string "AM"
+            if ((h >= 12) && (h < 24)) {
+                ap = "PM"
+            }
+            def h12:int (h % 12)
+            if (h12 == 0) {
+                h12 = 12
+            }
+            return ((to_string h12) + " " + ap)
+        }
+        return (EcI18n.time(lang (h * 60)))
+    }
+    ; --- Arabic, drawn ------------------------------------------------------------
+    ;
+    ; EVG's painter takes text in VISUAL order, already shaped, and tells the
+    ; canvas not to reorder it (a left-to-right override on every run). A
+    ; logical Arabic string therefore came out letter by letter backwards and
+    ; unjoined. So a string for the screen is shaped here into the Unicode
+    ; presentation forms (initial, medial, final, isolated, and the lam-alef
+    ; ligatures) and put into visual order — Arabic runs reversed, digits and
+    ; Latin kept as they read. The reader still gets the logical string: the
+    ; board keeps it as the element's accessible name.
+
+    ; The four forms of a letter: isolated, final, initial, medial. A letter
+    ; that joins only to the one before it has 0 for the last two.
+    sfn forms:[int] (c:int) {
+        if (c == 1569) { return ([] _:int ( 65152 0 0 0 )) }
+        if (c == 1570) { return ([] _:int ( 65153 65154 0 0 )) }
+        if (c == 1571) { return ([] _:int ( 65155 65156 0 0 )) }
+        if (c == 1572) { return ([] _:int ( 65157 65158 0 0 )) }
+        if (c == 1573) { return ([] _:int ( 65159 65160 0 0 )) }
+        if (c == 1574) { return ([] _:int ( 65161 65162 65163 65164 )) }
+        if (c == 1575) { return ([] _:int ( 65165 65166 0 0 )) }
+        if (c == 1576) { return ([] _:int ( 65167 65168 65169 65170 )) }
+        if (c == 1577) { return ([] _:int ( 65171 65172 0 0 )) }
+        if ((c >= 1578) && (c <= 1582)) {
+            def b:int (65173 + ((c - 1578) * 4))
+            return ([] _:int ( b (b + 1) (b + 2) (b + 3) ))
+        }
+        if ((c >= 1583) && (c <= 1586)) {
+            def b2:int (65193 + ((c - 1583) * 2))
+            return ([] _:int ( b2 (b2 + 1) 0 0 ))
+        }
+        if ((c >= 1587) && (c <= 1594)) {
+            def b3:int (65201 + ((c - 1587) * 4))
+            return ([] _:int ( b3 (b3 + 1) (b3 + 2) (b3 + 3) ))
+        }
+        if ((c >= 1601) && (c <= 1607)) {
+            def b4:int (65233 + ((c - 1601) * 4))
+            return ([] _:int ( b4 (b4 + 1) (b4 + 2) (b4 + 3) ))
+        }
+        if (c == 1608) { return ([] _:int ( 65261 65262 0 0 )) }
+        if (c == 1609) { return ([] _:int ( 65263 65264 0 0 )) }
+        if (c == 1610) { return ([] _:int ( 65265 65266 65267 65268 )) }
+        return ([] _:int ( 0 0 0 0 ))
+    }
+
+    sfn isLetter:boolean (c:int) {
+        def f:[int] (EcI18n.forms(c))
+        return ((itemAt f 0) != 0)
+    }
+
+    ; Joins to the letter AFTER it: has an initial form.
+    sfn joinsOn:boolean (c:int) {
+        def f:[int] (EcI18n.forms(c))
+        return ((itemAt f 2) != 0)
+    }
+
+    sfn hasArabic:boolean (s:string) {
+        def i:int 0
+        while (i < (strlen s)) {
+            def c:int (charAt s i)
+            if ((c >= 1536) && (c <= 1791)) {
+                return true
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    sfn lamAlef:int (alef:int) {
+        if (alef == 1570) { return 65269 }
+        if (alef == 1571) { return 65271 }
+        if (alef == 1573) { return 65273 }
+        if (alef == 1575) { return 65275 }
+        return 0
+    }
+
+    ; Logical codes, shaped.
+    sfn shape:[int] (s:string) {
+        def src:[int]
+        def i:int 0
+        while (i < (strlen s)) {
+            push src (charAt s i)
+            i = (i + 1)
+        }
+        def out:[int]
+        def n:int (array_length src)
+        i = 0
+        while (i < n) {
+            def c:int (itemAt src i)
+            if (EcI18n.isLetter(c)) {
+                def prevJoins:boolean false
+                if (i > 0) {
+                    prevJoins = (EcI18n.joinsOn((itemAt src (i - 1))))
+                }
+                def nx:int 0
+                if ((i + 1) < n) {
+                    nx = (itemAt src (i + 1))
+                }
+                def lig:int 0
+                if (c == 1604) {
+                    lig = (EcI18n.lamAlef(nx))
+                }
+                if (lig > 0) {
+                    if prevJoins {
+                        push out (lig + 1)
+                    } {
+                        push out lig
+                    }
+                    i = (i + 2)
+                } {
+                    def f:[int] (EcI18n.forms(c))
+                    def nextJoins:boolean ((EcI18n.joinsOn(c)) && (EcI18n.isLetter(nx)))
+                    def form:int (itemAt f 0)
+                    if (prevJoins && nextJoins) {
+                        form = (itemAt f 3)
+                    }
+                    if (prevJoins && (nextJoins == false)) {
+                        form = (itemAt f 1)
+                    }
+                    if ((prevJoins == false) && nextJoins) {
+                        form = (itemAt f 2)
+                    }
+                    push out form
+                    i = (i + 1)
+                }
+            } {
+                push out c
+                i = (i + 1)
+            }
+        }
+        return out
+    }
+
+    sfn strongLtr:boolean (c:int) {
+        if ((c >= 48) && (c <= 57)) { return true }
+        if ((c >= 65) && (c <= 90)) { return true }
+        if ((c >= 97) && (c <= 122)) { return true }
+        return false
+    }
+
+    ; What a right-to-left line looks like, left to right.
+    sfn visual:string (s:string) {
+        if ((EcI18n.hasArabic(s)) == false) {
+            return s
+        }
+        def cs:[int] (EcI18n.shape(s))
+        def n:int (array_length cs)
+        ; Mark each code: part of a left-to-right run or not. A ':' '.' or '/'
+        ; between two such characters belongs to their run (a clock time).
+        def ltr:[boolean]
+        def i:int 0
+        while (i < n) {
+            def c:int (itemAt cs i)
+            def l:boolean (EcI18n.strongLtr(c))
+            if ((l == false) && ((i > 0) && ((i + 1) < n))) {
+                if (((c == 58) || (c == 46)) || (c == 47)) {
+                    if ((EcI18n.strongLtr((itemAt cs (i - 1)))) && (EcI18n.strongLtr((itemAt cs (i + 1))))) {
+                        l = true
+                    }
+                }
+            }
+            push ltr l
+            i = (i + 1)
+        }
+        ; Walk from the logical end: a right-to-left character is written out
+        ; as met, a left-to-right run as a block in its own order.
+        def out:string ""
+        def j:int (n - 1)
+        while (j >= 0) {
+            if (itemAt ltr j) {
+                def e:int j
+                while ((j >= 0) && (itemAt ltr j)) {
+                    j = (j - 1)
+                }
+                def k:int (j + 1)
+                while (k <= e) {
+                    out = (out + (strfromcode (itemAt cs k)))
+                    k = (k + 1)
+                }
+            } {
+                def c2:int (itemAt cs j)
+                if (c2 == 40) {
+                    c2 = 41
+                } {
+                    if (c2 == 41) {
+                        c2 = 40
+                    }
+                }
+                out = (out + (strfromcode c2))
+                j = (j - 1)
+            }
+        }
+        return out
+    }
+}

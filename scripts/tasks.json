@@ -20,7 +20,7 @@
   "ui:demo:frame": "npm run ui:demo:build --silent && node gallery/evgui/demo/ripple-frame-check.mjs",
   "ui:demo:page": "npm run ui:demo:build --silent && node gallery/evgui/demo/build.mjs && node gallery/evgui/demo/page-check.mjs",
   "ui:demo:web": "npm run ui:web",
-  "ui:eventcal:demo": "npm run ui:demo:build --silent && node gallery/evgui/demo/eventcal-demo-check.mjs",
+  "ui:eventcal:demo": "npm run ui:demo:build --silent && node gallery/evgui/demo/eventcal-demo-check.mjs && node gallery/evgui/demo/eventcal-patterns-check.mjs",
   "ui:filters:demo": "npm run ui:demo:build --silent && node gallery/evgui/demo/filters-demo-check.mjs",
   "ui:form:check": "npm run ui:demo:build --silent && node gallery/evgui/demo/form-check.mjs",
   "ui:input:bench": "npm run ui:demo:build --silent && node gallery/evgui/demo/build.mjs && node gallery/evgui/demo/input-bench.mjs",

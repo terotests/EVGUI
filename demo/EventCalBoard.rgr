@@ -1,0 +1,2699 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; EcBoard — one of ReUI's event calendars, as a card
+; =============================================================================
+; Two of ReUI's event-calendar patterns are this class with different settings:
+;
+;   Pattern A ("ea"): the full calendar. A toolbar with Today, a view switcher
+;   (month, week, day, N days, agenda, resource), the arrows, the title, a
+;   Settings popover (tabs of switches and selects, every one of which changes
+;   the calendar) and New event.
+;
+;   Pattern B ("eb", `hotel`): a booking board. The resource view of one day —
+;   four rooms as columns, 8 to 20, status colours, two-line events — in a
+;   600px card that scrolls inside, with a legend under it. Bookings move
+;   between rooms and resize; new ones are not drawn by dragging.
+;
+; What an event IS, where overlapping ones go, and what a drag does to it are
+; `EventCalCtl`'s: the overlap layout is the measured one, and the three
+; gestures (`beginMove`, `beginResize`, `beginCreate`, `dragTo`, `endDrag`)
+; snap, clamp and refuse there. This file turns the pointer into a day, a
+; minute and a resource, and the controller's answer back into boxes.
+;
+; Absolutely placed boxes (events, the now line, the day number) are placed
+; from their parent's CONTENT box, so every parent that holds them has no
+; padding; and a row that stops matching a stylesheet rule keeps its last
+; value, so every state class sets each property its siblings set.
+; =============================================================================
+
+Import "../src/EventCalCtl.rgr"
+Import "../src/PopoverCtl.rgr"
+Import "../src/TabsCtl.rgr"
+Import "../src/SelectCtl.rgr"
+Import "../src/UiCtl.rgr"
+Import "../src/UiTree.rgr"
+Import "../src/UiDate.rgr"
+Import "../src/UiText.rgr"
+Import "EventCalI18n.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGLayout.rgr"
+Import "pkg:evg/EVGTextEngine.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+
+; One column of a time grid: which day, and in a resource view which lane.
+class EcCol {
+    def day:int 0
+    def res:string ""
+    def label:string ""
+    def color:string ""
+    Constructor () {
+    }
+}
+
+class EcBoard {
+    def p:string "ea"
+    def hotel:boolean false
+    def model:EventCalCtl (new EventCalCtl())
+    def measurer:EVGLayout (new EVGLayout())
+
+    ; --- the date --------------------------------------------------------------
+    def today:int 0
+    ; Now, in minutes from midnight of `today`, in the zone shown.
+    def nowMin:int 630
+    def cursor:int 0
+    def view:string "month"
+    def nDays:int 3
+    def created:int 0
+
+    ; --- the settings (Pattern A) -----------------------------------------------
+    def weekends:boolean true
+    def weekNumbers:boolean false
+    def nowLine:boolean true
+    def offDays:boolean false
+    def dayAdd:boolean false
+    def weekStart:int 0
+    def startH:int 0
+    def endH:int 24
+    def interval:int 60
+    def tooltips:boolean false
+    def lang:string "en"
+    def tz:string "browser"
+    ; The browser's own offset from UTC in minutes (east positive), which the
+    ; page reads from the real clock; the shift applied to every clock time is
+    ; the chosen zone's offset less this one.
+    def browserOff:int 0
+    def shift:int 0
+
+    ; --- the page state ----------------------------------------------------------
+    def focused:string ""
+    def hovered:string ""
+    def status:string ""
+    def scroll:double 0.0
+    def cardW:double 960.0
+    def narrow:boolean false
+    def cardEl@(optional):EVGElement
+
+    def settings:PopoverCtl (new PopoverCtl())
+    def tabs:TabsCtl (new TabsCtl())
+    def viewSel:SelectCtl (new SelectCtl())
+    def selWeek:SelectCtl (new SelectCtl())
+    def selStart:SelectCtl (new SelectCtl())
+    def selEnd:SelectCtl (new SelectCtl())
+    def selGrid:SelectCtl (new SelectCtl())
+    def selSnap:SelectCtl (new SelectCtl())
+    def selLang:SelectCtl (new SelectCtl())
+    def selTz:SelectCtl (new SelectCtl())
+
+    ; --- a pointer gesture ---------------------------------------------------------
+    ; `armed` is what the press landed on; the gesture begins only once the
+    ; pointer has travelled, so a click on an event is still a click.
+    def armed:string ""
+    def armKind:string ""
+    def armX:double 0.0
+    def armY:double 0.0
+    def dragging:boolean false
+    def lastDay:int 0
+    def lastRes:string ""
+
+    Constructor () {
+    }
+
+    ; =========================================================================
+    ; set-up
+    ; =========================================================================
+
+    fn setup:void (prefix:string isHotel:boolean day:int minute:int) {
+        p = prefix
+        hotel = isHotel
+        today = day
+        cursor = day
+        nowMin = minute
+        model.tid = prefix
+        if hotel {
+            view = "resource"
+            startH = 8
+            endH = 20
+            interval = 60
+            this.seedHotel()
+        } {
+            this.seedFull()
+        }
+        this.setupControls()
+        this.applySettings()
+        this.resetScroll()
+    }
+
+    fn seedFull:void () {
+        def sun:int (today - (UiDate.weekday(today)))
+        model.addEvent("e1" "Team sync" (sun + 1) 540 570 "alex" "")
+        def dr:CalEvent (model.addEvent("e2" "Design review" (sun + 2) 660 720 "mia" "violet"))
+        dr.kind = "avatars"
+        model.addEvent("e3" "Product demo" (sun + 3) 900 960 "sam" "emerald")
+        model.addEvent("e4" "Roadmap planning" (sun + 4) 600 690 "alex" "indigo")
+        def cc:CalEvent (model.addEvent("e5" "Client call" (sun + 5) 840 900 "mia" "amber"))
+        cc.kind = "pill"
+        ; ReUI's end is exclusive: day 4 to day 6 is Thursday and Friday.
+        def off:CalEvent (model.addAllDay("e6" "Team offsite" (sun + 4) (sun + 5)))
+        off.color = "rose"
+        model.addEvent("e7" "Sprint planning" (sun + 9) 570 630 "sam" "blue")
+        model.addEvent("e8" "Quarterly review" (sun + 17) 780 870 "alex" "cyan")
+    }
+
+    fn seedHotel:void () {
+        def d:int today
+        this.book("b1" "Occupied · Reed" "r101" 480 600 "occ")
+        this.book("b2" "Check-out · Reed" "r101" 600 630 "co")
+        this.book("b3" "Housekeeping" "r101" 630 720 "hk")
+        this.book("b4" "Check-in · Alvarez" "r101" 840 900 "ci")
+        this.book("b5" "Occupied · Chen" "r102" 480 960 "occ")
+        this.book("b6" "Check-out · Chen" "r102" 960 990 "co")
+        this.book("b7" "Housekeeping" "r102" 990 1080 "hk")
+        this.book("b8" "Check-out · Novak" "r204" 660 690 "co")
+        this.book("b9" "Deep clean" "r204" 690 780 "hk")
+        this.book("b10" "Check-in · Ford" "r204" 900 960 "ci")
+        this.book("b11" "Occupied · Ford" "r204" 960 1200 "occ")
+        this.book("b12" "Housekeeping" "r301" 480 570 "hk")
+        this.book("b13" "Check-in · Osei" "r301" 600 660 "ci")
+        this.book("b14" "Occupied · Osei" "r301" 660 1200 "occ")
+        model.canCreate = false
+    }
+
+    fn book:void (id:string title:string room:string s:int e:int status:string) {
+        def ev:CalEvent (model.addEvent(id title today s e room (EcBoard.statusColor(status))))
+        ev.kind = status
+    }
+
+    sfn statusColor:string (status:string) {
+        if (status == "occ") { return "emerald" }
+        if (status == "co") { return "rose" }
+        if (status == "hk") { return "cyan" }
+        return "blue"
+    }
+
+    fn setupControls:void () {
+        viewSel.tid = (p + "-view")
+        viewSel.name = "View"
+        settings.tid = (p + "-set")
+        settings.name = "Settings"
+        settings.title = "Calendar settings"
+        settings.side = "bottom"
+        settings.align = "end"
+        tabs.tid = (p + "-set-tabs")
+        tabs.name = "Settings sections"
+        tabs.value = "view"
+        this.fillTabs()
+        this.dressSel(selWeek "ws" "Week starts")
+        selWeek.addItem("0" "Sunday" false)
+        selWeek.addItem("1" "Monday" false)
+        this.dressSel(selStart "ds" "Day starts")
+        selStart.addItem("0" "00:00" false)
+        selStart.addItem("6" "06:00" false)
+        selStart.addItem("8" "08:00" false)
+        this.dressSel(selEnd "de" "Day ends")
+        selEnd.addItem("18" "18:00" false)
+        selEnd.addItem("20" "20:00" false)
+        selEnd.addItem("24" "24:00" false)
+        this.dressSel(selGrid "gi" "Grid interval")
+        selGrid.addItem("30" "30 min" false)
+        selGrid.addItem("60" "60 min" false)
+        this.dressSel(selSnap "sn" "Drag snap")
+        selSnap.addItem("5" "5 min" false)
+        selSnap.addItem("15" "15 min" false)
+        selSnap.addItem("30" "30 min" false)
+        this.dressSel(selLang "lang" "Language")
+        def codes:[string] (EcI18n.codes())
+        def names:[string] (EcI18n.names())
+        def i:int 0
+        while (i < (array_length codes)) {
+            selLang.addItem((itemAt codes i) (itemAt names i) false)
+            i = (i + 1)
+        }
+        this.dressSel(selTz "tz" "Time zone")
+        selTz.addItem("browser" "Browser" false)
+        selTz.addItem("ny" "New York" false)
+        selTz.addItem("london" "London" false)
+        selTz.addItem("tokyo" "Tokyo" false)
+        selTz.addItem("kolkata" "Kolkata" false)
+        this.fillViews()
+    }
+
+    fn dressSel:void (s:SelectCtl key:string label:string) {
+        s.tid = (p + "-set-" + key)
+        s.name = label
+    }
+
+    fn fillViews:void () {
+        def keep:string view
+        def empty:[UiItem]
+        viewSel.items = empty
+        def vs:[string] ([] _:string ( "month" "week" "day" "ndays" "agenda" "resource" ))
+        def i:int 0
+        while (i < (array_length vs)) {
+            def v:string (itemAt vs i)
+            viewSel.addItem(v (EcI18n.viewName(lang v nDays)) false)
+            i = (i + 1)
+        }
+        viewSel.value = keep
+    }
+
+    ; The Time grid tab exists only where there is a time grid.
+    fn fillTabs:void () {
+        def keep:string tabs.value
+        def empty:[UiItem]
+        tabs.items = empty
+        tabs.addItem("view" "View" "" false)
+        if (this.isGrid()) {
+            tabs.addItem("grid" "Time grid" "" false)
+        }
+        tabs.addItem("behavior" "Behavior" "" false)
+        tabs.addItem("region" "Region" "" false)
+        tabs.value = keep
+        if ((keep == "grid") && ((this.isGrid()) == false)) {
+            tabs.value = "view"
+        }
+        tabs.rovingValue = tabs.value
+    }
+
+    ; Everything the settings say, written where it is read.
+    fn applySettings:void () {
+        selWeek.value = (to_string weekStart)
+        selStart.value = (to_string startH)
+        selEnd.value = (to_string endH)
+        selGrid.value = (to_string interval)
+        selSnap.value = (to_string model.snapMinutes)
+        selLang.value = lang
+        selTz.value = tz
+        model.dayStartMin = (startH * 60)
+        model.dayEndMin = (endH * 60)
+        viewSel.value = view
+        this.fillViews()
+        this.fillTabs()
+    }
+
+    ; =========================================================================
+    ; the calendar's arithmetic
+    ; =========================================================================
+
+    fn isGrid:boolean () {
+        return ((view == "week") || ((view == "day") || ((view == "ndays") || (view == "resource"))))
+    }
+
+    sfn isWeekend:boolean (d:int) {
+        def w:int (UiDate.weekday(d))
+        return ((w == 0) || (w == 6))
+    }
+
+    fn startOfWeek:int (d:int) {
+        def w:int (UiDate.weekday(d))
+        return (d - (((w - weekStart) + 7) % 7))
+    }
+
+    fn firstOfMonth:int (d:int) {
+        def ymd:[int] (EcI18n.ymd(d))
+        return (UiDate.toDays((itemAt ymd 0) (itemAt ymd 1) 1))
+    }
+
+    fn monthStart:int () {
+        return (this.startOfWeek((this.firstOfMonth(cursor))))
+    }
+
+    fn shown:boolean (d:int) {
+        if weekends {
+            return true
+        }
+        return ((EcBoard.isWeekend(d)) == false)
+    }
+
+    ; The days a time grid (or the agenda) covers, in order.
+    fn gridDays:[int] () {
+        def out:[int]
+        if ((view == "day") || (view == "resource")) {
+            push out cursor
+            return out
+        }
+        if (view == "ndays") {
+            def d:int cursor
+            while ((array_length out) < nDays) {
+                if (this.shown(d)) {
+                    push out d
+                }
+                d = (d + 1)
+            }
+            return out
+        }
+        def s:int (this.startOfWeek(cursor))
+        def i:int 0
+        while (i < 7) {
+            if (this.shown((s + i))) {
+                push out (s + i)
+            }
+            i = (i + 1)
+        }
+        return out
+    }
+
+    fn resources:[EcCol] () {
+        def out:[EcCol]
+        if hotel {
+            push out (EcBoard.col(cursor "r101" "101 · King" "blue"))
+            push out (EcBoard.col(cursor "r102" "102 · Queen" "emerald"))
+            push out (EcBoard.col(cursor "r204" "204 · Twin" "violet"))
+            push out (EcBoard.col(cursor "r301" "Suite 301" "amber"))
+            return out
+        }
+        push out (EcBoard.col(cursor "alex" "Alex" "blue"))
+        push out (EcBoard.col(cursor "mia" "Mia" "violet"))
+        push out (EcBoard.col(cursor "sam" "Sam" "emerald"))
+        return out
+    }
+
+    sfn col:EcCol (day:int res:string label:string color:string) {
+        def c (new EcCol())
+        c.day = day
+        c.res = res
+        c.label = label
+        c.color = color
+        return c
+    }
+
+    fn columns:[EcCol] () {
+        if (view == "resource") {
+            return (this.resources())
+        }
+        def out:[EcCol]
+        def days:[int] (this.gridDays())
+        def i:int 0
+        while (i < (array_length days)) {
+            push out (EcBoard.col((itemAt days i) "" "" ""))
+            i = (i + 1)
+        }
+        return out
+    }
+
+    fn resName:string (res:string) {
+        def rs:[EcCol] (this.resources())
+        def i:int 0
+        while (i < (array_length rs)) {
+            def c:EcCol (itemAt rs i)
+            if (c.res == res) {
+                return c.label
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    fn title:string () {
+        if hotel {
+            return (EcI18n.dayTitle("en" cursor))
+        }
+        if (view == "month") {
+            return (EcI18n.monthTitle(lang cursor))
+        }
+        if ((view == "day") || (view == "resource")) {
+            return (EcI18n.dayTitle(lang cursor))
+        }
+        if (view == "agenda") {
+            return (EcI18n.rangeTitle(lang cursor (cursor + 29)))
+        }
+        def days:[int] (this.gridDays())
+        return (EcI18n.rangeTitle(lang (itemAt days 0) (itemAt days ((array_length days) - 1))))
+    }
+
+    ; ISO week of the week holding `d`.
+    sfn isoWeek:int (d:int) {
+        def thu:int ((d - (((UiDate.weekday(d)) + 6) % 7)) + 3)
+        def ymd:[int] (EcI18n.ymd(thu))
+        def jan4:int (UiDate.toDays((itemAt ymd 0) 1 4))
+        def wk1:int (jan4 - (((UiDate.weekday(jan4)) + 6) % 7))
+        return ((idiv (thu - wk1) 7) + 1)
+    }
+
+    ; One step of the arrows, in the view's unit.
+    fn step:void (delta:int) {
+        if ((view == "day") || (view == "resource")) {
+            cursor = (cursor + delta)
+            return
+        }
+        if (view == "ndays") {
+            cursor = (cursor + (delta * nDays))
+            return
+        }
+        if (view == "agenda") {
+            cursor = (cursor + (delta * 30))
+            return
+        }
+        if (view == "week") {
+            cursor = (cursor + (delta * 7))
+            return
+        }
+        def ymd:[int] (EcI18n.ymd(cursor))
+        def y:int (itemAt ymd 0)
+        def m:int ((itemAt ymd 1) + delta)
+        while (m > 12) {
+            m = (m - 12)
+            y = (y + 1)
+        }
+        while (m < 1) {
+            m = (m + 12)
+            y = (y - 1)
+        }
+        def dd:int (itemAt ymd 2)
+        def len:int (UiDate.daysInMonth(y m))
+        if (dd > len) {
+            dd = len
+        }
+        cursor = (UiDate.toDays(y m dd))
+    }
+
+    ; --- the time grid's geometry -----------------------------------------------
+
+    fn hourH:double () {
+        if hotel {
+            return 56.0
+        }
+        if (interval == 30) {
+            return 64.0
+        }
+        return 48.0
+    }
+
+    fn gutterW:double () {
+        if narrow {
+            return 44.0
+        }
+        if hotel {
+            return 72.0
+        }
+        return 64.0
+    }
+
+    fn innerW:double () {
+        return (cardW - 2.0)
+    }
+
+    fn contentH:double () {
+        return ((to_double (endH - startH)) * (this.hourH()))
+    }
+
+    fn viewportH:double () {
+        def v:double 560.0
+        if hotel {
+            v = 414.0
+        } {
+            if narrow {
+                v = 440.0
+            }
+        }
+        def c:double (this.contentH())
+        if (c < v) {
+            return c
+        }
+        return v
+    }
+
+    fn maxScroll:double () {
+        def m:double ((this.contentH()) - (this.viewportH()))
+        if (m < 0.0) {
+            return 0.0
+        }
+        return m
+    }
+
+    fn clampScroll:void () {
+        if (scroll > (this.maxScroll())) {
+            scroll = (this.maxScroll())
+        }
+        if (scroll < 0.0) {
+            scroll = 0.0
+        }
+    }
+
+    ; The morning in view: 8:00 at the top when the day starts earlier.
+    fn resetScroll:void () {
+        scroll = 0.0
+        if (startH < 8) {
+            scroll = ((to_double (8 - startH)) * (this.hourH()))
+        }
+        this.clampScroll()
+    }
+
+    fn scrollToMinute:void (m:int) {
+        def y:double (((to_double (m - (startH * 60))) / 60.0) * (this.hourH()))
+        if ((y < scroll) || (y > ((scroll + (this.viewportH())) - 40.0))) {
+            scroll = (y - 48.0)
+        }
+        this.clampScroll()
+    }
+
+    fn yOfMin:double (m:int) {
+        return (((to_double (m - (startH * 60))) / 60.0) * (this.hourH()))
+    }
+
+    fn scrollBy:boolean (dy:double) {
+        if ((this.isGrid()) == false) {
+            return false
+        }
+        def was:double scroll
+        scroll = (scroll + dy)
+        this.clampScroll()
+        return (scroll != was)
+    }
+
+    ; =========================================================================
+    ; drawing helpers
+    ; =========================================================================
+
+    sfn px:string (v:double) {
+        def scaled:int (to_int (v * 100.0))
+        def whole:int (idiv scaled 100)
+        def frac:int (scaled - (whole * 100))
+        def sign:string ""
+        if (scaled < 0) {
+            sign = "-"
+            whole = (0 - whole)
+            frac = (0 - frac)
+        }
+        def fs:string (to_string frac)
+        if (frac < 10) {
+            fs = "0" + fs
+        }
+        return (sign + (to_string whole) + "." + fs + "px")
+    }
+
+    sfn hr:EVGElement () {
+        def el:EVGElement (UiTree.div("" "eb-hr"))
+        el.a11yHidden = true
+        return el
+    }
+
+    ; A vertical hairline at x in an absolutely placing parent.
+    sfn vline:EVGElement (x:double h:double) {
+        def el:EVGElement (UiTree.div("" "eb-vl"))
+        el.a11yHidden = true
+        EcBoard.dims(el -1.0 h)
+        EcBoard.place(el x 0.0)
+        return el
+    }
+
+    sfn box:EVGElement (cls:string) {
+        return (UiTree.div("" cls))
+    }
+
+    sfn tx:EVGElement (cls:string text:string) {
+        def el:EVGElement (UiTree.label("" cls text))
+        el.a11yHidden = true
+        return el
+    }
+
+    sfn btn:EVGElement (id:string cls:string label:string) {
+        def el:EVGElement (UiTree.div(id cls))
+        el.role = "button"
+        el.a11yFocusable = true
+        el.a11yLabel = label
+        return el
+    }
+
+    sfn dims:void (el:EVGElement w:double h:double) {
+        if (w >= 0.0) {
+            UiTree.inline(el "width" (EcBoard.px(w)))
+        }
+        if (h >= 0.0) {
+            UiTree.inline(el "height" (EcBoard.px(h)))
+        }
+    }
+
+    sfn place:void (el:EVGElement x:double y:double) {
+        UiTree.inline(el "left" (EcBoard.px(x)))
+        UiTree.inline(el "top" (EcBoard.px(y)))
+    }
+
+    sfn iconPath:string (name:string) {
+        if (name == "left") { return "M15 18 L9 12 L15 6" }
+        if (name == "right") { return "M9 18 L15 12 L9 6" }
+        if (name == "down") { return "M6 9 L12 15 L18 9" }
+        if (name == "check") { return "M20 6 L9 17 L4 12" }
+        if (name == "plus") { return "M12 5 L12 19 M5 12 L19 12" }
+        ; Lucide settings-2: two rails and two knobs.
+        return "M20 7 L11 7 M14 17 L5 17 M20 17 A3 3 0 1 1 14 17 A3 3 0 1 1 20 17 Z M10 7 A3 3 0 1 1 4 7 A3 3 0 1 1 10 7 Z"
+    }
+
+    sfn icon:EVGElement (name:string cls:string) {
+        def el (EVGElement.createDiv())
+        el.className = ("eb-icon " + cls)
+        el.tagName = "path"
+        el.elementType = 3
+        el.viewBox = "0 0 24 24"
+        el.svgPath = (EcBoard.iconPath(name))
+        el.a11yHidden = true
+        return el
+    }
+
+    ; Tailwind's 500s, their tints (12%) and edges (30%) on white.
+    sfn base:string (c:string) {
+        if (c == "blue") { return "#3b82f6" }
+        if (c == "violet") { return "#8b5cf6" }
+        if (c == "emerald") { return "#10b981" }
+        if (c == "indigo") { return "#6366f1" }
+        if (c == "amber") { return "#f59e0b" }
+        if (c == "rose") { return "#f43f5e" }
+        if (c == "cyan") { return "#06b6d4" }
+        if (c == "sky") { return "#0ea5e9" }
+        return "#0a0a0a"
+    }
+
+    sfn tint:string (c:string) {
+        if (c == "blue") { return "#e7f0fe" }
+        if (c == "violet") { return "#f1ebfe" }
+        if (c == "emerald") { return "#e2f7f0" }
+        if (c == "indigo") { return "#ecedfd" }
+        if (c == "amber") { return "#fef3e2" }
+        if (c == "rose") { return "#fee8ec" }
+        if (c == "cyan") { return "#e1f6fa" }
+        if (c == "sky") { return "#e2f4fc" }
+        return "#e5e5e5"
+    }
+
+    sfn edge:string (c:string) {
+        if (c == "blue") { return "#c4dafc" }
+        if (c == "violet") { return "#dccefc" }
+        if (c == "emerald") { return "#b7ead9" }
+        if (c == "indigo") { return "#d0d1fb" }
+        if (c == "amber") { return "#fce2b6" }
+        if (c == "rose") { return "#fcc5cf" }
+        if (c == "cyan") { return "#b4e9f2" }
+        if (c == "sky") { return "#b7e4f8" }
+        return "#c4c4c4"
+    }
+
+    fn colorOf:string (e:CalEvent) {
+        return e.color
+    }
+
+    fn fit:string (text:string size:double w:double) {
+        if (w < 10.0) {
+            return ""
+        }
+        return (UiText.fit((measurer.getTextEngine()) text "Noto Sans" size w))
+    }
+
+    fn textW:double (text:string size:double) {
+        return (UiText.widthOf((measurer.getTextEngine()) text "Noto Sans" size))
+    }
+
+    fn timeRange:string (e:CalEvent) {
+        if (e.allDay || (e.endDay > e.startDay)) {
+            return (EcI18n.allDay(lang))
+        }
+        return ((EcI18n.time(lang e.startMin)) + " - " + (EcI18n.time(lang e.endMin)))
+    }
+
+    ; What a reader is told about an event: its title, its day and its times,
+    ; and in a resource view whose it is.
+    fn evLabel:string (e:CalEvent) {
+        def s:string (e.title + ", " + (EcI18n.dayTitle(lang e.startDay)) + ", " + (this.timeRange(e)))
+        if ((strlen e.resource) > 0) {
+            def rn:string (this.resName(e.resource))
+            if ((strlen rn) > 0) {
+                s = (s + ", " + rn)
+            }
+        }
+        return s
+    }
+
+    ; An event can be picked up in this grid at all.
+    fn movable:boolean () {
+        return model.canMove
+    }
+
+    ; =========================================================================
+    ; the card
+    ; =========================================================================
+
+    fn card:EVGElement () {
+        model.dayStartMin = (startH * 60)
+        model.dayEndMin = (endH * 60)
+        this.clampScroll()
+        def cls:string "eb-card"
+        if hotel {
+            cls = "eb-card eb-card-hotel"
+        }
+        def c:EVGElement (UiTree.div((p + "-card") cls))
+        c.role = "region"
+        c.a11yLabel = (this.cardName())
+        UiTree.inline(c "width" (EcBoard.px(cardW)))
+        if (EcI18n.isRtl(lang)) {
+            UiTree.inline(c "direction" "rtl")
+        } {
+            UiTree.inline(c "direction" "ltr")
+        }
+        c.addChild((this.toolbar()))
+        c.addChild((EcBoard.hr()))
+        if hotel {
+            c.addChild((this.timeGrid()))
+            c.addChild((EcBoard.hr()))
+            c.addChild((this.legend()))
+        } {
+            if (view == "month") {
+                c.addChild((this.monthView()))
+            }
+            if (view == "agenda") {
+                c.addChild((this.agendaView()))
+            }
+            if (this.isGrid()) {
+                c.addChild((this.timeGrid()))
+            }
+        }
+        if (EcI18n.isRtl(lang)) {
+            EcBoard.toVisual(c)
+        }
+        def st:EVGElement (UiTree.label((p + "-status") "eb-status" status))
+        st.role = "status"
+        c.addChild(st)
+        cardEl = c
+        return c
+    }
+
+    ; Arabic text on screen in visual order (see EcI18n.visual); a label a
+    ; reader hears keeps the logical string as its name.
+    sfn toVisual:void (el:EVGElement) {
+        if ((el.elementType == 1) && (EcI18n.hasArabic(el.textContent))) {
+            if ((el.a11yHidden == false) && ((strlen el.a11yLabel) == 0)) {
+                el.a11yLabel = el.textContent
+            }
+            el.textContent = (EcI18n.visual(el.textContent))
+        }
+        def i:int 0
+        while (i < (el.getChildCount())) {
+            EcBoard.toVisual((el.getChild(i)))
+            i = (i + 1)
+        }
+    }
+
+    fn cardName:string () {
+        if hotel {
+            return "Room bookings"
+        }
+        return "Event calendar"
+    }
+
+    ; --- the toolbar ---------------------------------------------------------------
+
+    fn toolbar:EVGElement () {
+        def bar:EVGElement (EcBoard.box("eb-bar"))
+        bar.role = "toolbar"
+        bar.a11yLabel = ((this.cardName()) + " toolbar")
+        def row:EVGElement (EcBoard.box("eb-barrow"))
+        def todayB:EVGElement (EcBoard.btn((p + "-today") "eb-btn eb-btn-ghost" (EcI18n.today(lang))))
+        todayB.addChild((EcBoard.tx("eb-btntx" (EcI18n.today(lang)))))
+        row.addChild(todayB)
+        if (hotel == false) {
+            row.addChild((this.viewSwitch()))
+        }
+        def prev:EVGElement (EcBoard.btn((p + "-prev") "eb-btn eb-btn-icon" "Previous"))
+        def next:EVGElement (EcBoard.btn((p + "-next") "eb-btn eb-btn-icon" "Next"))
+        ; The arrows point the way time runs, which in Arabic is leftwards.
+        if (EcI18n.isRtl(lang)) {
+            prev.addChild((EcBoard.icon("right" "eb-icon-md")))
+            next.addChild((EcBoard.icon("left" "eb-icon-md")))
+        } {
+            prev.addChild((EcBoard.icon("left" "eb-icon-md")))
+            next.addChild((EcBoard.icon("right" "eb-icon-md")))
+        }
+        if (narrow == false) {
+            row.addChild(prev)
+            row.addChild(next)
+        }
+        def ttl:EVGElement (UiTree.label((p + "-title") "eb-title" (this.title())))
+        ttl.role = "heading"
+        ttl.a11yLevel = 3
+        if (narrow == false) {
+            row.addChild(ttl)
+        }
+        row.addChild((EcBoard.box("eb-grow")))
+        if ((hotel == false) && (narrow == false)) {
+            row.addChild((this.settingsSlot()))
+        }
+        def newLabel:string "New event"
+        if hotel {
+            newLabel = "New booking"
+        }
+        def nb:EVGElement (EcBoard.btn((p + "-new") "eb-btn eb-btn-primary" newLabel))
+        nb.addChild((EcBoard.icon("plus" "eb-icon-md eb-icon-inv")))
+        if (narrow == false) {
+            nb.addChild((EcBoard.tx("eb-btntx eb-btntx-inv" newLabel)))
+        } {
+            UiTree.addClass(nb "eb-btn-sq")
+        }
+        row.addChild(nb)
+        ; On a phone the popover's trigger is the last thing in the row, so
+        ; the panel it hangs off its right edge stays on the page.
+        if ((hotel == false) && narrow) {
+            row.addChild((this.settingsSlot()))
+        }
+        bar.addChild(row)
+        if narrow {
+            def row2:EVGElement (EcBoard.box("eb-barrow eb-barrow-2"))
+            row2.addChild(prev)
+            row2.addChild(next)
+            row2.addChild(ttl)
+            bar.addChild(row2)
+        }
+        return bar
+    }
+
+    fn viewSwitch:EVGElement () {
+        def wrap:EVGElement (EcBoard.box("eb-slot"))
+        def t:EVGElement (EcBoard.btn((viewSel.triggerTid()) "eb-btn eb-btn-ghost" ("View: " + (viewSel.labelOf(view)))))
+        t.role = "combobox"
+        t.a11yHasPopup = "listbox"
+        t.a11yValue = (viewSel.labelOf(view))
+        t.addChild((EcBoard.tx("eb-btntx" (viewSel.labelOf(view)))))
+        t.addChild((EcBoard.icon("down" "eb-icon-sm")))
+        ; Sized by hand, trigger and slot alike: the list hanging off it is
+        ; out of flow, but a slot left to size itself counted it once.
+        def vw:double (to_double (to_int ((this.textW((viewSel.labelOf(view)) 14.0)) + 50.0)))
+        EcBoard.dims(t vw -1.0)
+        EcBoard.dims(wrap vw -1.0)
+        UiTree.anchor(t)
+        wrap.addChild(t)
+        if viewSel.open {
+            t.a11yExpanded = (EVGA11yTri.yes())
+            t.a11yControls = (viewSel.contentTid())
+            wrap.addChild((this.listOf(viewSel "start")))
+        } {
+            t.a11yExpanded = (EVGA11yTri.no())
+        }
+        return wrap
+    }
+
+    ; A select's list: an overlay under its trigger, a tick on the chosen row.
+    fn listOf:EVGElement (s:SelectCtl align:string) {
+        def list:EVGElement (UiTree.div((s.contentTid()) "eb-list"))
+        list.role = "listbox"
+        list.a11yLabel = s.name
+        UiTree.surface(list "bottom" align)
+        def i:int 0
+        while (i < (array_length s.items)) {
+            def it:UiItem (itemAt s.items i)
+            def cls:string "eb-opt"
+            if (it.value == s.activeValue) {
+                cls = "eb-opt eb-opt-active"
+            }
+            def o:EVGElement (UiTree.div((s.itemTid(it.value)) cls))
+            o.role = "option"
+            o.a11yLabel = it.name
+            o.a11yFocusable = true
+            if (it.value == s.value) {
+                o.a11ySelected = (EVGA11yTri.yes())
+                o.addChild((EcBoard.icon("check" "eb-icon-sm")))
+            } {
+                o.a11ySelected = (EVGA11yTri.no())
+                o.addChild((EcBoard.box("eb-optgap")))
+            }
+            o.addChild((EcBoard.tx("eb-opttx" it.name)))
+            list.addChild(o)
+            i = (i + 1)
+        }
+        return list
+    }
+
+    ; --- the settings popover -------------------------------------------------------
+
+    fn settingsSlot:EVGElement () {
+        def wrap:EVGElement (EcBoard.box("eb-slot"))
+        def t:EVGElement (EcBoard.btn((settings.triggerTid()) "eb-btn eb-btn-outline" "Settings"))
+        t.a11yHasPopup = "dialog"
+        t.addChild((EcBoard.icon("settings" "eb-icon-md")))
+        def sw:double 34.0
+        if narrow {
+            UiTree.addClass(t "eb-btn-sq")
+        } {
+            t.addChild((EcBoard.tx("eb-btntx" "Settings")))
+            sw = (to_double (to_int ((this.textW("Settings" 14.0)) + 50.0)))
+        }
+        EcBoard.dims(t sw -1.0)
+        EcBoard.dims(wrap sw -1.0)
+        UiTree.anchor(t)
+        wrap.addChild(t)
+        if settings.open {
+            t.a11yExpanded = (EVGA11yTri.yes())
+            t.a11yControls = (settings.contentTid())
+            wrap.addChild((this.settingsPanel()))
+        } {
+            t.a11yExpanded = (EVGA11yTri.no())
+        }
+        return wrap
+    }
+
+    fn settingsPanel:EVGElement () {
+        def c:EVGElement (UiTree.div((settings.contentTid()) "eb-pop"))
+        c.role = "dialog"
+        c.a11yLabel = settings.title
+        UiTree.surface(c "bottom" "end")
+        c.overlayGap = 8.0
+        ; The tabs: a segmented strip, as shadcn's TabsList.
+        def list:EVGElement (UiTree.div((tabs.listTid()) "eb-tabs"))
+        list.role = "tablist"
+        list.a11yLabel = tabs.name
+        def n:int (array_length tabs.items)
+        def tw:double ((((320.0 - 24.0) - 2.0) - 6.0) / (to_double n))
+        def i:int 0
+        while (i < n) {
+            def it:UiItem (itemAt tabs.items i)
+            def on:boolean (it.value == tabs.value)
+            def cls:string "eb-tab"
+            def tcls:string "eb-tabtx"
+            if on {
+                cls = "eb-tab eb-tab-on"
+                tcls = "eb-tabtx eb-tabtx-on"
+            }
+            def t:EVGElement (UiTree.div((tabs.tabTid(it.value)) cls))
+            t.role = "tab"
+            t.a11yLabel = it.name
+            ; A roving tab stop: only the selected tab is in the Tab order,
+            ; the arrows reach the others.
+            t.a11yFocusable = on
+            t.a11yControls = (tabs.panelTid(it.value))
+            if on {
+                t.a11ySelected = (EVGA11yTri.yes())
+            } {
+                t.a11ySelected = (EVGA11yTri.no())
+            }
+            UiTree.inline(t "width" (EcBoard.px(tw)))
+            t.addChild((EcBoard.tx(tcls it.name)))
+            list.addChild(t)
+            i = (i + 1)
+        }
+        c.addChild(list)
+        def panel:EVGElement (UiTree.div((tabs.panelTid(tabs.value)) "eb-panel"))
+        panel.role = "tabpanel"
+        panel.a11yLabel = (this.tabName(tabs.value))
+        if (tabs.value == "view") {
+            panel.addChild((this.switchRow("weekends" "Weekends" weekends)))
+            panel.addChild((this.switchRow("weeknum" "Week numbers" weekNumbers)))
+            panel.addChild((this.switchRow("now" "Now indicator" nowLine)))
+            panel.addChild((this.switchRow("off" "Mark off days" offDays)))
+            panel.addChild((this.switchRow("add" "Day add button" dayAdd)))
+            panel.addChild((this.selectRow(selWeek)))
+        }
+        if (tabs.value == "grid") {
+            panel.addChild((this.selectRow(selStart)))
+            panel.addChild((this.selectRow(selEnd)))
+            panel.addChild((this.selectRow(selGrid)))
+            panel.addChild((this.selectRow(selSnap)))
+        }
+        if (tabs.value == "behavior") {
+            panel.addChild((this.switchRow("move" "Drag to move" model.canMove)))
+            panel.addChild((this.switchRow("resize" "Drag to resize" model.canResize)))
+            panel.addChild((this.switchRow("create" "Drag to create" model.canCreate)))
+            panel.addChild((this.switchRow("tips" "Event tooltips" tooltips)))
+        }
+        if (tabs.value == "region") {
+            panel.addChild((this.selectRow(selLang)))
+            panel.addChild((this.selectRow(selTz)))
+            def note:EVGElement (UiTree.label("" "eb-note" "Language sets the calendar's labels, names and direction. The time zone moves every clock time; Browser is this device's own zone."))
+            panel.addChild(note)
+        }
+        c.addChild(panel)
+        def reset:EVGElement (EcBoard.btn((p + "-set-reset") "eb-btn eb-btn-outline eb-btn-wide" "Reset to defaults"))
+        reset.addChild((EcBoard.tx("eb-btntx" "Reset to defaults")))
+        c.addChild(reset)
+        return c
+    }
+
+    fn tabName:string (v:string) {
+        def i:int 0
+        while (i < (array_length tabs.items)) {
+            def it:UiItem (itemAt tabs.items i)
+            if (it.value == v) {
+                return it.name
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    ; A whole row is the switch, as a <label> wrapping one is: a press on the
+    ; words flips it too.
+    fn switchRow:EVGElement (key:string label:string on:boolean) {
+        def row:EVGElement (UiTree.div((p + "-set-sw-" + key) "eb-swrow"))
+        row.role = "switch"
+        row.a11yLabel = label
+        row.a11yFocusable = true
+        if on {
+            row.a11yChecked = (EVGA11yTri.yes())
+        } {
+            row.a11yChecked = (EVGA11yTri.no())
+        }
+        row.addChild((EcBoard.tx("eb-rowlabel" label)))
+        def track:EVGElement (EcBoard.box("eb-track"))
+        def thumb:EVGElement (EcBoard.box("eb-thumb"))
+        if on {
+            track.className = "eb-track eb-track-on"
+            UiTree.inline(thumb "left" "18px")
+        } {
+            UiTree.inline(thumb "left" "2px")
+        }
+        track.addChild(thumb)
+        row.addChild(track)
+        return row
+    }
+
+    fn selectRow:EVGElement (s:SelectCtl) {
+        def row:EVGElement (EcBoard.box("eb-selrow"))
+        row.addChild((EcBoard.tx("eb-rowlabel" s.name)))
+        def slot:EVGElement (EcBoard.box("eb-slot"))
+        EcBoard.dims(slot 140.0 -1.0)
+        def t:EVGElement (EcBoard.btn((s.triggerTid()) "eb-select" s.name))
+        t.role = "combobox"
+        t.a11yHasPopup = "listbox"
+        t.a11yValue = (s.labelOf(s.value))
+        t.addChild((EcBoard.tx("eb-seltx" (s.labelOf(s.value)))))
+        t.addChild((EcBoard.icon("down" "eb-icon-sm eb-icon-muted")))
+        UiTree.anchor(t)
+        slot.addChild(t)
+        if s.open {
+            t.a11yExpanded = (EVGA11yTri.yes())
+            t.a11yControls = (s.contentTid())
+            slot.addChild((this.listOf(s "end")))
+        } {
+            t.a11yExpanded = (EVGA11yTri.no())
+        }
+        row.addChild(slot)
+        return row
+    }
+
+    ; --- the month --------------------------------------------------------------------
+
+    fn monthCols:[int] () {
+        def out:[int]
+        def s:int (this.monthStart())
+        def i:int 0
+        while (i < 7) {
+            if (this.shown((s + i))) {
+                push out i
+            }
+            i = (i + 1)
+        }
+        return out
+    }
+
+    fn wnW:double () {
+        if weekNumbers {
+            if narrow {
+                return 28.0
+            }
+            return 40.0
+        }
+        return 0.0
+    }
+
+    fn cellH:double () {
+        if narrow {
+            return 88.0
+        }
+        return 112.0
+    }
+
+    fn maxLanes:int () {
+        return (to_int (((this.cellH()) - 36.0) / 24.0))
+    }
+
+    ; The events on day `d` at or below `lane`.
+    fn coverAt:[CalEvent] (d:int fromLane:int) {
+        def out:[CalEvent]
+        def i:int 0
+        while (i < (array_length model.events)) {
+            def e:CalEvent (itemAt model.events i)
+            if (((e.clipStart <= d) && (e.clipEnd >= d)) && (e.lane >= fromLane)) {
+                if (e.clipEnd >= e.clipStart) {
+                    push out e
+                }
+            }
+            i = (i + 1)
+        }
+        return out
+    }
+
+    fn laneOn:string (lane:int d:int) {
+        def i:int 0
+        while (i < (array_length model.events)) {
+            def e:CalEvent (itemAt model.events i)
+            if (((e.lane == lane) && (e.clipStart <= d)) && ((e.clipEnd >= d) && (e.clipEnd >= e.clipStart))) {
+                return e.id
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    ; A day whose last slot says "+N more" instead of holding a chip.
+    fn overflowing:boolean (d:int) {
+        def ml:int (this.maxLanes())
+        def extra:[CalEvent] (this.coverAt(d ml))
+        if ((array_length extra) > 1) {
+            return true
+        }
+        return false
+    }
+
+    fn monthView:EVGElement () {
+        def start:int (this.monthStart())
+        model.layoutChips(start (start + 41))
+        def cols:[int] (this.monthCols())
+        def nc:int (array_length cols)
+        def wn:double (this.wnW())
+        def cw:double ((((this.innerW()) - wn)) / (to_double nc))
+        def ch:double (this.cellH())
+        def ml:int (this.maxLanes())
+        def m:EVGElement (UiTree.div((p + "-month") "eb-month"))
+        m.role = "grid"
+        m.a11yLabel = (EcI18n.monthTitle(lang cursor))
+        ; The weekday names.
+        def head:EVGElement (EcBoard.box("eb-mhead"))
+        head.role = "row"
+        if weekNumbers {
+            def wh:EVGElement (EcBoard.box("eb-wnhead"))
+            EcBoard.dims(wh wn -1.0)
+            head.addChild(wh)
+        }
+        def k:int 0
+        while (k < nc) {
+            def dow:int (UiDate.weekday((start + (itemAt cols k))))
+            def hc:EVGElement (UiTree.label("" "eb-mheadcell" (EcI18n.dayShort(lang dow))))
+            hc.role = "columnheader"
+            hc.a11yLabel = (EcI18n.dayName(lang dow))
+            EcBoard.dims(hc cw -1.0)
+            head.addChild(hc)
+            k = (k + 1)
+        }
+        m.addChild(head)
+        m.addChild((EcBoard.hr()))
+        def curMonth:int (itemAt (EcI18n.ymd(cursor)) 1)
+        def row:int 0
+        while (row < 6) {
+            def rs:int (start + (row * 7))
+            def r:EVGElement (UiTree.div((p + "-mrow-" + (to_string row)) "eb-mrow"))
+            r.role = "row"
+            EcBoard.dims(r -1.0 ch)
+            r.addChild((this.monthBg(cols nc cw ch wn rs)))
+            if weekNumbers {
+                def wnum:int (EcBoard.isoWeek((rs + 3)))
+                def wc:EVGElement (UiTree.label("" "eb-wn" ("W" + (to_string wnum))))
+                wc.role = "rowheader"
+                wc.a11yLabel = ("Week " + (to_string wnum))
+                EcBoard.dims(wc wn ch)
+                r.addChild(wc)
+            }
+            def c:int 0
+            while (c < nc) {
+                def d:int (rs + (itemAt cols c))
+                r.addChild((this.monthCell(d c nc cw ch ml curMonth row rs cols)))
+                c = (c + 1)
+            }
+            m.addChild(r)
+            if (row < 5) {
+                m.addChild((EcBoard.hr()))
+            }
+            row = (row + 1)
+        }
+        return m
+    }
+
+    ; Behind a row's cells: the off-day shading and the lines between cells,
+    ; one layer, so a chip that runs on into the next cell is never painted
+    ; over by that cell. Absolute, so placed by hand in either direction.
+    fn monthBg:EVGElement (cols:[int] nc:int cw:double ch:double wn:double rs:int) {
+        def rtl:boolean (EcI18n.isRtl(lang))
+        def full:double (this.innerW())
+        def bg:EVGElement (EcBoard.box("eb-mbg"))
+        bg.a11yHidden = true
+        EcBoard.dims(bg full ch)
+        def c:int 0
+        while (c < nc) {
+            def x:double (wn + ((to_double c) * cw))
+            if rtl {
+                x = ((full - x) - cw)
+            }
+            def d:int (rs + (itemAt cols c))
+            if (offDays && (EcBoard.isWeekend(d))) {
+                def sh:EVGElement (EcBoard.box("eb-shade"))
+                EcBoard.dims(sh cw ch)
+                EcBoard.place(sh x 0.0)
+                bg.addChild(sh)
+            }
+            if ((c > 0) || (wn > 0.0)) {
+                def lx:double x
+                if rtl {
+                    lx = ((x + cw) - 1.0)
+                }
+                bg.addChild((EcBoard.vline(lx ch)))
+            }
+            c = (c + 1)
+        }
+        return bg
+    }
+
+    fn monthCell:EVGElement (d:int c:int nc:int cw:double ch:double ml:int curMonth:int row:int rs:int cols:[int]) {
+        def ymd:[int] (EcI18n.ymd(d))
+        def cls:string "eb-mcell"
+        def cell:EVGElement (UiTree.div((p + "-cell-" + (to_string d)) cls))
+        cell.role = "gridcell"
+        cell.a11yLabel = (EcI18n.dayTitle(lang d))
+        if (d == today) {
+            cell.a11yCurrent = "date"
+        }
+        EcBoard.dims(cell cw ch)
+        def over:boolean (this.overflowing(d))
+        def lane:int 1
+        while (lane <= ml) {
+            def last:boolean (lane == ml)
+            if (last && over) {
+                def more:int (array_length (this.coverAt(d ml)))
+                def mt:string (EcI18n.more(lang more))
+                def mb:EVGElement (EcBoard.btn((p + "-more-" + (to_string d)) "eb-more" (mt + ", " + (EcI18n.dayTitle(lang d)))))
+                mb.addChild((EcBoard.tx("eb-moretx" mt)))
+                cell.addChild(mb)
+            } {
+                def eid:string (this.laneOn(lane d))
+                if (eid == "") {
+                    cell.addChild((EcBoard.box("eb-chipgap")))
+                } {
+                    def e:CalEvent (model.event(eid))
+                    ; Drawn where it starts, or where this row begins.
+                    def firstHere:boolean (e.clipStart == d)
+                    if ((firstHere == false) && (c == 0)) {
+                        firstHere = true
+                    }
+                    if ((firstHere == false) && (c > 0)) {
+                        ; Its day before was hidden (a weekend), so this is the
+                        ; first shown cell of it in the row.
+                        def prevDay:int (rs + (itemAt cols (c - 1)))
+                        if (prevDay < e.clipStart) {
+                            firstHere = true
+                        }
+                    }
+                    if firstHere {
+                        def span:int 1
+                        def q:int (c + 1)
+                        def going:boolean true
+                        while (going && (q < nc)) {
+                            def dq:int (rs + (itemAt cols q))
+                            if ((dq <= e.clipEnd) && ((last && (this.overflowing(dq))) == false)) {
+                                span = (span + 1)
+                                q = (q + 1)
+                            } {
+                                going = false
+                            }
+                        }
+                        def cid:string (p + "-chip-" + e.id)
+                        if (e.clipStart != d) {
+                            cid = (cid + "-w" + (to_string row))
+                        }
+                        def w:double (((cw * (to_double span)) - 8.0))
+                        ; Out of flow, so a chip running on into the next
+                        ; days does not overflow its own cell's flow; a gap
+                        ; holds its lane. Placed from the cell's content box,
+                        ; leftwards from the right edge in Arabic.
+                        cell.addChild((EcBoard.box("eb-chipgap")))
+                        def chipEl:EVGElement (this.chip(e cid w))
+                        UiTree.inline(chipEl "position" "absolute")
+                        def cx:double 0.0
+                        if (EcI18n.isRtl(lang)) {
+                            cx = ((cw - 8.0) - w)
+                        }
+                        EcBoard.place(chipEl cx ((to_double (lane - 1)) * 24.0))
+                        cell.addChild(chipEl)
+                        this.tipAfter(cell cid e)
+                    } {
+                        cell.addChild((EcBoard.box("eb-chipgap")))
+                    }
+                }
+            }
+            lane = (lane + 1)
+        }
+        ; The day number, bottom right, a filled circle for today.
+        def ncls:string "eb-daynum"
+        def dm:int (itemAt ymd 1)
+        if (dm != curMonth) {
+            ncls = "eb-daynum eb-daynum-out"
+        }
+        if (d == today) {
+            ncls = "eb-daynum eb-daynum-today"
+        }
+        def dayNum:string (to_string (itemAt ymd 2))
+        ; A pointer shortcut to the day: the cell already names the date, and
+        ; the view switcher is the keyboard's way to a day, so 42 more tab
+        ; stops before the first event would only be in the way.
+        def num:EVGElement (UiTree.div((p + "-num-" + (to_string d)) ncls))
+        num.a11yHidden = true
+        def ntx:string "eb-daynumtx"
+        if (dm != curMonth) {
+            ntx = "eb-daynumtx eb-daynumtx-out"
+        }
+        if (d == today) {
+            ntx = "eb-daynumtx eb-daynumtx-today"
+        }
+        num.addChild((EcBoard.tx(ntx dayNum)))
+        def nx:double ((cw - 8.0) - 28.0)
+        if (EcI18n.isRtl(lang)) {
+            nx = 0.0
+        }
+        EcBoard.place(num nx ((ch - 8.0) - 26.0))
+        cell.addChild(num)
+        if dayAdd {
+            def ab:EVGElement (EcBoard.btn((p + "-add-" + (to_string d)) "eb-add" ("Add event on " + (EcI18n.dayTitle(lang d)))))
+            ab.addChild((EcBoard.icon("plus" "eb-icon-xs")))
+            def ax:double 0.0
+            if (EcI18n.isRtl(lang)) {
+                ax = ((cw - 8.0) - 22.0)
+            }
+            EcBoard.place(ab ax ((ch - 8.0) - 24.0))
+            cell.addChild(ab)
+        }
+        return cell
+    }
+
+    ; A month chip: tinted, a hairline of its colour, a dot, the title and the
+    ; time — or ReUI's two custom chips.
+    fn chip:EVGElement (e:CalEvent cid:string w:double) {
+        def col:string (this.colorOf(e))
+        def ch:EVGElement (EcBoard.btn(cid "eb-chip" (this.evLabel(e))))
+        EcBoard.dims(ch w -1.0)
+        UiTree.inline(ch "background-color" (EcBoard.tint(col)))
+        UiTree.inline(ch "border-color" (EcBoard.edge(col)))
+        if (focused == cid) {
+            UiTree.addClass(ch "eb-chip-focus")
+        }
+        def room:double (w - 14.0)
+        if ((e.kind == "avatars") && (w >= 90.0)) {
+            def av:EVGElement (EcBoard.box("eb-avatars"))
+            av.addChild((this.avatar("MJ" "violet" false)))
+            av.addChild((this.avatar("AL" "sky" true)))
+            ch.addChild(av)
+            ch.addChild((EcBoard.tx("eb-chiptx eb-chiptx-bold" (this.fit(e.title 12.0 (room - 34.0))))))
+            return ch
+        }
+        def dot:EVGElement (EcBoard.box("eb-dot"))
+        UiTree.inline(dot "background-color" (EcBoard.base(col)))
+        ch.addChild(dot)
+        room = (room - 12.0)
+        if (e.kind == "pill") {
+            def pill:EVGElement (EcBoard.box("eb-pill"))
+            pill.addChild((EcBoard.tx("eb-pilltx" "30m")))
+            ch.addChild((EcBoard.tx("eb-chiptx" (this.fit(e.title 12.0 (room - 40.0))))))
+            ch.addChild((EcBoard.box("eb-grow")))
+            if (w > 70.0) {
+                ch.addChild(pill)
+            }
+            return ch
+        }
+        def timed:boolean ((e.allDay == false) && (e.endDay == e.startDay))
+        def tstr:string ""
+        if (timed && (w >= 110.0)) {
+            tstr = (EcI18n.time(lang e.startMin))
+        }
+        def tw:double 0.0
+        if ((strlen tstr) > 0) {
+            tw = ((this.textW(tstr 11.0)) + 6.0)
+        }
+        ch.addChild((EcBoard.tx("eb-chiptx" (this.fit(e.title 12.0 (room - tw))))))
+        if ((strlen tstr) > 0) {
+            ch.addChild((EcBoard.box("eb-grow")))
+            ch.addChild((EcBoard.tx("eb-chiptime" tstr)))
+        }
+        return ch
+    }
+
+    fn avatar:EVGElement (initials:string color:string overlap:boolean) {
+        def a:EVGElement (EcBoard.box("eb-avatar"))
+        if overlap {
+            a.className = "eb-avatar eb-avatar-over"
+            ; Absolute boxes do not turn round with the row: in Arabic the
+            ; first avatar flows to the right, so the second goes on its left.
+            if (EcI18n.isRtl(lang)) {
+                UiTree.inline(a "left" "0px")
+            }
+        }
+        UiTree.inline(a "background-color" (EcBoard.base(color)))
+        a.addChild((EcBoard.tx("eb-avatartx" initials)))
+        return a
+    }
+
+    ; --- tooltips -------------------------------------------------------------------------
+
+    fn tipFor:string () {
+        if (tooltips == false) {
+            return ""
+        }
+        if ((strlen hovered) > 0) {
+            return hovered
+        }
+        return focused
+    }
+
+    ; A tooltip under the event the pointer (or the focus) is on, when the
+    ; setting is on. The event's sibling, so the overlay pass anchors it there.
+    fn tipAfter:void (parent:EVGElement anchorId:string e:CalEvent) {
+        if hotel {
+            return
+        }
+        def want:string (this.tipFor())
+        if ((strlen want) == 0) {
+            return
+        }
+        if ((want != anchorId) && (want != (p + "-rz-" + e.id))) {
+            return
+        }
+        def n:int (parent.getChildCount())
+        def anchor:EVGElement (parent.getChild((n - 1)))
+        UiTree.anchor(anchor)
+        ; A picture of what the event's name already says (title, day, time,
+        ; whose), so a reader is not told it twice — and a tooltip inside a
+        ; column's list would be a list child that is not an item.
+        def tip:EVGElement (UiTree.div((p + "-tip") "eb-tip"))
+        tip.role = "tooltip"
+        tip.a11yHidden = true
+        UiTree.surface(tip "bottom" "start")
+        tip.overlayGap = 6.0
+        tip.addChild((UiTree.label("" "eb-tiptitle" e.title)))
+        tip.addChild((UiTree.label("" "eb-tiptx" ((EcI18n.shortDate(lang e.startDay)) + " · " + (this.timeRange(e))))))
+        if ((strlen e.resource) > 0) {
+            tip.addChild((UiTree.label("" "eb-tiptx" (this.resName(e.resource)))))
+        }
+        parent.addChild(tip)
+    }
+
+    ; --- the agenda ------------------------------------------------------------------------
+
+    fn agendaView:EVGElement () {
+        def a:EVGElement (UiTree.div((p + "-agenda") "eb-agenda"))
+        a.role = "list"
+        a.a11yLabel = (EcI18n.viewName(lang "agenda" nDays))
+        model.layoutChips(cursor (cursor + 29))
+        def any:boolean false
+        def d:int cursor
+        while (d < (cursor + 30)) {
+            def items:[CalEvent] (this.agendaOn(d))
+            if ((array_length items) > 0) {
+                any = true
+                def grp:EVGElement (EcBoard.box("eb-agday"))
+                def hcls:string "eb-aghead"
+                if (d == today) {
+                    hcls = "eb-aghead eb-aghead-today"
+                }
+                grp.addChild((UiTree.label("" hcls (EcI18n.shortDate(lang d)))))
+                def soft:EVGElement (UiTree.div("" "eb-hr-soft"))
+                soft.a11yHidden = true
+                grp.addChild(soft)
+                def i:int 0
+                while (i < (array_length items)) {
+                    def e:CalEvent (itemAt items i)
+                    def rid:string (p + "-ag-" + e.id)
+                    if (e.startDay != d) {
+                        rid = (rid + "-" + (to_string d))
+                    }
+                    def r:EVGElement (EcBoard.btn(rid "eb-agrow" (this.evLabel(e))))
+                    r.role = "listitem"
+                    if (focused == rid) {
+                        UiTree.addClass(r "eb-agrow-focus")
+                    }
+                    def dot:EVGElement (EcBoard.box("eb-dot"))
+                    UiTree.inline(dot "background-color" (EcBoard.base((this.colorOf(e)))))
+                    r.addChild(dot)
+                    def tcell:EVGElement (EcBoard.tx("eb-agtime" (this.timeRange(e))))
+                    r.addChild(tcell)
+                    r.addChild((EcBoard.tx("eb-agtitle" e.title)))
+                    grp.addChild(r)
+                    this.tipAfter(grp rid e)
+                    i = (i + 1)
+                }
+                a.addChild(grp)
+            }
+            d = (d + 1)
+        }
+        if (any == false) {
+            a.addChild((UiTree.label((p + "-empty") "eb-empty" (EcI18n.noEvents(lang)))))
+        }
+        return a
+    }
+
+    fn agendaOn:[CalEvent] (d:int) {
+        def out:[CalEvent]
+        def i:int 0
+        while (i < (array_length model.events)) {
+            def e:CalEvent (itemAt model.events i)
+            if ((EventCalCtl.inAllDayBand(e)) && ((e.startDay <= d) && (e.endDay >= d))) {
+                push out e
+            }
+            i = (i + 1)
+        }
+        def timed:[CalEvent] (model.timedOn(d))
+        i = 0
+        while (i < (array_length timed)) {
+            push out (itemAt timed i)
+            i = (i + 1)
+        }
+        return out
+    }
+
+    ; --- the time grid -----------------------------------------------------------------------
+
+    fn timeGrid:EVGElement () {
+        def cols:[EcCol] (this.columns())
+        def nc:int (array_length cols)
+        def g:double (this.gutterW())
+        def cw:double (((this.innerW()) - g) / (to_double nc))
+        def rtl:boolean (EcI18n.isRtl(lang))
+        def wrap:EVGElement (UiTree.div((p + "-tg") "eb-tg"))
+        ; The heads: a day (today circled) or a resource with its colour.
+        def head:EVGElement (EcBoard.box("eb-thead"))
+        def corner:EVGElement (EcBoard.box("eb-corner"))
+        EcBoard.dims(corner g -1.0)
+        if (weekNumbers && (hotel == false)) {
+            corner.addChild((EcBoard.tx("eb-wntx" ("W" + (to_string (EcBoard.isoWeek(cursor)))))))
+        }
+        head.addChild(corner)
+        def i:int 0
+        while (i < nc) {
+            def c:EcCol (itemAt cols i)
+            def hc:EVGElement (EcBoard.box("eb-thcell"))
+            if hotel {
+                hc.className = "eb-thcell eb-thcell-center"
+            }
+            if (narrow && ((strlen c.res) == 0)) {
+                hc.className = "eb-thcell eb-thcell-stack"
+            }
+            EcBoard.dims(hc cw -1.0)
+            if ((strlen c.res) > 0) {
+                if (hotel == false) {
+                    def dot:EVGElement (EcBoard.box("eb-dot"))
+                    UiTree.inline(dot "background-color" (EcBoard.base(c.color)))
+                    hc.addChild(dot)
+                }
+                hc.addChild((UiTree.label("" "eb-thname" (this.fit(c.label 14.0 (cw - 24.0))))))
+            } {
+                def dow:int (UiDate.weekday(c.day))
+                hc.addChild((UiTree.label("" "eb-thday" (EcI18n.dayShort(lang dow)))))
+                def ncls:string "eb-thnum"
+                if (c.day == today) {
+                    ncls = "eb-thnum eb-thnum-today"
+                }
+                hc.addChild((UiTree.label("" ncls (to_string (itemAt (EcI18n.ymd(c.day)) 2)))))
+                if (dayAdd && (narrow == false)) {
+                    hc.addChild((EcBoard.box("eb-grow")))
+                    def ab:EVGElement (EcBoard.btn((p + "-add-" + (to_string c.day)) "eb-add eb-add-head" ("Add event on " + (EcI18n.dayTitle(lang c.day)))))
+                    ab.addChild((EcBoard.icon("plus" "eb-icon-xs")))
+                    hc.addChild(ab)
+                }
+            }
+            head.addChild(hc)
+            i = (i + 1)
+        }
+        wrap.addChild(head)
+        wrap.addChild((EcBoard.hr()))
+        wrap.addChild((this.allDayRow(cols cw g)))
+        wrap.addChild((EcBoard.hr()))
+        ; The hours, in a viewport that scrolls.
+        def vp:EVGElement (UiTree.div((p + "-scroll") "eb-scroll"))
+        vp.role = "group"
+        vp.a11yLabel = (EcI18n.viewName(lang view nDays))
+        EcBoard.dims(vp (this.innerW()) (this.viewportH()))
+        vp.scrollTop = scroll
+        def body:EVGElement (EcBoard.box("eb-tbody"))
+        def ch:double (this.contentH())
+        EcBoard.dims(body (this.innerW()) ch)
+        def gut:EVGElement (EcBoard.box("eb-gutter"))
+        EcBoard.dims(gut g ch)
+        def hH:double (this.hourH())
+        def h:int (startH + 1)
+        while (h < endH) {
+            def lab:EVGElement (UiTree.label("" "eb-hour" (EcI18n.hour(lang h))))
+            lab.a11yHidden = true
+            EcBoard.dims(lab (g - 8.0) 14.0)
+            EcBoard.place(lab 0.0 (((to_double (h - startH)) * hH) - 7.0))
+            gut.addChild(lab)
+            h = (h + 1)
+        }
+        body.addChild(gut)
+        i = 0
+        while (i < nc) {
+            def c2:EcCol (itemAt cols i)
+            body.addChild((this.gridCol(c2 i cw ch rtl)))
+            i = (i + 1)
+        }
+        vp.addChild(body)
+        wrap.addChild(vp)
+        return wrap
+    }
+
+    fn allDayRow:EVGElement (cols:[EcCol] cw:double g:double) {
+        def nc:int (array_length cols)
+        def c0:EcCol (itemAt cols 0)
+        def cn:EcCol (itemAt cols (nc - 1))
+        def lo:int c0.day
+        def hi:int cn.day
+        def lanes:int (model.layoutBandRange(lo hi))
+        def row:EVGElement (EcBoard.box("eb-allday"))
+        row.role = "list"
+        row.a11yLabel = (EcI18n.allDay(lang))
+        def rh:double ((to_double lanes) * 24.0)
+        if (rh < 24.0) {
+            rh = 24.0
+        }
+        rh = (rh + 8.0)
+        EcBoard.dims(row (this.innerW()) rh)
+        def lab:EVGElement (UiTree.label("" "eb-alldaylab" (this.fit((EcI18n.allDay(lang)) 11.0 (g - 12.0)))))
+        lab.a11yHidden = true
+        EcBoard.dims(lab g -1.0)
+        row.addChild(lab)
+        def band:EVGElement (EcBoard.box("eb-bandarea"))
+        EcBoard.dims(band ((this.innerW()) - g) rh)
+        if (EcI18n.isRtl(lang)) {
+            band.addChild((EcBoard.vline((((this.innerW()) - g) - 1.0) rh)))
+        } {
+            band.addChild((EcBoard.vline(0.0 rh)))
+        }
+        def resView:boolean (view == "resource")
+        def rtl:boolean (EcI18n.isRtl(lang))
+        def list:[CalEvent] (model.bandEvents())
+        def i:int 0
+        while (i < (array_length list)) {
+            def e:CalEvent (itemAt list i)
+            if ((e.lane > 0) && (e.clipEnd >= e.clipStart)) {
+                ; First and last shown column the band covers.
+                def a:int -1
+                def b:int -1
+                def k:int 0
+                while (k < nc) {
+                    def ck:EcCol (itemAt cols k)
+                    def cd:int ck.day
+                    if ((cd >= e.clipStart) && (cd <= e.clipEnd)) {
+                        if (a < 0) {
+                            a = k
+                        }
+                        b = k
+                    }
+                    k = (k + 1)
+                }
+                if resView {
+                    a = 0
+                    b = (nc - 1)
+                }
+                if (a >= 0) {
+                    def cid:string (p + "-band-" + e.id)
+                    def w:double (((to_double ((b - a) + 1)) * cw) - 4.0)
+                    def x:double (((to_double a) * cw) + 2.0)
+                    if rtl {
+                        x = (((((this.innerW()) - g)) - x) - w)
+                    }
+                    def chipEl:EVGElement (this.chip(e cid w))
+                    chipEl.role = "listitem"
+                    UiTree.inline(chipEl "position" "absolute")
+                    EcBoard.place(chipEl x (((to_double (e.lane - 1)) * 24.0) + 4.0))
+                    band.addChild(chipEl)
+                    this.tipAfter(band cid e)
+                }
+            }
+            i = (i + 1)
+        }
+        row.addChild(band)
+        return row
+    }
+
+    fn gridCol:EVGElement (c:EcCol idx:int cw:double ch:double rtl:boolean) {
+        def cls:string "eb-col"
+        if ((offDays && (EcBoard.isWeekend(c.day))) && ((strlen c.res) == 0)) {
+            cls = "eb-col eb-col-off"
+        }
+        def col:EVGElement (UiTree.div((p + "-col-" + (to_string idx)) cls))
+        col.role = "list"
+        if ((strlen c.res) > 0) {
+            col.a11yLabel = c.label
+        } {
+            col.a11yLabel = (EcI18n.dayTitle(lang c.day))
+        }
+        EcBoard.dims(col cw ch)
+        def inner:double cw
+        ; The line on the column's leading edge: between it and the gutter or
+        ; the column before.
+        if rtl {
+            col.addChild((EcBoard.vline((cw - 1.0) ch)))
+        } {
+            col.addChild((EcBoard.vline(0.0 ch)))
+        }
+        ; The slot lines: an hour line, and the interval's lines between.
+        def hH:double (this.hourH())
+        def slots:int (idiv ((endH - startH) * 60) interval)
+        def s:int 1
+        while (s < slots) {
+            def y:double (((to_double (s * interval)) / 60.0) * hH)
+            def ln:EVGElement (EcBoard.box("eb-line"))
+            if (((s * interval) % 60) != 0) {
+                ln.className = "eb-line eb-line-half"
+            }
+            EcBoard.dims(ln inner 1.0)
+            EcBoard.place(ln 0.0 y)
+            col.addChild(ln)
+            s = (s + 1)
+        }
+        ; The events, where the measured layout puts them.
+        if ((strlen c.res) > 0) {
+            model.layoutDayRes(c.day c.res)
+        } {
+            model.layoutDayRes(c.day "")
+        }
+        def evs:[CalEvent] (model.timedOnRes(c.day c.res))
+        def i:int 0
+        while (i < (array_length evs)) {
+            def e:CalEvent (itemAt evs i)
+            this.eventBox(col e inner rtl)
+            i = (i + 1)
+        }
+        ; Now: a red line across today, with a dot at its start.
+        if ((nowLine && (c.day == today)) && (hotel == false)) {
+            if ((nowMin >= (startH * 60)) && (nowMin <= (endH * 60))) {
+                def ny:double (this.yOfMin(nowMin))
+                def line:EVGElement (UiTree.div((p + "-now-" + (to_string idx)) "eb-now"))
+                line.a11yHidden = true
+                EcBoard.dims(line inner 2.0)
+                EcBoard.place(line 0.0 (ny - 1.0))
+                col.addChild(line)
+                def dot:EVGElement (EcBoard.box("eb-nowdot"))
+                def dx:double -4.0
+                if rtl {
+                    dx = (inner - 4.0)
+                }
+                EcBoard.place(dot dx (ny - 4.0))
+                col.addChild(dot)
+            }
+        }
+        return col
+    }
+
+    fn eventBox:void (col:EVGElement e:CalEvent inner:double rtl:boolean) {
+        def s:int e.startMin
+        def en:int e.endMin
+        if (en <= (startH * 60)) {
+            return
+        }
+        if (s >= (endH * 60)) {
+            return
+        }
+        if (s < (startH * 60)) {
+            s = (startH * 60)
+        }
+        if (en > (endH * 60)) {
+            en = (endH * 60)
+        }
+        def y:double ((this.yOfMin(s)) + 1.0)
+        def h:double (((this.yOfMin(en)) - (this.yOfMin(s))) - 2.0)
+        if (h < 12.0) {
+            h = 12.0
+        }
+        def lf:double ((to_double e.column) / (to_double e.total))
+        def wf:double ((to_double (e.total - e.column)) / (to_double e.total))
+        def x:double ((lf * inner) + 3.0)
+        def w:double ((wf * inner) - 6.0)
+        if rtl {
+            x = ((inner - x) - w)
+        }
+        def id:string (p + "-ev-" + e.id)
+        def cls:string "eb-ev"
+        if (focused == id) {
+            cls = "eb-ev eb-ev-focus"
+        }
+        if ((model.dragId == e.id) && dragging) {
+            cls = "eb-ev eb-ev-drag"
+        }
+        def col2:string (this.colorOf(e))
+        def box:EVGElement (EcBoard.btn(id cls (this.evLabel(e))))
+        box.a11yRoleDescription = "event"
+        box.role = "listitem"
+        EcBoard.dims(box w h)
+        EcBoard.place(box x y)
+        UiTree.inline(box "z-index" (to_string (e.column + 1)))
+        UiTree.inline(box "background-color" (EcBoard.tint(col2)))
+        UiTree.inline(box "border-color" (EcBoard.edge(col2)))
+        def body:EVGElement (EcBoard.box("eb-evbody"))
+        EcBoard.dims(body (w - 2.0) (h - 2.0))
+        def room:double (w - 14.0)
+        def tr:string (this.timeRange(e))
+        if (h >= 36.0) {
+            if ((e.kind == "avatars") && (w >= 90.0)) {
+                def top:EVGElement (EcBoard.box("eb-evtop"))
+                def av:EVGElement (EcBoard.box("eb-avatars"))
+                av.addChild((this.avatar("MJ" "violet" false)))
+                av.addChild((this.avatar("AL" "sky" true)))
+                top.addChild(av)
+                top.addChild((EcBoard.tx("eb-evtitle eb-evtitle-bold" (this.fit(e.title 12.0 (room - 34.0))))))
+                body.addChild(top)
+            } {
+                def top2:EVGElement (EcBoard.box("eb-evtop"))
+                top2.addChild((EcBoard.tx("eb-evtitle" (this.fit(e.title 12.0 (room - (this.pillRoom(e))))))))
+                if ((e.kind == "pill") && (w > 90.0)) {
+                    top2.addChild((EcBoard.box("eb-grow")))
+                    def pill:EVGElement (EcBoard.box("eb-pill"))
+                    pill.addChild((EcBoard.tx("eb-pilltx" "30m")))
+                    top2.addChild(pill)
+                }
+                body.addChild(top2)
+            }
+            body.addChild((EcBoard.tx("eb-evtime" (this.fit(tr 11.0 room)))))
+        } {
+            ; One line: the title, then as much of the time as fits.
+            def one:EVGElement (EcBoard.box("eb-evtop"))
+            def titleW:double (this.textW(e.title 12.0))
+            def half:double (room * 0.55)
+            if (titleW < half) {
+                half = titleW
+            }
+            def t1:string (this.fit(e.title 12.0 half))
+            one.addChild((EcBoard.tx("eb-evtitle" t1)))
+            def rest:double ((room - (this.textW(t1 12.0))) - 8.0)
+            if (rest > 20.0) {
+                one.addChild((EcBoard.tx("eb-evtime eb-evtime-inline" (this.fit(tr 11.0 rest)))))
+            }
+            body.addChild(one)
+        }
+        box.addChild(body)
+        if (model.canResize && (h >= 16.0)) {
+            def rz:EVGElement (UiTree.div((p + "-rz-" + e.id) "eb-resize"))
+            rz.a11yHidden = true
+            EcBoard.dims(rz (w - 2.0) 6.0)
+            EcBoard.place(rz 0.0 (h - 8.0))
+            box.addChild(rz)
+        }
+        col.addChild(box)
+        this.tipAfter(col id e)
+    }
+
+    fn pillRoom:double (e:CalEvent) {
+        if (e.kind == "pill") {
+            return 40.0
+        }
+        return 0.0
+    }
+
+    ; --- the legend (Pattern B) --------------------------------------------------------------
+
+    fn legend:EVGElement () {
+        def lg:EVGElement (UiTree.div((p + "-legend") "eb-legend"))
+        lg.role = "list"
+        lg.a11yLabel = "Status colours"
+        lg.addChild((this.legendItem("Occupied" "emerald")))
+        lg.addChild((this.legendItem("Check-out" "rose")))
+        lg.addChild((this.legendItem("Housekeeping" "cyan")))
+        lg.addChild((this.legendItem("Check-in" "blue")))
+        return lg
+    }
+
+    fn legendItem:EVGElement (label:string color:string) {
+        def it:EVGElement (EcBoard.box("eb-legitem"))
+        it.role = "listitem"
+        it.a11yLabel = label
+        def dot:EVGElement (EcBoard.box("eb-legdot"))
+        UiTree.inline(dot "background-color" (EcBoard.base(color)))
+        it.addChild(dot)
+        it.addChild((EcBoard.tx("eb-legtx" label)))
+        return it
+    }
+
+    ; =========================================================================
+    ; input
+    ; =========================================================================
+
+    fn owns:boolean (id:string) {
+        return (UiTree.beginsWith(id (p + "-")))
+    }
+
+    fn after:string (id:string prefix:string) {
+        if (UiTree.beginsWith(id prefix)) {
+            return (substring id (strlen prefix) (strlen id))
+        }
+        return ""
+    }
+
+    fn selects:[SelectCtl] () {
+        def out:[SelectCtl]
+        push out viewSel
+        push out selWeek
+        push out selStart
+        push out selEnd
+        push out selGrid
+        push out selSnap
+        push out selLang
+        push out selTz
+        return out
+    }
+
+    fn openSel@(optional):SelectCtl () {
+        def all:[SelectCtl] (this.selects())
+        def i:int 0
+        while (i < (array_length all)) {
+            def s:SelectCtl (itemAt all i)
+            if s.open {
+                def hit@(optional):SelectCtl s
+                return hit
+            }
+            i = (i + 1)
+        }
+        def none@(optional):SelectCtl
+        return none
+    }
+
+    fn selFor@(optional):SelectCtl (target:string) {
+        def all:[SelectCtl] (this.selects())
+        def i:int 0
+        while (i < (array_length all)) {
+            def s:SelectCtl (itemAt all i)
+            if (target == (s.triggerTid())) {
+                def hit@(optional):SelectCtl s
+                return hit
+            }
+            i = (i + 1)
+        }
+        def none@(optional):SelectCtl
+        return none
+    }
+
+    fn say:void (text:string) {
+        status = text
+    }
+
+    ; What a chosen value does.
+    fn chosen:void (s:SelectCtl) {
+        def v:string s.value
+        if (s.tid == viewSel.tid) {
+            this.pickView(v)
+            return
+        }
+        if (s.tid == selWeek.tid) {
+            weekStart = (?? (to_int v) 0)
+            this.say(("Week starts on " + (s.labelOf(v))))
+        }
+        if (s.tid == selStart.tid) {
+            startH = (?? (to_int v) 0)
+            if (endH <= startH) {
+                endH = 24
+            }
+            this.resetScroll()
+            this.say(("Day starts at " + (s.labelOf(v))))
+        }
+        if (s.tid == selEnd.tid) {
+            endH = (?? (to_int v) 24)
+            this.clampScroll()
+            this.say(("Day ends at " + (s.labelOf(v))))
+        }
+        if (s.tid == selGrid.tid) {
+            def keepTop:double (scroll / (this.hourH()))
+            interval = (?? (to_int v) 60)
+            scroll = (keepTop * (this.hourH()))
+            this.clampScroll()
+            this.say(("Grid interval " + (s.labelOf(v))))
+        }
+        if (s.tid == selSnap.tid) {
+            model.snapMinutes = (?? (to_int v) 15)
+            this.say(("Drag snaps to " + (s.labelOf(v))))
+        }
+        if (s.tid == selLang.tid) {
+            lang = v
+            this.say(("Language " + (s.labelOf(v))))
+        }
+        if (s.tid == selTz.tid) {
+            this.setZone(v)
+            this.say(("Time zone " + (s.labelOf(v))))
+        }
+        this.applySettings()
+    }
+
+    ; September offsets (daylight saving where it applies), east positive.
+    sfn zoneOffset:int (zone:string browser:int) {
+        if (zone == "ny") { return -240 }
+        if (zone == "london") { return 60 }
+        if (zone == "tokyo") { return 540 }
+        if (zone == "kolkata") { return 330 }
+        return browser
+    }
+
+    fn setZone:void (zone:string) {
+        def want:int ((EcBoard.zoneOffset(zone browserOff)) - browserOff)
+        def delta:int (want - shift)
+        model.shiftAll(delta)
+        ; Now moves with the clocks, and may move to another day.
+        def abs:int (((today * 1440) + nowMin) + delta)
+        today = (EventCalCtl.floorDiv(abs 1440))
+        nowMin = (abs - (today * 1440))
+        shift = want
+        tz = zone
+    }
+
+    fn pickView:void (v:string) {
+        def wasGrid:boolean (this.isGrid())
+        view = v
+        model.setView(v)
+        viewSel.value = v
+        this.fillTabs()
+        if ((this.isGrid()) && (wasGrid == false)) {
+            this.resetScroll()
+        }
+        this.say(((EcI18n.viewName(lang v nDays)) + " view, " + (this.title())))
+    }
+
+    fn resetDefaults:void () {
+        weekends = true
+        weekNumbers = false
+        nowLine = true
+        offDays = false
+        dayAdd = false
+        weekStart = 0
+        startH = 0
+        endH = 24
+        interval = 60
+        model.snapMinutes = 15
+        model.canMove = true
+        model.canResize = true
+        model.canCreate = true
+        tooltips = false
+        lang = "en"
+        this.setZone("browser")
+        this.applySettings()
+        this.resetScroll()
+        this.say("Settings reset to defaults")
+    }
+
+    fn toggle:void (key:string) {
+        def word:string ""
+        def on:boolean false
+        if (key == "weekends") {
+            weekends = (weekends == false)
+            on = weekends
+            word = "Weekends"
+        }
+        if (key == "weeknum") {
+            weekNumbers = (weekNumbers == false)
+            on = weekNumbers
+            word = "Week numbers"
+        }
+        if (key == "now") {
+            nowLine = (nowLine == false)
+            on = nowLine
+            word = "Now indicator"
+        }
+        if (key == "off") {
+            offDays = (offDays == false)
+            on = offDays
+            word = "Mark off days"
+        }
+        if (key == "add") {
+            dayAdd = (dayAdd == false)
+            on = dayAdd
+            word = "Day add button"
+        }
+        if (key == "move") {
+            model.canMove = (model.canMove == false)
+            on = model.canMove
+            word = "Drag to move"
+        }
+        if (key == "resize") {
+            model.canResize = (model.canResize == false)
+            on = model.canResize
+            word = "Drag to resize"
+        }
+        if (key == "create") {
+            model.canCreate = (model.canCreate == false)
+            on = model.canCreate
+            word = "Drag to create"
+        }
+        if (key == "tips") {
+            tooltips = (tooltips == false)
+            on = tooltips
+            word = "Event tooltips"
+        }
+        if on {
+            this.say((word + " on"))
+        } {
+            this.say((word + " off"))
+        }
+    }
+
+    ; A new event at noon today, and the calendar goes to it.
+    fn addNew:void (day:int) {
+        created = (created + 1)
+        def id:string ("n" + (to_string created))
+        if hotel {
+            def ev:CalEvent (model.addEvent(id "New booking" day 720 780 "r101" "blue"))
+            ev.kind = "ci"
+        } {
+            model.addEvent(id "New event" day 720 780 "alex" "blue")
+        }
+        cursor = day
+        this.scrollToMinute(720)
+        def e:CalEvent (model.event(id))
+        focused = (this.focusIdOf(e))
+        this.say(("Created " + (this.evLabel(e))))
+    }
+
+    ; Where an event's focus lives in the current view.
+    fn focusIdOf:string (e:CalEvent) {
+        if (view == "month") {
+            return (p + "-chip-" + e.id)
+        }
+        if (view == "agenda") {
+            return (p + "-ag-" + e.id)
+        }
+        return (p + "-ev-" + e.id)
+    }
+
+    fn eventIdOf:string (target:string) {
+        def a:string (this.after(target (p + "-ev-")))
+        if ((strlen a) > 0) {
+            return a
+        }
+        def b:string (this.after(target (p + "-rz-")))
+        if ((strlen b) > 0) {
+            return b
+        }
+        return ""
+    }
+
+    ; A press: the click half of every control. Returns whether anything
+    ; changed.
+    fn press:boolean (target:string) {
+        ; An open list answers first: a row chooses, its trigger closes it,
+        ; anything else closes it and goes on.
+        def os@(optional):SelectCtl (this.openSel())
+        if (!null? os) {
+            def s:SelectCtl (unwrap os)
+            if (target == (s.triggerTid())) {
+                s.closeList()
+                focused = target
+                return true
+            }
+            def act:string (s.activate(target))
+            if ((strlen act) > 0) {
+                focused = (s.triggerTid())
+                this.chosen(s)
+                return true
+            }
+            s.closeList()
+            if ((strlen target) == 0) {
+                return true
+            }
+        }
+        ; A press outside the open popover dismisses it, and still does what
+        ; it pressed.
+        if settings.open {
+            if ((UiTree.beginsWith(target (p + "-set-"))) == false) {
+                settings.dismiss()
+            }
+        }
+        if ((strlen target) == 0) {
+            return true
+        }
+        if (target == (p + "-today")) {
+            cursor = today
+            focused = target
+            if (this.isGrid()) {
+                this.scrollToMinute(nowMin)
+            }
+            this.say(("Today, " + (this.title())))
+            return true
+        }
+        if ((target == (p + "-prev")) || (target == (p + "-next"))) {
+            focused = target
+            if (target == (p + "-prev")) {
+                this.step(-1)
+            } {
+                this.step(1)
+            }
+            this.say((this.title()))
+            return true
+        }
+        if (target == (p + "-new")) {
+            this.addNew(today)
+            return true
+        }
+        if (target == (viewSel.triggerTid())) {
+            focused = target
+            viewSel.openList()
+            return true
+        }
+        if (target == (settings.triggerTid())) {
+            focused = target
+            settings.initialFocus = (tabs.tabTid(tabs.value))
+            def land:string (settings.activate(target))
+            if settings.open {
+                focused = land
+            } {
+                focused = target
+            }
+            return true
+        }
+        if (target == (p + "-set-reset")) {
+            focused = target
+            this.resetDefaults()
+            return true
+        }
+        def tabTarget:string (this.after(target (tabs.tid + "-tab-")))
+        if ((strlen tabTarget) > 0) {
+            focused = target
+            tabs.activate(target)
+            return true
+        }
+        def sw:string (this.after(target (p + "-set-sw-")))
+        if ((strlen sw) > 0) {
+            focused = target
+            this.toggle(sw)
+            return true
+        }
+        def sf@(optional):SelectCtl (this.selFor(target))
+        if (!null? sf) {
+            def s2:SelectCtl (unwrap sf)
+            focused = target
+            s2.openList()
+            return true
+        }
+        def more:string (this.after(target (p + "-more-")))
+        if ((strlen more) == 0) {
+            more = (this.after(target (p + "-num-")))
+        }
+        if ((strlen more) > 0) {
+            def dd@(optional):int (to_int more)
+            if (!null? dd) {
+                cursor = (unwrap dd)
+                this.pickView("day")
+                focused = (viewSel.triggerTid())
+                return true
+            }
+        }
+        def add:string (this.after(target (p + "-add-")))
+        if ((strlen add) > 0) {
+            def ad@(optional):int (to_int add)
+            if (!null? ad) {
+                def keep:string view
+                this.addNew((unwrap ad))
+                view = keep
+                if (view == "month") {
+                    cursor = (unwrap ad)
+                }
+                return true
+            }
+        }
+        ; An event, a chip or an agenda row: it takes the focus.
+        def ev:string (this.eventIdOf(target))
+        if ((strlen ev) > 0) {
+            focused = (p + "-ev-" + ev)
+            return true
+        }
+        if (UiTree.beginsWith(target (p + "-chip-"))) {
+            focused = target
+            return true
+        }
+        if (UiTree.beginsWith(target (p + "-ag-"))) {
+            focused = target
+            return true
+        }
+        return false
+    }
+
+    ; Close any open list and the popover; whether anything closed.
+    fn closeOverlays:boolean () {
+        def did:boolean false
+        def all:[SelectCtl] (this.selects())
+        def i:int 0
+        while (i < (array_length all)) {
+            def s:SelectCtl (itemAt all i)
+            if s.open {
+                s.closeList()
+                did = true
+            }
+            i = (i + 1)
+        }
+        if settings.open {
+            settings.dismiss()
+            did = true
+        }
+        return did
+    }
+
+    ; Close an open list only, and say which trigger the focus goes back to.
+    fn closeLists:string () {
+        def os@(optional):SelectCtl (this.openSel())
+        if (!null? os) {
+            def s:SelectCtl (unwrap os)
+            s.closeList()
+            return (s.triggerTid())
+        }
+        return ""
+    }
+
+    ; --- the pointer -----------------------------------------------------------------
+
+    fn findEl@(optional):EVGElement (id:string) {
+        if (null? cardEl) {
+            def none@(optional):EVGElement
+            return none
+        }
+        def c:EVGElement (unwrap cardEl)
+        return (UiTree.findById(c id))
+    }
+
+    ; Which column the x is over, or -1. Read off the laid-out columns, so it
+    ; is right in either direction.
+    fn colAt:int (x:double) {
+        def n:int (array_length (this.columns()))
+        def i:int 0
+        while (i < n) {
+            def f@(optional):EVGElement (this.findEl((p + "-col-" + (to_string i))))
+            if (!null? f) {
+                def el:EVGElement (unwrap f)
+                if ((x >= el.calculatedX) && (x < (el.calculatedX + el.calculatedWidth))) {
+                    return i
+                }
+            }
+            i = (i + 1)
+        }
+        return -1
+    }
+
+    fn minuteAt:int (y:double) {
+        def f@(optional):EVGElement (this.findEl((p + "-col-0")))
+        if (null? f) {
+            return 0
+        }
+        def el:EVGElement (unwrap f)
+        def rel:double ((y - el.calculatedY) / (this.hourH()))
+        return ((startH * 60) + (to_int (rel * 60.0)))
+    }
+
+    fn pointerDown:boolean (id:string x:double y:double) {
+        armed = ""
+        armKind = ""
+        dragging = false
+        if (this.isGrid()) {
+            def rz:string (this.after(id (p + "-rz-")))
+            if (((strlen rz) > 0) && model.canResize) {
+                armed = id
+                armKind = "resize"
+            }
+            def ev:string (this.after(id (p + "-ev-")))
+            if (((strlen ev) > 0) && model.canMove) {
+                armed = id
+                armKind = "move"
+            }
+            def ci:string (this.after(id (p + "-col-")))
+            if (((strlen ci) > 0) && model.canCreate) {
+                armed = id
+                armKind = "create"
+            }
+        }
+        if ((strlen armed) > 0) {
+            armX = x
+            armY = y
+            ; Close what a press elsewhere would close.
+            def os@(optional):SelectCtl (this.openSel())
+            if (!null? os) {
+                def s:SelectCtl (unwrap os)
+                s.closeList()
+            }
+            if settings.open {
+                settings.dismiss()
+            }
+            return true
+        }
+        return (this.press(id))
+    }
+
+    fn pointerMove:boolean (x:double y:double) {
+        if ((strlen armed) == 0) {
+            return false
+        }
+        if (dragging == false) {
+            def dx:double (x - armX)
+            def dy:double (y - armY)
+            if (((dx * dx) + (dy * dy)) < 16.0) {
+                return false
+            }
+            if ((this.beginGesture()) == false) {
+                armed = ""
+                return false
+            }
+            dragging = true
+        }
+        def ci:int (this.colAt(x))
+        def cols:[EcCol] (this.columns())
+        if (ci >= 0) {
+            def c:EcCol (itemAt cols ci)
+            lastDay = c.day
+            lastRes = c.res
+        }
+        def changed:boolean (model.dragTo(lastDay (this.minuteAt(y)) lastRes))
+        return true
+    }
+
+    fn beginGesture:boolean () {
+        def cols:[EcCol] (this.columns())
+        def ci:int (this.colAt(armX))
+        if (ci < 0) {
+            return false
+        }
+        def c:EcCol (itemAt cols ci)
+        lastDay = c.day
+        lastRes = c.res
+        def m:int (this.minuteAt(armY))
+        if (armKind == "move") {
+            return (model.beginMove((this.eventIdOf(armed)) m))
+        }
+        if (armKind == "resize") {
+            return (model.beginResize((this.eventIdOf(armed))))
+        }
+        created = (created + 1)
+        def id:string ("n" + (to_string created))
+        def res:string c.res
+        if ((strlen res) == 0) {
+            res = "alex"
+        }
+        ; The create starts at the snapped minute the press was on, not the
+        ; nearest one, so a press in the bottom half of 9:00-9:15 is 9:00.
+        def m2:int (m - (idiv model.snapMinutes 2))
+        return (model.beginCreate(id "New event" c.day m2 res "blue"))
+    }
+
+    fn pointerUp:boolean () {
+        if ((strlen armed) == 0) {
+            return false
+        }
+        def was:string armed
+        def kind:string armKind
+        armed = ""
+        armKind = ""
+        if dragging {
+            dragging = false
+            def id:string (model.endDrag())
+            if ((strlen id) > 0) {
+                def e:CalEvent (model.event(id))
+                focused = (p + "-ev-" + id)
+                if (kind == "move") {
+                    this.say(("Moved " + (this.evLabel(e))))
+                }
+                if (kind == "resize") {
+                    this.say(("Resized " + (this.evLabel(e))))
+                }
+                if (kind == "create") {
+                    this.say(("Created " + (this.evLabel(e))))
+                }
+            }
+            return true
+        }
+        ; No travel: it was a click.
+        if (kind == "create") {
+            return true
+        }
+        return (this.press(was))
+    }
+
+    fn cancelGesture:boolean () {
+        if dragging {
+            dragging = false
+            armed = ""
+            model.cancelDrag()
+            this.say("Drag cancelled")
+            return true
+        }
+        return false
+    }
+
+    ; What the pointer looks like over `id`.
+    fn cursorFor:string (id:string) {
+        if (this.isGrid()) {
+            if (UiTree.beginsWith(id (p + "-rz-"))) {
+                if model.canResize {
+                    return "ns-resize"
+                }
+            }
+            if (UiTree.beginsWith(id (p + "-ev-"))) {
+                if model.canMove {
+                    return "grab"
+                }
+                return "pointer"
+            }
+            if (UiTree.beginsWith(id (p + "-col-"))) {
+                if model.canCreate {
+                    return "crosshair"
+                }
+                return "default"
+            }
+        }
+        return ""
+    }
+
+    ; --- the keyboard ----------------------------------------------------------------
+
+    fn keyWith:boolean (k:string shift:boolean) {
+        if (k == "Escape") {
+            if (this.cancelGesture()) {
+                return true
+            }
+        }
+        def os@(optional):SelectCtl (this.openSel())
+        if (!null? os) {
+            def s:SelectCtl (unwrap os)
+            def was:string s.value
+            def land:string (s.keyDown(focused k))
+            if ((strlen land) > 0) {
+                focused = land
+            }
+            if (s.open == false) {
+                focused = (s.triggerTid())
+                if (s.value != was) {
+                    this.chosen(s)
+                }
+            }
+            return true
+        }
+        if (k == "Escape") {
+            if settings.open {
+                focused = (settings.closeAndRestore())
+                return true
+            }
+            return false
+        }
+        if ((k == "Enter") || (k == " ")) {
+            if ((strlen focused) > 0) {
+                return (this.press(focused))
+            }
+            return false
+        }
+        ; The tabs: the arrows move and select.
+        if (UiTree.beginsWith(focused (tabs.tid + "-tab-"))) {
+            def landT:string (tabs.keyDown(focused k))
+            if ((strlen landT) > 0) {
+                focused = landT
+                return true
+            }
+            return false
+        }
+        def sf@(optional):SelectCtl (this.selFor(focused))
+        if (!null? sf) {
+            if ((k == "ArrowDown") || (k == "ArrowUp")) {
+                def s2:SelectCtl (unwrap sf)
+                s2.openList()
+                focused = (s2.itemTid(s2.value))
+                return true
+            }
+            return false
+        }
+        ; A focused event in a time grid: the keyboard's move and resize.
+        def ev:string (this.eventIdOf(focused))
+        if (((strlen ev) > 0) && (this.isGrid())) {
+            return (this.keyEvent(ev k shift))
+        }
+        return false
+    }
+
+    fn keyEvent:boolean (ev:string k:string shift:boolean) {
+        def step:int model.snapMinutes
+        def e:CalEvent (model.event(ev))
+        def did:boolean false
+        def what:string ""
+        if ((k == "ArrowUp") || (k == "ArrowDown")) {
+            def d:int step
+            if (k == "ArrowUp") {
+                d = (0 - step)
+            }
+            if shift {
+                did = (model.resizeBy(ev d))
+                what = "Resized "
+            } {
+                did = (model.moveBy(ev 0 d))
+                what = "Moved "
+            }
+        }
+        if ((k == "ArrowLeft") || (k == "ArrowRight")) {
+            def dir:int 1
+            if (k == "ArrowLeft") {
+                dir = -1
+            }
+            if (EcI18n.isRtl(lang)) {
+                dir = (0 - dir)
+            }
+            what = "Moved "
+            if (view == "resource") {
+                def rs:[EcCol] (this.resources())
+                def at:int -1
+                def i:int 0
+                while (i < (array_length rs)) {
+                    def ri:EcCol (itemAt rs i)
+                    if (ri.res == e.resource) {
+                        at = i
+                    }
+                    i = (i + 1)
+                }
+                def to:int (at + dir)
+                if ((to >= 0) && (to < (array_length rs))) {
+                    def rt:EcCol (itemAt rs to)
+                    did = (model.moveToResource(ev rt.res))
+                }
+            } {
+                ; To the next SHOWN day, so a hidden weekend is stepped over.
+                def nd:int (e.startDay + dir)
+                while ((this.shown(nd)) == false) {
+                    nd = (nd + dir)
+                }
+                did = (model.moveBy(ev (nd - e.startDay) 0))
+                def days:[int] (this.gridDays())
+                if (did && ((view == "day") || (view == "ndays") || (view == "week"))) {
+                    def inside:boolean false
+                    def j:int 0
+                    while (j < (array_length days)) {
+                        if ((itemAt days j) == nd) {
+                            inside = true
+                        }
+                        j = (j + 1)
+                    }
+                    if (inside == false) {
+                        cursor = nd
+                    }
+                }
+            }
+        }
+        if (what == "") {
+            return false
+        }
+        if did {
+            this.scrollToMinute(e.startMin)
+            this.say((what + (this.evLabel(e))))
+        } {
+            if ((model.canMove == false) && (what == "Moved ")) {
+                this.say("Moving is off")
+            }
+            if ((model.canResize == false) && (what == "Resized ")) {
+                this.say("Resizing is off")
+            }
+        }
+        return true
+    }
+}

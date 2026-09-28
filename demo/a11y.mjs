@@ -93,6 +93,22 @@ const metadata = atRest(MetadataDemo, "metadata.css");
 const otp = atRest(OtpDemo, "otp.css");
 const filters = atRest(FilterDemo, "filters.css");
 const eventcal = atRest(EventCalDemo, "eventcal.css");
+// ReUI's patterns in their other states: the Settings popover open on its
+// Behavior tab; the week with an event focused, tooltips on and one showing;
+// the resource view with a select list open; and Arabic, right to left.
+const eventcalSettings = atRest(EventCalDemo, "eventcal.css");
+for (const id of ["ea-set-trigger", "ea-set-tabs-tab-behavior"]) eventcalSettings.press(id);
+eventcalSettings.displayListJson();
+const eventcalWeek = atRest(EventCalDemo, "eventcal.css");
+for (const id of ["ea-view-trigger", "ea-view-item-week", "ea-set-trigger", "ea-set-tabs-tab-behavior", "ea-set-sw-tips", "ea-title", "ea-ev-e2"]) eventcalWeek.press(id);
+eventcalWeek.setHover("ea-ev-e4");
+eventcalWeek.displayListJson();
+const eventcalResource = atRest(EventCalDemo, "eventcal.css");
+for (const id of ["ea-view-trigger", "ea-view-item-resource", "ea-set-trigger", "ea-set-tabs-tab-grid", "ea-set-sn-trigger"]) eventcalResource.press(id);
+eventcalResource.displayListJson();
+const eventcalAr = atRest(EventCalDemo, "eventcal.css");
+for (const id of ["ea-set-trigger", "ea-set-tabs-tab-region", "ea-set-lang-trigger", "ea-set-lang-item-ar", "ea-title"]) eventcalAr.press(id);
+eventcalAr.displayListJson();
 const message = atRest(MessageDemo, "message.css");
 const controls = atRest(ControlsDemo, "controls.css");
 const accordion = atRest(AccordionDemo, "accordion.css");
@@ -137,7 +153,11 @@ const REST = [
   ["metadata — two comboboxes, a date field and a pill pair", metadata, 42],
   ["otp — two one-time-code fields", otp, 43],
   ["filters — a filter bar and its results", filters, 44],
-  ["eventcal — a week of events", eventcal, 45],
+  ["eventcal — month, board and measured week at rest", eventcal, 45],
+  ["eventcal — Settings open on Behavior", eventcalSettings, 91],
+  ["eventcal — week, an event focused, a tooltip showing", eventcalWeek, 92],
+  ["eventcal — resource view, the drag-snap list open", eventcalResource, 93],
+  ["eventcal — Arabic, right to left", eventcalAr, 94],
   ["message — a chat transcript", message, 46],
   ["controls — stepper, sliders and a number field", controls, 47],
   ["accordion — three lists, first items open", accordion, 48],

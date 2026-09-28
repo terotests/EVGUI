@@ -88,6 +88,14 @@ class CalEvent {
     def overflowLeft:boolean false
     def overflowRight:boolean false
 
+    ; --- the full calendar's additions ---------------------------------------
+    ; Which lane of a resource view the event sits in ("" for none), the
+    ; colour name the page tints it with, and a kind the page may draw its own
+    ; chip for. None of them is read by the measured layout above.
+    def resource:string ""
+    def color:string ""
+    def kind:string ""
+
     Constructor () {
     }
 }
@@ -309,7 +317,12 @@ class EventCalCtl extends UiCtl {
     }
 
     fn layoutDay:void (day:int) {
-        def day_events:[CalEvent] (this.timedOn(day))
+        this.layoutList((this.timedOn(day)))
+    }
+
+    ; The two passes over a list already in start order. `layoutDay` hands it
+    ; one day's events; a resource view hands it one day of one resource.
+    fn layoutList:void (day_events:[CalEvent]) {
         def n:int (array_length day_events)
         ; Where the current batch started, and the highest column it has used.
         def batchStart:int 0
@@ -504,8 +517,12 @@ class EventCalCtl extends UiCtl {
     ; past it. Runs for every view: a week shows a band that started last week
     ; the same way a day shows one that started this morning.
     fn clipToView:void () {
-        def lo:int (this.firstDay())
-        def hi:int (this.lastDay())
+        this.clipRange((this.firstDay()) (this.lastDay()))
+    }
+
+    ; The clip for any window of days, which a page with its own idea of the
+    ; window (six weeks of month, weekends hidden) needs as much as a view.
+    fn clipRange:void (lo:int hi:int) {
         def i:int 0
         while (i < (array_length events)) {
             def e:CalEvent (itemAt events i)
@@ -634,6 +651,9 @@ class EventCalCtl extends UiCtl {
         if (v == "day") { view = "day" }
         if (v == "week") { view = "week" }
         if (v == "month") { view = "month" }
+        if (v == "ndays") { view = "ndays" }
+        if (v == "agenda") { view = "agenda" }
+        if (v == "resource") { view = "resource" }
     }
 
     ; One step forward or back, in the unit the current view shows. A week view
@@ -774,5 +794,497 @@ class EventCalCtl extends UiCtl {
             ms = "0" + ms
         }
         return hs + ":" + ms
+    }
+    ; =========================================================================
+    ; THE FULL CALENDAR — settings, resources and the three drag gestures
+    ; =========================================================================
+    ; Everything below is additive: the measured layout above is untouched and
+    ; a page that never calls these gets exactly the calendar it had. The page
+    ; turns pixels into (day, minute, resource) and back; which minute a drag
+    ; lands on, whether it is allowed at all and what the event becomes is
+    ; decided here, so a keyboard and a pointer move an event by the same rule.
+
+    ; Snap and the window the time grid shows, in minutes from midnight.
+    def snapMinutes:int 15
+    def dayStartMin:int 0
+    def dayEndMin:int 1440
+    ; The Behavior toggles. A gesture that is off does not begin.
+    def canMove:boolean true
+    def canResize:boolean true
+    def canCreate:boolean true
+    ; The gesture in flight: "move", "resize", "create" or "".
+    def dragMode:string ""
+    def dragId:string ""
+    ; Where in the event the pointer took hold, in minutes from its start, so
+    ; a move keeps the event under the same spot of the pointer.
+    def dragGrab:int 0
+    ; A create's first minute: the new event runs from here to the pointer,
+    ; whichever way the pointer goes.
+    def dragAnchor:int 0
+    def dragChanged:boolean false
+    ; What the event was before the gesture, for Escape.
+    def origDay:int 0
+    def origStart:int 0
+    def origEnd:int 0
+    def origRes:string ""
+
+    fn addEvent:CalEvent (id:string title:string day:int startMin:int endMin:int res:string color:string) {
+        def e:CalEvent (this.addTimed(id title day startMin endMin))
+        e.resource = res
+        e.color = color
+        return e
+    }
+
+    fn has:boolean (id:string) {
+        def i:int 0
+        while (i < (array_length events)) {
+            def e:CalEvent (itemAt events i)
+            if (e.id == id) {
+                return true
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    ; To the NEAREST step, half up — a pointer 7 minutes past 9:00 on a
+    ; 15-minute snap is 9:00 and at 8 it is 9:15, which is how a grid that
+    ; snaps feels right under the hand.
+    sfn snapTo:int (m:int step:int) {
+        if (step <= 1) {
+            return m
+        }
+        def neg:boolean (m < 0)
+        def a:int m
+        if neg {
+            a = (0 - m)
+        }
+        def q:int (idiv (a + (idiv step 2)) step)
+        def r:int (q * step)
+        if neg {
+            return (0 - r)
+        }
+        return r
+    }
+
+    fn snap:int (m:int) {
+        return (EventCalCtl.snapTo(m snapMinutes))
+    }
+
+    ; A start that keeps an event of `dur` minutes inside the shown window.
+    fn clampStart:int (start:int dur:int) {
+        def s:int start
+        if ((s + dur) > dayEndMin) {
+            s = (dayEndMin - dur)
+        }
+        if (s < dayStartMin) {
+            s = dayStartMin
+        }
+        return s
+    }
+
+    fn remember:void (e:CalEvent) {
+        origDay = e.startDay
+        origStart = e.startMin
+        origEnd = e.endMin
+        origRes = e.resource
+        dragChanged = false
+    }
+
+    ; Only a timed, same-day event can be picked up in the grid: a band event
+    ; is not drawn there.
+    fn inGrid:boolean (e:CalEvent) {
+        return ((EventCalCtl.inAllDayBand(e)) == false)
+    }
+
+    fn beginMove:boolean (id:string grabMin:int) {
+        if ((canMove == false) || ((this.has(id)) == false)) {
+            return false
+        }
+        def e:CalEvent (this.event(id))
+        if ((this.inGrid(e)) == false) {
+            return false
+        }
+        this.remember(e)
+        dragMode = "move"
+        dragId = id
+        dragGrab = (grabMin - e.startMin)
+        if (dragGrab < 0) {
+            dragGrab = 0
+        }
+        return true
+    }
+
+    fn beginResize:boolean (id:string) {
+        if ((canResize == false) || ((this.has(id)) == false)) {
+            return false
+        }
+        def e:CalEvent (this.event(id))
+        if ((this.inGrid(e)) == false) {
+            return false
+        }
+        this.remember(e)
+        dragMode = "resize"
+        dragId = id
+        return true
+    }
+
+    ; A new event from the snapped minute under the pointer, one snap long
+    ; until the pointer says otherwise.
+    fn beginCreate:boolean (id:string title:string day:int minute:int res:string color:string) {
+        if canCreate {
+        } {
+            return false
+        }
+        def step:int snapMinutes
+        if (step < 5) {
+            step = 5
+        }
+        def s:int (this.clampStart((EventCalCtl.snapTo(minute step)) step))
+        def e:CalEvent (this.addEvent(id title day s (s + step) res color))
+        this.remember(e)
+        dragMode = "create"
+        dragId = id
+        dragAnchor = s
+        dragChanged = true
+        return true
+    }
+
+    ; Where the pointer is now, as the page reads it off the grid. Returns
+    ; whether the event changed, so a move within one snap repaints nothing.
+    fn dragTo:boolean (day:int minute:int res:string) {
+        if ((strlen dragMode) == 0) {
+            return false
+        }
+        def e:CalEvent (this.event(dragId))
+        def was:string ((to_string e.startDay) + "/" + (to_string e.startMin) + "/" + (to_string e.endMin) + "/" + e.resource)
+        def step:int snapMinutes
+        if (step < 1) {
+            step = 1
+        }
+        if (dragMode == "move") {
+            def dur:int (e.endMin - e.startMin)
+            def s:int (this.clampStart((this.snap((minute - dragGrab))) dur))
+            e.startDay = day
+            e.endDay = day
+            e.startMin = s
+            e.endMin = (s + dur)
+            if ((strlen res) > 0) {
+                e.resource = res
+            }
+        }
+        if (dragMode == "resize") {
+            def end:int (this.snap(minute))
+            if (end < (e.startMin + step)) {
+                end = (e.startMin + step)
+            }
+            if (end > dayEndMin) {
+                end = dayEndMin
+            }
+            e.endMin = end
+        }
+        if (dragMode == "create") {
+            def m:int (this.snap(minute))
+            if (m < dayStartMin) {
+                m = dayStartMin
+            }
+            if (m > dayEndMin) {
+                m = dayEndMin
+            }
+            if (m >= dragAnchor) {
+                e.startMin = dragAnchor
+                e.endMin = m
+                if (e.endMin < (dragAnchor + step)) {
+                    e.endMin = (dragAnchor + step)
+                }
+            } {
+                e.startMin = m
+                e.endMin = dragAnchor
+            }
+            if (e.endMin > dayEndMin) {
+                e.endMin = dayEndMin
+                e.startMin = (dayEndMin - step)
+            }
+        }
+        def now:string ((to_string e.startDay) + "/" + (to_string e.startMin) + "/" + (to_string e.endMin) + "/" + e.resource)
+        if (now != was) {
+            dragChanged = true
+            return true
+        }
+        return false
+    }
+
+    ; The gesture ends where it is. Returns the event it moved, "" if none.
+    fn endDrag:string () {
+        def id:string dragId
+        dragMode = ""
+        dragId = ""
+        return id
+    }
+
+    ; Escape: put it back, or take back an event the gesture created.
+    fn cancelDrag:boolean () {
+        if ((strlen dragMode) == 0) {
+            return false
+        }
+        if (dragMode == "create") {
+            this.removeEvent(dragId)
+        } {
+            def e:CalEvent (this.event(dragId))
+            e.startDay = origDay
+            e.endDay = origDay
+            e.startMin = origStart
+            e.endMin = origEnd
+            e.resource = origRes
+        }
+        dragMode = ""
+        dragId = ""
+        return true
+    }
+
+    fn removeEvent:void (id:string) {
+        def keep:[CalEvent]
+        def i:int 0
+        while (i < (array_length events)) {
+            def e:CalEvent (itemAt events i)
+            if (e.id != id) {
+                push keep e
+            }
+            i = (i + 1)
+        }
+        events = keep
+    }
+
+    ; --- the keyboard's version of the same gestures --------------------------
+    ; One snap per key, by the same clamps as the pointer, and refused by the
+    ; same toggles: a calendar whose drag-to-move is off does not move an event
+    ; from the keyboard either.
+
+    fn moveBy:boolean (id:string dDays:int dMin:int) {
+        if ((canMove == false) || ((this.has(id)) == false)) {
+            return false
+        }
+        def e:CalEvent (this.event(id))
+        if ((this.inGrid(e)) == false) {
+            return false
+        }
+        def dur:int (e.endMin - e.startMin)
+        def s:int (this.clampStart((e.startMin + dMin) dur))
+        if ((s == e.startMin) && (dDays == 0)) {
+            return false
+        }
+        e.startDay = (e.startDay + dDays)
+        e.endDay = e.startDay
+        e.startMin = s
+        e.endMin = (s + dur)
+        return true
+    }
+
+    fn moveToResource:boolean (id:string res:string) {
+        if ((canMove == false) || ((this.has(id)) == false)) {
+            return false
+        }
+        def e:CalEvent (this.event(id))
+        if (e.resource == res) {
+            return false
+        }
+        e.resource = res
+        return true
+    }
+
+    fn resizeBy:boolean (id:string dMin:int) {
+        if ((canResize == false) || ((this.has(id)) == false)) {
+            return false
+        }
+        def e:CalEvent (this.event(id))
+        if ((this.inGrid(e)) == false) {
+            return false
+        }
+        def step:int snapMinutes
+        if (step < 1) {
+            step = 1
+        }
+        def end:int (e.endMin + dMin)
+        if (end < (e.startMin + step)) {
+            end = (e.startMin + step)
+        }
+        if (end > dayEndMin) {
+            end = dayEndMin
+        }
+        if (end == e.endMin) {
+            return false
+        }
+        e.endMin = end
+        return true
+    }
+
+    ; --- time zones -----------------------------------------------------------
+    ; Every clock time moves by the same number of minutes, crossing midnight
+    ; where it must — and an event that then runs past midnight is promoted to
+    ; the band by the rule above, as the reference does. 24:00 stays the end of
+    ; its own day rather than becoming 00:00 of the next, so a shift that ends
+    ; an event exactly at midnight does not promote it.
+    sfn floorDiv:int (a:int b:int) {
+        def q:int (idiv a b)
+        if (((q * b) > a)) {
+            q = (q - 1)
+        }
+        return q
+    }
+
+    fn shiftAll:void (delta:int) {
+        if (delta == 0) {
+            return
+        }
+        def i:int 0
+        while (i < (array_length events)) {
+            def e:CalEvent (itemAt events i)
+            if (e.allDay == false) {
+                def sa:int (((e.startDay * 1440) + e.startMin) + delta)
+                def ea:int (((e.endDay * 1440) + e.endMin) + delta)
+                e.startDay = (EventCalCtl.floorDiv(sa 1440))
+                e.startMin = (sa - (e.startDay * 1440))
+                e.endDay = (EventCalCtl.floorDiv(ea 1440))
+                e.endMin = (ea - (e.endDay * 1440))
+                if ((e.endMin == 0) && (e.endDay == (e.startDay + 1))) {
+                    e.endDay = e.startDay
+                    e.endMin = 1440
+                }
+            }
+            i = (i + 1)
+        }
+    }
+
+    ; --- resources, and windows the page chooses -------------------------------
+
+    fn timedOnRes:[CalEvent] (day:int res:string) {
+        def out:[CalEvent]
+        def all:[CalEvent] (this.timedOn(day))
+        def i:int 0
+        while (i < (array_length all)) {
+            def e:CalEvent (itemAt all i)
+            if ((strlen res) == 0) {
+                push out e
+            } {
+                if (e.resource == res) {
+                    push out e
+                }
+            }
+            i = (i + 1)
+        }
+        return out
+    }
+
+    fn layoutDayRes:void (day:int res:string) {
+        this.layoutList((this.timedOnRes(day res)))
+    }
+
+    ; Chips for any window, laned the way the month lanes them: first free row
+    ; over the CLIPPED range. `layoutMonth` is this over the view's own window.
+    fn layoutChips:void (lo:int hi:int) {
+        this.clipRange(lo hi)
+        def chips:[CalEvent]
+        def i:int 0
+        while (i < (array_length events)) {
+            def e:CalEvent (itemAt events i)
+            if ((e.startDay <= hi) && (e.endDay >= lo)) {
+                push chips e
+            }
+            i = (i + 1)
+        }
+        ; Longer first within a day, so a multi-day bar keeps the top lane and
+        ; the single days stack under it.
+        def sorted:[CalEvent] (EventCalCtl.sortByStart(chips false))
+        def ordered:[CalEvent]
+        def k:int 0
+        while (k < (array_length sorted)) {
+            def a:CalEvent (itemAt sorted k)
+            if ((EventCalCtl.inAllDayBand(a))) {
+                push ordered a
+            }
+            k = (k + 1)
+        }
+        k = 0
+        while (k < (array_length sorted)) {
+            def b:CalEvent (itemAt sorted k)
+            if ((EventCalCtl.inAllDayBand(b)) == false) {
+                push ordered b
+            }
+            k = (k + 1)
+        }
+        def n:int (array_length ordered)
+        i = 0
+        while (i < n) {
+            def cur:CalEvent (itemAt ordered i)
+            def lane:int 1
+            def searching:boolean true
+            while searching {
+                def taken:boolean false
+                def j:int 0
+                while (j < i) {
+                    def other:CalEvent (itemAt ordered j)
+                    if (other.lane == lane) {
+                        if ((cur.clipStart <= other.clipEnd) && (other.clipStart <= cur.clipEnd)) {
+                            taken = true
+                        }
+                    }
+                    j = (j + 1)
+                }
+                if taken {
+                    lane = (lane + 1)
+                } {
+                    searching = false
+                }
+            }
+            cur.lane = lane
+            i = (i + 1)
+        }
+    }
+
+    ; The all-day band over a window: only the bands that reach it take lanes,
+    ; so a band last month does not push this week's down a row.
+    fn layoutBandRange:int (lo:int hi:int) {
+        this.clipRange(lo hi)
+        def band:[CalEvent] (this.bandEvents())
+        def shown:[CalEvent]
+        def i:int 0
+        while (i < (array_length band)) {
+            def e:CalEvent (itemAt band i)
+            if ((e.startDay <= hi) && (e.endDay >= lo)) {
+                push shown e
+            } {
+                e.lane = 0
+            }
+            i = (i + 1)
+        }
+        def most:int 0
+        i = 0
+        while (i < (array_length shown)) {
+            def cur:CalEvent (itemAt shown i)
+            def lane:int 1
+            def searching:boolean true
+            while searching {
+                def taken:boolean false
+                def j:int 0
+                while (j < i) {
+                    def other:CalEvent (itemAt shown j)
+                    if ((other.lane == lane) && (EventCalCtl.dayOverlap(cur other))) {
+                        taken = true
+                    }
+                    j = (j + 1)
+                }
+                if taken {
+                    lane = (lane + 1)
+                } {
+                    searching = false
+                }
+            }
+            cur.lane = lane
+            if (lane > most) {
+                most = lane
+            }
+            i = (i + 1)
+        }
+        return most
     }
 }
