@@ -447,26 +447,6 @@
             <svg class="i chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
           </summary>
           <div class="panel-body">
-            <section data-for="menubar">
-              <h2>open menu</h2>
-              <div id="menus"></div>
-            </section>
-            <section data-for="menubar">
-              <h2>submenu</h2>
-              <label><input type="checkbox" id="submenu" checked /> show it</label>
-            </section>
-            <section data-for="menubar">
-              <h2>collisions</h2>
-              <label><input type="checkbox" id="atbottom" /> bar at the bottom</label>
-            </section>
-            <section data-for="menubar">
-              <h2>checkbox items</h2>
-              <div id="checks"></div>
-            </section>
-            <section data-for="menubar">
-              <h2>profile</h2>
-              <div id="profiles"></div>
-            </section>
             <section data-for="toolbar">
               <h2>format</h2>
               <div id="format"></div>
@@ -1083,6 +1063,30 @@
               AlertDialog. Continue deletes nothing.
             </p>
           </section>
+          <section data-for="menubar">
+            <h2>what to try</h2>
+            <p class="hint">
+              <strong>Click a menu</strong>, then move the pointer along the bar:
+              with one menu open, hovering another trigger switches to it. A click
+              on the open trigger, anywhere outside, or <strong>Escape</strong>
+              closes it (Escape puts the focus back on its trigger).
+            </p>
+            <p class="hint">
+              <strong>Tab</strong> onto a bar, then &larr; / &rarr; walk its triggers
+              and <strong>Enter</strong>, <strong>Space</strong> or &darr; opens a menu
+              on its first item. Inside, &uarr; / &darr; walk the rows (skipping
+              separators and disabled rows), <strong>Home</strong> / <strong>End</strong>
+              jump, a letter jumps to the next row starting with it, and &larr; / &rarr;
+              move to the neighbouring menu.
+            </p>
+            <p class="hint">
+              In <em>View</em> the rows are checkboxes and in <em>Theme</em> a radio
+              group: choosing one toggles it (or checks it) and closes the menu, as
+              Radix does. <em>Sign out</em> is the destructive variant. In the third
+              bar, rest on <em>Share</em> or <em>Find</em> (or press &rarr;) for the
+              submenu.
+            </p>
+          </section>
           <section data-for="popover">
             <h2>what to try</h2>
             <p class="hint">
@@ -1239,12 +1243,14 @@
             three alignment buttons are drawn icons, and exactly one is pressed.
           </p>
           <p class="note" data-for="menubar">
-            <strong>Click it.</strong> The canvas answers the pointer through EVG&rsquo;s own
-            hit testing: a press is resolved against the same laid-out tree that was
-            drawn, topmost first, so a click inside an open panel reaches the panel and
-            not the trigger it covers. Hovering <em>Share</em> opens the submenu; Escape
-            closes; ← and → walk the bar, ↑ and ↓ the rows. The controls panel is a second view
-            of the same state.
+            <strong>The behaviour is the controllers&rsquo;.</strong> Each bar is a
+            <code>MenubarCtl</code> (<code>src/</code>) &mdash; which menu is open,
+            the triggers&rsquo; roving focus, the keyboard open and the arrows
+            between menus &mdash; measured against <code>@radix-ui/react-menubar</code>;
+            the inside of each menu is a <code>MenuCtl</code> (arrows, Home/End,
+            typeahead, submenus, checkbox and radio items, separators), measured
+            against Radix&rsquo;s dropdown menu. The page only passes presses,
+            hovers and keys through; the look is ReUI&rsquo;s, from its screenshots.
           </p>
           <details class="about">
             <summary>How this page works</summary>
@@ -1286,8 +1292,8 @@
  "menubar": {
   "title": "Menubar",
   "src": "MenubarDemo",
-  "caption": "Radix Menubar example · keyboard hand-written, not yet measured",
-  "desc": "Radix's menubar example — four menus, submenus, checkbox and radio items, separators and shortcut slots — written as a Ranger tree literal. Its keyboard is hand-written on this page and matched against nothing; the controls below are a second view of the same state."
+  "caption": "MenubarCtl + MenuCtl · measured against @radix-ui/react-menubar",
+  "desc": "ReUI's two menubar patterns — File and Account with icons, shortcuts and a destructive Sign out; View and Theme with checkbox and radio items — and Radix's own example with submenus and disabled rows, one card each. Which menu is open, the roving focus along the bar, the keyboard open and the arrows between menus are MenubarCtl's, measured against Radix Menubar; everything inside a menu is a MenuCtl's, measured against Radix's dropdown menu."
  },
  "toolbar": {
   "title": "Toolbar",

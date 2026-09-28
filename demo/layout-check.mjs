@@ -48,14 +48,15 @@ const BASELINE = path.join(HERE, "layout-baseline.json");
 
 // TWO SHAPES, because the demos have two. Most are an instance you `init` with
 // a stylesheet and then ask for a display list, which lays the tree out on the
-// way. Three — menubar, sortable, toolbar — are STATIC: `sfn page(...)`
-// returns a tree and the host lays it out, so here the sheet is applied and
-// `EVGLayout` run by hand with the same viewport the page uses.
+// way. Three — sortable, toolbar and the menubar's first-version page
+// (`MenubarDemo#page`, which the static API still draws) — are STATIC:
+// `sfn page(...)` returns a tree and the host lays it out, so here the sheet is
+// applied and `EVGLayout` run by hand with the same viewport the page uses.
 //
 // They are not skipped for being awkward. A gate with a hole in it is how all
 // of this got here.
 const STATIC_ARGS = {
-  MenubarDemo: (M) => M.MenubarDemo.page([], "ada", "", false, false),
+  "MenubarDemo#page": (M) => M.MenubarDemo.page([], "ada", "", false, false),
   SortableDemo: (M) =>
     M.SortableDemo.page(["a", "b", "c", "d", "e"], ""),
   ToolbarDemo: (M) =>
@@ -76,6 +77,7 @@ const DEMOS = [
   ["FilterDemo", "filters.css"],
   ["FormDemo", "form.css"],
   ["MenubarDemo", "menubar.css"],
+  ["MenubarDemo#page", "menubar.css"],
   ["MessageDemo", "message.css"],
   ["MotionDemo", "motion.css"],
   ["OtpDemo", "otp.css"],
@@ -146,7 +148,7 @@ const record = process.argv.includes("--record");
 let failed = 0;
 const counts = {};
 for (const [demo, css] of DEMOS) {
-  const file = path.join(BIN, demo + ".cjs");
+  const file = path.join(BIN, demo.split("#")[0] + ".cjs");
   if (!fs.existsSync(file)) {
     console.log(`  MISSING ${demo} — run \`npm run ui:demo:build\``);
     failed += 1;

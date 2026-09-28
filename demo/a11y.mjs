@@ -539,6 +539,41 @@ STATES.push(...[
   })));
 }
 
+// The menubar page: three bars at rest, then each kind of menu open, reached
+// by pressing (and hovering) the ids the hit test reports, as the page does —
+// the icons-and-shortcuts File menu, Account with its group and destructive
+// row, View's checkbox rows, Theme's radio group, and the Radix example with a
+// submenu out. The five states above are the static `page()` the tree-literal
+// test uses; these are the live page's.
+{
+  const live = (steps) => {
+    const d = atRest(MenubarDemo, "menubar.css");
+    for (const [op, id] of steps) {
+      if (op === "hover") d.setHover(id);
+      else if (op === "tick") d.tick(150.0);
+      else d.press(id);
+      d.displayListJson();
+    }
+    return d;
+  };
+  for (const [name, steps, gen] of [
+    ["menubar page — three bars at rest", [], 64],
+    ["menubar page — File open (icons, shortcuts)", [["press", "mb1-file-trigger"]], 65],
+    ["menubar page — Account open (a group, a destructive row)", [["press", "mb1-account-trigger"]], 66],
+    ["menubar page — View open (checkbox rows)", [["press", "mb2-view-trigger"]], 67],
+    ["menubar page — Theme open (a radio group)", [["press", "mb2-theme-trigger"]], 68],
+    ["menubar page — Radix Edit open, Find submenu out", [["press", "mb3-edit-trigger"], ["hover", "mb3-edit-item-find"], ["tick"]], 69],
+  ]) {
+    const d = live(steps);
+    STATES.push({
+      name,
+      size: [d.widthPx(), d.heightPx()],
+      lint: () => d.a11yLint(),
+      tree: () => d.a11yTreeJson(gen, d.focused || ""),
+    });
+  }
+}
+
 const AXE = fs.readFileSync(domRequire.resolve("axe-core"), "utf8");
 
 const html = `<!doctype html><meta charset="utf-8">

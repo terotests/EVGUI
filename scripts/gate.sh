@@ -55,6 +55,7 @@ SUITES=(
   ui:rating:check
   ui:dialog:check
   ui:popover:check
+  ui:menubar:check
   ui:semantics:check
   ui:input:bench
   ui:layout:check

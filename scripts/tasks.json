@@ -37,6 +37,7 @@
   "ui:pages:build": "npm run ui:web:build && npm run ui:demo:build && node gallery/evgui/demo/build.mjs && node gallery/evgui/web/build-pages.mjs --out gallery/evgui/web/dist",
   "ui:pages:smoke": "node gallery/evgui/web/pages-smoke.mjs --dist gallery/evgui/web/dist",
   "ui:popover:check": "npm run ui:demo:build --silent && node gallery/evgui/demo/popover-check.mjs",
+  "ui:menubar:check": "npm run ui:demo:build --silent && node gallery/evgui/demo/menubar-check.mjs",
   "ui:pagination:check": "npm run ui:demo:build --silent && node gallery/evgui/demo/pagination-check.mjs",
   "ui:radio:check": "npm run ui:demo:build --silent && node gallery/evgui/demo/radio-check.mjs",
   "ui:profile:check": "npm run ui:demo:build --silent && node gallery/evgui/demo/profile-check.mjs",

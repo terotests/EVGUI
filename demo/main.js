@@ -44,7 +44,6 @@ import { installCanvasMeasurer } from "../../../lib/evg/gl/evg-measure.js";
 // The whole modules too: `keptTree` needs EVGStyleSheet, EVGLayout and the
 // rest out of the same bundle the tree was built by. Two copies of a class
 // are two classes.
-import * as MenubarModule from "../bin/MenubarDemo.cjs";
 import * as ToolbarModule from "../bin/ToolbarDemo.cjs";
 import * as SortableModule from "../bin/SortableDemo.cjs";
 const fontMeasure = installCanvasMeasurer(MODULES);
@@ -68,12 +67,6 @@ import { MENUBAR_CSS, TOOLBAR_CSS, SORTABLE_CSS, MOTION_CSS, TABLE_CSS, DROPDOWN
 // report the extra, it crops it.
 const W = 1240;
 
-const CHECK_ITEMS = ["Always Show Bookmarks Bar", "Always Show Full URLs"];
-const PROFILES = ["Andy", "Benoît", "Luis"];
-const MENUS = ["File", "Edit", "View", "Profiles"];
-const SUB_ROWS = { File: "row-Share", Edit: "row-Find" };
-const SUB_SURFACE = { File: "menu-share-content", Edit: "menu-find-content" };
-
 const SORTABLE_IDS = ["demo", "spec", "video", "audio", "extra"];
 
 const state = {
@@ -93,20 +86,10 @@ const state = {
   // the arrow keys and never leaves the list, so there is nothing following
   // anything and a preview would be a lie about where the row is.
   floating: false,
-  open: "File",
-  submenu: true,
-  // The bar at the bottom edge, where the menus have no room below their
-  // triggers and the overlay pass flips them upwards.
-  atBottom: false,
-  checked: ["Always Show Full URLs"],
-  profile: "Luis",
   bold: true,
   italic: false,
   underline: false,
   align: "center",
-  // A row asked for by a key press that has not been built yet — see
-  // `settlePendingRow`.
-  pendingRow: "",
   // The app's focus, and the app's alone. The mirror never reports focus back:
   // a mirror that does gets into a loop with the app that is setting it.
   focus: "",
@@ -430,6 +413,13 @@ let lastTabsHover = "";
 // Popover: every popover is a PopoverCtl (measured against
 // @radix-ui/react-popover); the Dimensions fields are InputCtls on the text
 // session. Non-modal: no trap, and the focus leaving a popover closes it.
+// Menubar: ReUI's two patterns and the Radix example, one card each. Every bar
+// is a MenubarCtl (measured against @radix-ui/react-menubar) whose menus are
+// MenuCtls (measured against @radix-ui/react-dropdown-menu); the page passes
+// keys, presses and hovers straight through.
+let menubar = new MenubarDemo();
+menubar.init(MENUBAR_CSS);
+let lastMenubarHover = "";
 let popover = new PopoverDemo();
 popover.init(POPOVER_CSS);
 let lastPopoverHover = "";
@@ -485,7 +475,6 @@ let lastTimelineHover = "";
 // `page()` functions the PNG snapshots and the accessibility audit call, so
 // there is one description of each demo and not two.
 const HOSTS = {
-  menubar: keptTree(MenubarModule, MENUBAR_CSS, "Menubar demo", [W, 560]),
   toolbar: keptTree(ToolbarModule, TOOLBAR_CSS, "Toolbar demo", [W, 320]),
   sortable: keptTree(SortableModule, SORTABLE_CSS, "Sortable demo", [W, 560]),
 };
@@ -525,22 +514,6 @@ const DEMOS = {
       root: () => null,
     }),
     animated: true,
-  },
-  menubar: {
-    height: 560,
-    args: () => [MENUBAR_CSS, state.checked, state.profile, state.open, state.submenu, state.atBottom],
-    module: MenubarDemo,
-    // Through the kept tree, so a hover does not rebuild and a
-    // transition has something to remember.
-    sync: () => HOSTS.menubar.sync(JSON.stringify([state.checked, state.profile, state.open, state.submenu, state.atBottom]), () => MenubarDemo.page(state.checked, state.profile, state.open, state.submenu, state.atBottom)),
-    list: () => HOSTS.menubar.list(),
-    hit: (x, y) => HOSTS.menubar.hit(x, y),
-    a11y: (gen, focus) => HOSTS.menubar.a11y(gen, focus),
-    host: () => HOSTS.menubar,
-    animated: true,
-    press: pressMenubar,
-    hover: hoverMenubar,
-    key: keyMenubar,
   },
   toolbar: {
     height: 320,
@@ -1455,6 +1428,36 @@ DEMOS.pagination = {
     root: () => null,
   }),
 };
+// Menubar. No `ownsTab`: each bar is one stop of the page's Tab walk (a
+// menubar is a composite), and a Tab from inside an open menu closes it first
+// (the page sends Escape). Everything else is MenubarCtl's and MenuCtl's.
+DEMOS.menubar = {
+  height: () => menubar.heightPx(),
+  list: () => menubar.displayListJson(),
+  hit: (x, y) => menubar.hitAt(x, y),
+  a11y: (gen, focus) => menubar.a11yTreeJson(gen, focus),
+  cursorAt: (x, y) => menubar.cursorAt(x, y),
+  press: (id) => menubar.press(id),
+  hover: (id) => {
+    if (id === lastMenubarHover) return false;
+    lastMenubarHover = id;
+    return menubar.setHover(id);
+  },
+  keyWith: (k, shift, ctrl) => menubar.keyWith(k, shift, ctrl),
+  key: (k) => menubar.key(k),
+  host: () => ({
+    tick: (dt) => menubar.tick(dt),
+    busy: () => menubar.busyNow(),
+    setHover: (id) => {
+      if (id === lastMenubarHover) return false;
+      lastMenubarHover = id;
+      return menubar.setHover(id);
+    },
+    setPressed: (id) => menubar.setPressed(id),
+    root: () => null,
+  }),
+  animated: true,
+};
 // Radio Group. No `ownsTab`: the page's generic Tab walk makes each
 // radiogroup one stop, landing on its checked radio. The arrows (which move
 // AND check, wrapping) and Space are the demo's, through RadioGroupCtl.
@@ -1528,7 +1531,13 @@ DEMOS.rating = {
 // off the pixels would test the screenshot rather than the behaviour.
 window.__sortRoot = () => HOSTS.sortable.root();
 window.__sortState = () => ({ dragging: state.dragging, over: state.over, order: state.order });
-window.__mbState = () => ({ open: state.open, focus: state.focus, which: state.which });
+// The menubar's state is its controllers': which menu each bar has open
+// ("mb1=file;mb2=;mb3=;…"), the checked values, and the focus.
+window.__mbState = () => {
+  const summary = menubar.summary();
+  const open = (summary.match(/mb\d=([a-z]+)/) || [])[1] || "";
+  return { open, focus: menubar.focused, which: state.which, summary, size: [menubar.pageW, menubar.pageH] };
+};
 // The dropdown's state is MenuCtl's, so this reads the controller rather than
 // the page: what is open, where focus is, and how deep the submenu stack goes.
 window.__dlgState = () => ({
@@ -1763,8 +1772,8 @@ window.addEventListener("unhandledrejection", (ev) => reportError(ev.reason, "an
  * The object behind each tab.
  *
  * Thunks rather than the objects, because `__resetDemo` replaces five of them.
- * The three kept trees — the menubar, the toolbar and the sortable — are not
- * here: they are static `page()` builders with no instance to ask.
+ * The two kept trees — the toolbar and the sortable — are not here: they are
+ * static `page()` builders with no instance to ask.
  */
 const INSTANCE = {
   table: () => table,
@@ -1794,9 +1803,14 @@ const INSTANCE = {
 INSTANCE.radio = () => radio;
 INSTANCE.popover = () => popover;
 INSTANCE.rating = () => rating;
+INSTANCE.menubar = () => menubar;
 // A press on the page outside the canvas is outside the popover too, and
 // Radix dismisses on a pointer down outside wherever it lands.
 window.addEventListener("pointerdown", (ev) => {
+  if (state.which === "menubar" && !stage.contains(ev.target)) {
+    if (menubar.press("")) paint();
+    return;
+  }
   if (state.which !== "popover" || stage.contains(ev.target)) return;
   if (popover.dismissOutside()) {
     paint();
@@ -1900,7 +1914,9 @@ const MIN_SCALE = 0.75;
 // handles. h: the page height to use when narrower than authored — a number,
 // or "auto" to measure the laid-out content (see `contentHeight`).
 const NARROW = {
-  menubar: { min: 320, h: "auto", keep: true, grow: true },
+  // Laid out at the room (up to its 1024), as tall as its cards; the menus
+  // open inside the cards.
+  menubar: { min: 320, h: "own", grow: true },
   toolbar: { min: 320, h: "auto", keep: true, grow: true },
   sortable: { min: 320, h: "auto", grow: true },
   tree: { min: 320, h: "auto" },
@@ -2065,48 +2081,6 @@ function hitAt(x, y) {
 // Each returns true when something changed, so a press on empty space does not
 // repaint the page for nothing.
 
-function pressMenubar(id) {
-  for (const label of MENUS) {
-    if (id === `trigger-${label}`) {
-      state.open = state.open === label ? "" : label;
-      state.focus = id;
-      return true;
-    }
-  }
-  // A row that opens a submenu toggles it, and nothing else about it is
-  // special: it is a row in a menu that happens to have a menu beside it.
-  if (id === SUB_ROWS[state.open]) {
-    state.submenu = !state.submenu;
-    state.focus = id;
-    return true;
-  }
-  if (id.startsWith("row-")) {
-    const label = id.slice(4);
-    state.focus = id;
-    if (label === "New Incognito Window") return true; // disabled: focus only
-    if (CHECK_ITEMS.includes(label)) {
-      state.checked = state.checked.includes(label)
-        ? state.checked.filter((x) => x !== label)
-        : state.checked.concat(label);
-      return true;
-    }
-    if (PROFILES.includes(label)) {
-      state.profile = label;
-      return true;
-    }
-    // Any other row is a command. It has none, so it does what a menu does
-    // after one: it closes.
-    state.open = "";
-    return true;
-  }
-  // Anywhere else — including the page behind the menu — closes.
-  if (state.open) {
-    state.open = "";
-    return true;
-  }
-  return false;
-}
-
 function pressToolbar(id) {
   const toggles = { "tb-bold": "bold", "tb-italic": "italic", "tb-underline": "underline" };
   if (toggles[id]) {
@@ -2124,206 +2098,6 @@ function pressToolbar(id) {
     return true;
   }
   return false;
-}
-
-// A submenu opens when the pointer is over the row that owns it and closes when
-// it leaves both the row and the surface — the surface included, or crossing
-// into it would close the thing you are reaching for.
-function hoverMenubar(id) {
-  const row = SUB_ROWS[state.open];
-  if (!row) return false;
-  const inside = id === row || isInside(id, SUB_SURFACE[state.open]);
-  if (inside === state.submenu) return false;
-  state.submenu = inside;
-  return true;
-}
-
-function isInside(id, surfaceId) {
-  if (!id || !surfaceId) return false;
-  if (id === surfaceId) return true;
-  // The rows of a submenu are its children in the accessible tree, which is the
-  // same tree the picture came from — so "is this inside the submenu" is a
-  // question the app can already answer without a second structure.
-  const tree = lastTree;
-  if (!tree) return false;
-  let node = tree.byId.get(id);
-  while (node) {
-    if (node.id === surfaceId) return true;
-    node = node.p ? tree.byId.get(node.p) : null;
-  }
-  return false;
-}
-
-// --- keys --------------------------------------------------------------------
-
-/**
- * The menubar keyboard, as WAI-ARIA's menubar pattern describes it.
- *
- * What was here handled two of the eight keys and gave up. The hole that
- * mattered was that every branch began `if (!state.open) return false` — so
- * pressing Escape, or arriving with nothing open, left the component
- * completely dead to the keyboard. A pointer user would never find it; a
- * keyboard user finds nothing else.
- *
- * The pattern in full:
- *
- *   ON THE BAR       Left/Right walk the triggers and wrap. They only OPEN a
- *                    menu if one was already open, which is what lets you look
- *                    along the bar without pulling menus down.
- *                    Down opens and lands on the first row, Up on the last.
- *                    Enter and Space open and land on the first.
- *                    Home/End jump to the ends of the bar.
- *
- *   IN A MENU        Up/Down walk the rows and wrap, skipping the disabled
- *                    ones — a row you cannot use is a row the cursor should
- *                    not stop on.
- *                    Right opens a submenu when the row has one, and otherwise
- *                    moves to the next menu. Left closes a submenu and returns
- *                    to the row that owns it, and otherwise moves to the
- *                    previous menu. That double meaning is the pattern's, and
- *                    it is why Right on `Share` used to jump to Edit.
- *                    Home/End jump to the ends of the menu.
- *                    Enter and Space do what a click does.
- *                    Escape closes one level and puts focus back where it came
- *                    from, which is the part that makes it recoverable.
- */
-function rowsIn(surface) {
-  if (!lastTree || !surface) return [];
-  return lastTree.nodes
-    .filter((n) => n.p === surface && n.focusable && !n.disabled)
-    .map((n) => n.id);
-}
-
-const menuSurface = (label) => `menu-${String(label).toLowerCase()}-content`;
-
-function focusableRows() {
-  return rowsIn(menuSurface(state.open));
-}
-
-/** Is the keyboard inside the open menu's submenu? */
-function inSubmenu() {
-  const sub = SUB_SURFACE[state.open];
-  return !!sub && state.submenu && rowsIn(sub).includes(state.focus);
-}
-
-/** The rows the cursor is currently walking: a submenu's, or the menu's. */
-function currentRows() {
-  return inSubmenu() ? rowsIn(SUB_SURFACE[state.open]) : focusableRows();
-}
-
-function keyMenubar(key) {
-  // An empty focus means "on the bar", which is where a Tab into the component
-  // lands and where the page starts. Normalising here rather than at load
-  // matters: writing a focus into the state before the user has pressed
-  // anything would take the browser's focus off whatever they were on.
-  const focus = state.focus || `trigger-${state.open || MENUS[0]}`;
-  const onTrigger = focus.startsWith("trigger-");
-  const label = onTrigger ? focus.slice("trigger-".length) : state.open;
-  const at = Math.max(0, MENUS.indexOf(label));
-
-  const goToTrigger = (i) => {
-    const next = MENUS[(i + MENUS.length) % MENUS.length];
-    // Only follow with the menu if one was already down. Walking the bar with
-    // everything closed should not start opening things.
-    if (state.open) state.open = next;
-    state.focus = `trigger-${next}`;
-    return true;
-  };
-
-  const openMenu = (name, which) => {
-    state.open = name;
-    state.submenu = false;
-    const rows = rowsIn(menuSurface(name));
-    // The tree for a menu that is not open yet has no rows in it, so the
-    // landing place is decided on the next frame instead. Focusing the trigger
-    // is not a fallback nobody sees: it is where a menu opened by a pointer
-    // leaves the cursor too.
-    state.focus = rows.length
-      ? rows[which === "last" ? rows.length - 1 : 0]
-      : `trigger-${name}`;
-    state.pendingRow = rows.length ? "" : which || "first";
-    return true;
-  };
-
-  if (key === "Escape") {
-    if (inSubmenu()) {
-      state.submenu = false;
-      state.focus = SUB_ROWS[state.open] || `trigger-${state.open}`;
-      return true;
-    }
-    if (state.open) {
-      state.focus = `trigger-${state.open}`;
-      state.open = "";
-      return true;
-    }
-    return false;
-  }
-
-  if (key === "Enter" || key === " ") {
-    if (onTrigger) return openMenu(label, "first");
-    return pressMenubar(state.focus);
-  }
-
-  if (key === "Home" || key === "End") {
-    if (onTrigger) return goToTrigger(key === "Home" ? 0 : MENUS.length - 1);
-    const rows = currentRows();
-    if (!rows.length) return false;
-    state.focus = key === "Home" ? rows[0] : rows[rows.length - 1];
-    return true;
-  }
-
-  if (key === "ArrowDown" || key === "ArrowUp") {
-    if (onTrigger) return openMenu(label, key === "ArrowDown" ? "first" : "last");
-    const rows = currentRows();
-    if (!rows.length) return false;
-    const i = rows.indexOf(state.focus);
-    const step = key === "ArrowDown" ? 1 : rows.length - 1;
-    state.focus = rows[(i < 0 ? 0 : (i + step) % rows.length)];
-    return true;
-  }
-
-  if (key === "ArrowRight") {
-    // A row that owns a submenu opens it rather than leaving the menu. This is
-    // the case that used to jump to the next menu instead.
-    if (!onTrigger && state.focus === SUB_ROWS[state.open]) {
-      state.submenu = true;
-      const rows = rowsIn(SUB_SURFACE[state.open]);
-      if (rows.length) state.focus = rows[0];
-      else state.pendingRow = "first";
-      return true;
-    }
-    return goToTrigger(at + 1);
-  }
-
-  if (key === "ArrowLeft") {
-    if (inSubmenu()) {
-      state.submenu = false;
-      state.focus = SUB_ROWS[state.open] || `trigger-${state.open}`;
-      return true;
-    }
-    return goToTrigger(at - 1);
-  }
-
-  return false;
-}
-
-/**
- * Land on the row a key asked for once the tree that holds it exists.
- *
- * Opening a menu and choosing a row inside it are one keystroke but two
- * frames: the rows are read off the accessible tree, and the tree for a menu
- * that was closed a moment ago has none. So the request is remembered and
- * settled after the paint that built them.
- */
-function settlePendingRow() {
-  if (!state.pendingRow || state.which !== "menubar") return false;
-  const rows = state.submenu && SUB_SURFACE[state.open]
-    ? rowsIn(SUB_SURFACE[state.open])
-    : focusableRows();
-  if (!rows.length) return false;
-  state.focus = state.pendingRow === "last" ? rows[rows.length - 1] : rows[0];
-  state.pendingRow = "";
-  return true;
 }
 
 // --- painting ----------------------------------------------------------------
@@ -2618,23 +2392,12 @@ function boxes(host, values, has, toggle) {
 // The sidebar is a second view of the same state, so a click on the canvas has
 // to move it too — otherwise the panel says "File" while the screen shows View.
 function syncControls() {
-  for (const input of document.querySelectorAll("#menus input")) {
-    input.checked = input.value === state.open;
-  }
-  for (const input of document.querySelectorAll("#profiles input")) {
-    input.checked = input.value === state.profile;
-  }
-  for (const input of document.querySelectorAll("#checks input")) {
-    input.checked = state.checked.includes(input.value);
-  }
   for (const input of document.querySelectorAll("#format input")) {
     input.checked = state[input.value];
   }
   for (const input of document.querySelectorAll("#align input")) {
     input.checked = input.value === state.align;
   }
-  document.getElementById("submenu").checked = state.submenu;
-  document.getElementById("atbottom").checked = state.atBottom;
   // The order, as a second view of the same state — the sidebar is where you
   // check that what you dragged is what the page now holds.
   document.getElementById("order").textContent = state.order.join(" → ");
@@ -2969,15 +2732,6 @@ radios(
     state.align = v;
   },
 );
-radios(
-  document.getElementById("menus"),
-  "menu",
-  MENUS,
-  () => state.open,
-  (v) => {
-    state.open = v;
-  },
-);
 // Colours only: the theme repaints and moves nothing, so switching it leaves
 // every measured position on the page the number it was.
 radios(
@@ -2989,34 +2743,6 @@ radios(
     dashboard.setTheme(DASH_THEMES[v]);
   },
 );
-radios(
-  document.getElementById("profiles"),
-  "profile",
-  PROFILES,
-  () => state.profile,
-  (v) => {
-    state.profile = v;
-  },
-);
-boxes(
-  document.getElementById("checks"),
-  CHECK_ITEMS,
-  (v) => state.checked.includes(v),
-  (v) => {
-    state.checked = state.checked.includes(v)
-      ? state.checked.filter((x) => x !== v)
-      : state.checked.concat(v);
-  },
-);
-document.getElementById("submenu").addEventListener("change", (e) => {
-  state.submenu = e.target.checked;
-  paint();
-});
-document.getElementById("atbottom").addEventListener("change", (e) => {
-  state.atBottom = e.target.checked;
-  paint();
-});
-
 // --- input -------------------------------------------------------------------
 
 // The canvas is where the picture is, so the canvas is where a press lands.
@@ -3231,9 +2957,6 @@ listen(window, "keydown", "a key", (ev) => {
   // of the profile's date picker returns it to the date box — and the editing
   // session has to follow, or the next keystroke types nowhere.
   if (d0.textSession) syncTextSession();
-  // A key that opened a menu asked for a row inside it, and the rows only
-  // exist once that paint has built them. One more pass settles it.
-  if (settlePendingRow()) paint();
   // THE CLOCK, same as every pointer handler above. A focus ring and a row's
   // background are transitioned properties: the frame a key produces is the
   // START of that transition, so a page that painted once and stopped showed
@@ -3345,6 +3068,7 @@ window.__resetDemo = (name) => {
   else if (name === "autocomplete") { autocomplete = new AutocompleteDemo(); autocomplete.init(AUTOCOMPLETE_CSS); lastAutocompleteHover = ""; }
   else if (name === "pagination") { pagination = new PaginationDemo(); pagination.init(PAGINATION_CSS); lastPaginationHover = ""; }
   else if (name === "radio") { radio = new RadioGroupDemo(); radio.init(RADIO_CSS); lastRadioHover = ""; }
+  else if (name === "menubar") { menubar = new MenubarDemo(); menubar.init(MENUBAR_CSS); lastMenubarHover = ""; }
   else if (name === "rating") { rating = new RatingDemo(); rating.init(RATING_CSS); lastRatingHover = ""; }
   else if (name === "dialog") { dialog = new DialogDemo(); dialog.init(DIALOG_CSS); lastDialogHover = ""; }
   else if (name === "popover") { popover = new PopoverDemo(); popover.init(POPOVER_CSS); lastPopoverHover = ""; }
@@ -3527,7 +3251,6 @@ function kbSetFocus(id) {
 function kbSettle() {
   paint();
   syncTextSession();
-  if (settlePendingRow()) paint();
   const want = kbFocusId();
   if (want && !textInput.isActive()) {
     const el = mirror.elementOf(want);
@@ -3549,7 +3272,6 @@ function kbEscapePopups() {
     if (!n || !kbInPopup(n)) return;
     if (!kbDemoKey("Escape")) return;
     paint();
-    if (settlePendingRow()) paint();
   }
 }
 

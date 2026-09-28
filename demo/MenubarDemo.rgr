@@ -1,34 +1,40 @@
 ; SPDX-License-Identifier: AGPL-3.0-or-later
 
 ; =============================================================================
-; MenubarDemo — the Radix menubar example, written with Ranger tree literals
+; MenubarDemo — ReUI's menubar patterns and the Radix example, one card each
 ; =============================================================================
-; The reference is https://www.radix-ui.com/primitives/docs/components/menubar,
-; roughly 200 lines of JSX. This is the same menu as a Ranger tree literal over
-; EVG elements: four menus, submenus, checkbox items, a radio group, separators,
-; disabled items and right-hand shortcut slots.
+; The references are ReUI's Menubar page (shadcn's Menubar over Radix's
+; @radix-ui/react-menubar) and Radix's own menubar example:
 ;
-; It is a structure, not a component library — there is no keyboard handling and
-; no focus here. Those belong to a MenubarCtl in gallery/evgui/src, which does not
-; exist yet; this is what its `build()` would be able to look like.
+;    1  icons and shortcuts   File (New File ⌘N, Open Folder, Save ⌘S) and
+;                             Account (Profile, Sign out — destructive)
+;    2  checkbox and radio    View (two checkbox items) and Theme (a radio
+;                             group Light / Dark / System)
+;    3  the Radix example     File / Edit / View / Profiles: submenus,
+;                             disabled rows, shortcuts, checkbox and radio
 ;
-; What the demo settled about the syntax:
+; EVERY BAR IS A `MenubarCtl` whose menus each carry a `MenuCtl` — the way
+; Radix builds it, Menubar.Menu being a Menu primitive. MenubarCtl owns which
+; menu is open, the triggers' roving focus, the keyboard open that lands on the
+; first item and the sideways arrows between menus (measured against
+; @radix-ui/react-menubar); each MenuCtl owns the inside of its menu — arrows,
+; Home/End, typeahead, submenus and their hover delay, checkbox and radio
+; items, separators (measured against @radix-ui/react-dropdown-menu). This file
+; draws what they say and adds decoration only: icons, shortcuts, the
+; destructive tint, groups. Nothing here decides whether a menu is open.
 ;
-;   * a tag carries defaults, so the factory says once what a Trigger IS and no
-;     call site repeats it. That option exists because writing this without it
-;     read badly.
-;   * a component is a function. `item`, `checkItem` and `radioItem` are
-;     ordinary Ranger functions returning EVGElement, spliced in with `(child …)`.
-;   * a loop is an ordinary loop; there is no list form and none was wanted.
-;
-; And what the OVERLAY work settled: a dropdown is not composed by hand any
-; more. `Content` is still the `Menu`'s child — ownership, events and the
-; accessibility walk all still follow the tree — but the factory marks it an
-; overlay surface, and EVG takes it out of its parent's flow, anchors it to the
-; Trigger beside it and paints it above the page. A submenu is a Menu like any
-; other, so there is no submenu case anywhere in this file.
+; THE STATIC API STAYS. `page`, `a11yJson`, `hitId`, `describe` and `main`
+; take the old arguments (checked rows, profile, open menu, submenu, bar at the
+; bottom) and draw the third card's bar on a 1240 × 560 page with the ids the
+; first version of this demo used (`trigger-File`, `row-New Tab`,
+; `menu-file-content`) — Ranger's tests/tree-literals.test.ts compiles this
+; file and asserts on exactly that. They build the same MenubarCtl model and
+; the same drawing; only the ids differ (`legacy`).
 ; =============================================================================
 
+Import "../src/MenubarCtl.rgr"
+Import "../src/MenuCtl.rgr"
+Import "../src/UiCtl.rgr"
 Import "pkg:evg/EVGElement.rgr"
 Import "pkg:evg/EVGUnit.rgr"
 Import "pkg:evg/EVGLayout.rgr"
@@ -37,331 +43,878 @@ Import "pkg:evg/EVGStyleSheet.rgr"
 Import "pkg:evg/EVGA11yTree.rgr"
 Import "pkg:evg/EVGA11yFromTree.rgr"
 Import "pkg:evg/EVGHitTest.rgr"
-; Not used by the builders below — imported so the page can drive a
-; transition over the tree they produce. Hover is a presentational state and
-; belongs to the stylesheet; the demo just builds boxes with class names.
+; Not used here — imported so the page can drive transitions over the tree
+; and reconcile a kept one with THIS module's classes (two copies of a class
+; are two classes).
 Import "pkg:evg/EVGTransition.rgr"
-; The demo page keeps this tree across frames rather than rebuilding it, and
-; `keptTree` in main.js reconciles it with `EVGReconcile` taken FROM THIS
-; MODULE — it has to be this module's copy, because two copies of a class are
-; two classes and an element built by one is not an element the other knows.
-;
-; It was never imported here, so `new mod.EVGReconcile()` threw the day that
-; line was written and went on throwing: nothing loaded the page. It does now
-; — see demo/page-check.mjs.
 Import "pkg:evg/EVGReconcile.rgr"
 
 ; -----------------------------------------------------------------------------
-; The factory. Every tag is an EVGElement — EVG has one element type and the
-; tags carry the INTENT, which is what the stylesheet and now the overlay pass
-; match on. A different factory over the same tags could build something else.
+; The factory. Every tag is an EVGElement; the tags carry the intent (role,
+; overlay, anchor) and the stylesheet the look.
 ; -----------------------------------------------------------------------------
 
 treefactory Menubar {
     child addChild
     text  textContent
 
-    tag Bar        EVGElement (props (className "mb-root"))
+    tag Page       EVGElement (props (className "mb-page"))
+    tag Cards      EVGElement (props (className "mb-cards"))
+    tag Card       EVGElement (props (className "mb-card"))
+    tag Stage      EVGElement (props (className "mb-stage"))
+    tag Foot       EVGElement (props (className "mb-foot"))
+    tag Caption    EVGElement (props (className "mb-caption") (elementType 1) (role "heading") (a11yLevel 2))
+
+    tag Bar        EVGElement (props (className "mb-root") (role "menubar"))
+    ; The trigger and its surface, as siblings: the overlay pass finds the
+    ; anchor among the surface's siblings, and a menu is not nested inside a
+    ; button.
     tag Menu       EVGElement (props (className "mb-menu"))
-    ; A trigger is what its menu's surface hangs off. The surface finds it by
-    ; this flag among its own siblings — nothing joins the two by hand.
-    ;
-    ; It also carries the ROLE. A canvas hands a screen reader one empty
-    ; graphic, so the meaning has to be published beside the picture — and the
-    ; only description that cannot drift out of step with the picture is the
-    ; one on the element that draws it. `EVGA11yFromTree` walks this same tree.
-    tag Trigger    EVGElement (props (className "mb-trigger") (elementType 1) (isOverlayAnchor true) (role "menuitem") (a11yFocusable true))
-    ; The surface. Still the Menu's child, and out of the Menu's flow: anchored
-    ; under the trigger and painted above the page.
-    tag Content    EVGElement (props (className "mb-content") (isOverlay true) (overlaySide "bottom") (overlayAlign "start") (role "menu"))
-    ; A submenu opens to the side of the row that owns it.
-    tag SubContent EVGElement (props (className "mb-content mb-subcontent") (isOverlay true) (overlaySide "right") (overlayAlign "start") (role "menu"))
-    tag Row        EVGElement (props (className "mb-item") (role "menuitem") (a11yFocusable true))
-    ; A row that opens a submenu is itself an anchor.
-    tag SubRow     EVGElement (props (className "mb-item mb-item-sub") (isOverlayAnchor true) (role "menuitem") (a11yFocusable true))
-    ; A row that carries a state is a different ARIA role, not a menuitem with
-    ; a state on it: a reader announces the two differently.
-    tag CheckRow   EVGElement (props (className "mb-item mb-item-inset") (role "menuitemcheckbox") (a11yFocusable true))
-    tag RadioRow   EVGElement (props (className "mb-item mb-item-inset") (role "menuitemradio") (a11yFocusable true))
-    ; No roles below: these are what the row is NAMED by. `EVGA11yFromTree`
-    ; collects the text of the roleless descendants, which is how "New Tab ⌘ T"
-    ; arrives as one announcement instead of three nodes.
+    tag Trigger    EVGElement (props (className "mb-trigger") (elementType 1) (role "menuitem") (a11yFocusable true) (a11yHasPopup "menu") (cursor "pointer"))
+    ; What the menu hangs off: the trigger's box grown 4px each side. shadcn
+    ; opens a menubar menu with `align="start" alignOffset={-4}`, and EVG's
+    ; overlay pass has no align offset — so the anchor carries it (and an
+    ; end-aligned fallback near the right edge gets the mirror image). No id,
+    ; so a press goes through it to the trigger painted over it.
+    tag Anchor     EVGElement (props (className "mb-anchor") (isOverlayAnchor true) (a11yHidden true))
+    tag Content    EVGElement (props (className "mb-content") (isOverlay true) (overlaySide "bottom") (overlayAlign "start") (role "menu") (a11yOrientation "vertical"))
+    tag SubContent EVGElement (props (className "mb-content mb-subcontent") (isOverlay true) (overlaySide "right") (overlayAlign "start") (role "menu") (a11yOrientation "vertical"))
+    tag Group      EVGElement (props (className "mb-group") (role "group"))
+    tag Row        EVGElement (props (className "mb-item") (role "menuitem") (a11yFocusable true) (cursor "pointer"))
+    tag SubRow     EVGElement (props (className "mb-item mb-item-sub") (isOverlayAnchor true) (role "menuitem") (a11yFocusable true) (a11yHasPopup "menu") (cursor "pointer"))
+    tag CheckRow   EVGElement (props (className "mb-item mb-item-inset") (role "menuitemcheckbox") (a11yFocusable true) (cursor "pointer"))
+    tag RadioRow   EVGElement (props (className "mb-item mb-item-inset") (role "menuitemradio") (a11yFocusable true) (cursor "pointer"))
+    ; What a row is NAMED by (roleless text), or decoration marked as such.
     tag Label      EVGElement (props (className "mb-label") (elementType 1))
     tag Shortcut   EVGElement (props (className "mb-shortcut") (elementType 1))
-    tag Indicator  EVGElement (props (className "mb-indicator") (elementType 1))
+    ; The left column of a checkbox or radio row. `alt` is its text
+    ; equivalent — "✓", "●" or "" — which `describe` prints; the mark itself
+    ; is a Lucide path inside it.
+    tag Indicator  EVGElement (props (className "mb-indicator") (a11yHidden true))
+    tag Icon       EVGElement (props (className "mb-icon") (tagName "path") (elementType 3) (viewBox "0 0 24 24") (a11yHidden true))
     tag Separator  EVGElement (props (className "mb-separator") (role "separator"))
 }
 
 class MenubarDemo {
 
-    ; --- components: ordinary functions that return a node ---------------------
+    def bar1:MenubarCtl (new MenubarCtl())
+    def bar2:MenubarCtl (new MenubarCtl())
+    def bar3:MenubarCtl (new MenubarCtl())
+    ; Draw with the first version's ids (see THE STATIC API STAYS).
+    def legacy:boolean false
 
-    ; "New Tab            ⌘ T"
-    ; The id is derived from the label rather than counted, because it is what
-    ; a click and a screen reader's cursor both land on: a row that is numbered
-    ; changes id when a row above it appears, and the reader loses its place.
+    def root@(optional):EVGElement
+    def sheet@(optional):EVGStyleSheet
+    def layout@(optional):EVGLayout
+    def hovered:string ""
+    def pressed:string ""
+    def focused:string ""
+    def dirty:boolean true
+    def pageW:double 1024.0
+    def pageH:double 800.0
+
+    Constructor () {
+    }
+
+    ; --- the models ---------------------------------------------------------------
+
+    fn buildModels:void () {
+        bar1.tid = "mb1"
+        bar1.name = "Menubar with icons"
+        bar1.addMenu("file" "File")
+        bar1.addMenu("account" "Account")
+        def f1:MenuCtl (bar1.attachMenu("file"))
+        f1.addItem("newfile" "New File" false)
+        f1.addItem("openfolder" "Open Folder" false)
+        f1.addSeparator()
+        f1.addItem("save" "Save" false)
+        def a1:MenuCtl (bar1.attachMenu("account"))
+        a1.addItem("profile" "Profile" false)
+        a1.addSeparator()
+        a1.addItem("signout" "Sign out" false)
+
+        bar2.tid = "mb2"
+        bar2.name = "Menubar with checkbox and radio items"
+        bar2.addMenu("view" "View")
+        bar2.addMenu("theme" "Theme")
+        def v2:MenuCtl (bar2.attachMenu("view"))
+        v2.addCheckbox("bookmarks" "Always Show Bookmarks Bar" false)
+        v2.addCheckbox("urls" "Always Show Full URLs" true)
+        def t2:MenuCtl (bar2.attachMenu("theme"))
+        t2.addRadio("light" "Light" "theme" false)
+        t2.addRadio("dark" "Dark" "theme" false)
+        t2.addRadio("system" "System" "theme" true)
+
+        bar3.tid = "mb3"
+        bar3.name = "Main"
+        bar3.addMenu("file" "File")
+        bar3.addMenu("edit" "Edit")
+        bar3.addMenu("view" "View")
+        bar3.addMenu("profiles" "Profiles")
+        def f3:MenuCtl (bar3.attachMenu("file"))
+        f3.addItem("newtab" "New Tab" false)
+        f3.addItem("newwindow" "New Window" false)
+        f3.addItem("incognito" "New Incognito Window" true)
+        f3.addSeparator()
+        def share:UiItem (f3.addSub("share" "Share" false))
+        MenuCtl.addKid(share "email" "Email Link" false)
+        MenuCtl.addKid(share "messages" "Messages" false)
+        MenuCtl.addKid(share "notes" "Notes" false)
+        f3.addSeparator()
+        f3.addItem("print" "Print…" false)
+        def e3:MenuCtl (bar3.attachMenu("edit"))
+        e3.addItem("undo" "Undo" false)
+        e3.addItem("redo" "Redo" false)
+        e3.addSeparator()
+        def find:UiItem (e3.addSub("find" "Find" false))
+        MenuCtl.addKid(find "searchweb" "Search the web…" false)
+        MenuCtl.addKidSeparator(find)
+        MenuCtl.addKid(find "findtext" "Find…" false)
+        MenuCtl.addKid(find "findnext" "Find Next" false)
+        MenuCtl.addKid(find "findprev" "Find Previous" false)
+        e3.addSeparator()
+        e3.addItem("cut" "Cut" false)
+        e3.addItem("copy" "Copy" false)
+        e3.addItem("paste" "Paste" false)
+        def v3:MenuCtl (bar3.attachMenu("view"))
+        v3.addCheckbox("bookmarks" "Always Show Bookmarks Bar" false)
+        v3.addCheckbox("urls" "Always Show Full URLs" true)
+        v3.addSeparator()
+        v3.addItem("reload" "Reload" false)
+        v3.addItem("forcereload" "Force Reload" true)
+        v3.addSeparator()
+        v3.addItem("fullscreen" "Toggle Fullscreen" false)
+        v3.addSeparator()
+        v3.addItem("sidebar" "Hide Sidebar" false)
+        def p3:MenuCtl (bar3.attachMenu("profiles"))
+        p3.addRadio("andy" "Andy" "profile" false)
+        p3.addRadio("benoit" "Benoît" "profile" false)
+        p3.addRadio("luis" "Luis" "profile" true)
+        p3.addSeparator()
+        p3.addItem("editprofile" "Edit…" false)
+        p3.addSeparator()
+        p3.addItem("addprofile" "Add Profile…" false)
+    }
+
+    fn init:void (css:string) {
+        def s (new EVGStyleSheet())
+        s.parse(css)
+        sheet = s
+        this.buildModels()
+        this.rebuild()
+    }
+
+    fn bars:[MenubarCtl] () {
+        def a:[MenubarCtl]
+        push a bar1
+        push a bar2
+        push a bar3
+        return a
+    }
+
+    ; The bar `target` belongs to (its own id, a trigger, a menu or a row), or -1.
+    fn barIndexOf:int (target:string) {
+        if ((strlen target) == 0) {
+            return -1
+        }
+        def a:[MenubarCtl] (this.bars())
+        def i:int 0
+        while (i < (array_length a)) {
+            def b:MenubarCtl (itemAt a i)
+            if (target == b.tid) {
+                return i
+            }
+            if ((strlen (b.menuOf(target))) > 0) {
+                return i
+            }
+            i = (i + 1)
+        }
+        return -1
+    }
+
+    fn barAt:MenubarCtl (i:int) {
+        def a:[MenubarCtl] (this.bars())
+        return (itemAt a i)
+    }
+
+    ; --- decoration, chosen from the item's value ---------------------------------------
+
+    sfn shortcutFor:string (value:string) {
+        if (value == "newfile") { return "⌘N" }
+        if (value == "save") { return "⌘S" }
+        if (value == "newtab") { return "⌘ T" }
+        if (value == "newwindow") { return "⌘ N" }
+        if (value == "print") { return "⌘ P" }
+        if (value == "undo") { return "⌘ Z" }
+        if (value == "redo") { return "⇧ ⌘ Z" }
+        if (value == "reload") { return "⌘ R" }
+        if (value == "forcereload") { return "⇧ ⌘ R" }
+        return ""
+    }
+
+    ; Lucide outlines, 24 × 24, stroked.
+    sfn iconPath:string (value:string) {
+        if (value == "newfile") {
+            return "M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z M14 2v4a2 2 0 0 0 2 2h4"
+        }
+        if (value == "openfolder") {
+            return "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
+        }
+        if (value == "save") {
+            return "M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7 M7 3v4a1 1 0 0 0 1 1h7"
+        }
+        if (value == "profile") {
+            return "M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2 M16 7a4 4 0 1 1-8 0a4 4 0 1 1 8 0z"
+        }
+        if (value == "signout") {
+            return "M16 17l5-5-5-5 M21 12H9 M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"
+        }
+        return ""
+    }
+
+    sfn checkPath:string () {
+        return "M20 6L9 17l-5-5"
+    }
+
+    sfn chevronPath:string () {
+        return "M9 18l6-6-6-6"
+    }
+
+    ; shadcn's radio mark is a small filled circle; ReUI's Theme menu draws the
+    ; same tick the checkbox rows do.
+    sfn dotPath:string () {
+        return "M12 7a5 5 0 1 0 0 10a5 5 0 1 0 0-10z"
+    }
+
+    sfn isDestructive:boolean (value:string) {
+        return (value == "signout")
+    }
+
+    ; Items wrapped in a Menubar.Group (role group): the Account menu's first
+    ; item, and every radio group.
+    sfn groupFor:string (it:UiItem) {
+        if (it.value == "profile") {
+            return "account"
+        }
+        if (it.kind == "radio") {
+            return it.group
+        }
+        return ""
+    }
+
+    sfn groupLabel:string (g:string) {
+        if (g == "theme") { return "Theme" }
+        if (g == "profile") { return "Profiles" }
+        return "Account"
+    }
+
+    fn contentClass:string (bar:MenubarCtl value:string) {
+        if (bar.tid == "mb1") {
+            return "mb-content mb-content-sm"
+        }
+        if (bar.tid == "mb2") {
+            if (value == "view") {
+                return "mb-content mb-content-lg"
+            }
+            return "mb-content mb-content-sm"
+        }
+        return "mb-content"
+    }
+
+    ; --- ids: the controller's, or the first version's -----------------------------
+
+    fn barIdOf:string (bar:MenubarCtl) {
+        if legacy {
+            return "menubar"
+        }
+        return bar.tid
+    }
+
+    fn triggerIdOf:string (bar:MenubarCtl m:UiMenu) {
+        if legacy {
+            return ("trigger-" + m.name)
+        }
+        return (bar.triggerTid(m.value))
+    }
+
+    fn menuIdOf:string (bar:MenubarCtl m:UiMenu) {
+        if legacy {
+            return ("menu-" + (to_lowercase m.name))
+        }
+        return ((bar.tid + "-") + m.value) + "-menu"
+    }
+
+    fn contentIdOf:string (bar:MenubarCtl m:UiMenu) {
+        if legacy {
+            return (("menu-" + (to_lowercase m.name)) + "-content")
+        }
+        return (bar.contentTid(m.value))
+    }
+
+    fn rowIdOf:string (tid:string name:string) {
+        if legacy {
+            return (MenubarDemo.rowId(name))
+        }
+        return tid
+    }
+
+    fn subMenuIdOf:string (tid:string name:string) {
+        if legacy {
+            return ("menu-" + (to_lowercase name))
+        }
+        return (tid + "-menu")
+    }
+
+    fn subContentIdOf:string (tid:string name:string) {
+        if legacy {
+            return (("menu-" + (to_lowercase name)) + "-content")
+        }
+        return (MenuCtl.subContentTid(tid))
+    }
+
+    ; The first version's row and trigger ids, derived from the label.
     sfn rowId:string (label:string) {
         return ("row-" + label)
     }
-
-    sfn item:EVGElement (label:string shortcut:string) {
-        return (tree Menubar
-            (Row (props (id (MenubarDemo.rowId(label))))
-                (Label label)
-                (Shortcut shortcut)))
-    }
-
-    ; A disabled row greys its label. The extra class is written here rather
-    ; than matched with a descendant selector, because EVGStyleSheet matches one
-    ; class token per selector and a compound rule would silently do nothing.
-    sfn disabledItem:EVGElement (label:string shortcut:string) {
-        return (tree Menubar
-            (Row (props (className "mb-item mb-item-disabled") (id (MenubarDemo.rowId(label))) (a11yDisabled true))
-                (Label (props (className "mb-label mb-label-disabled")) label)
-                (Shortcut shortcut)))
-    }
-
-    ; The row a submenu hangs off. It carries the chevron in the same
-    ; right-hand slot the shortcuts use, which is why there is no separate
-    ; SubTrigger tag.
-    ; `open` is the submenu's state, and it is on the ROW rather than on the
-    ; surface: aria-expanded belongs to the thing you activate, not to the
-    ; thing that appears.
-    sfn subRow:EVGElement (label:string open:boolean) {
-        def state:int (EVGA11yTri.no())
-        if open {
-            state = (EVGA11yTri.yes())
-        }
-        return (tree Menubar
-            (SubRow (props (id (MenubarDemo.rowId(label))) (a11yExpanded state))
-                (Label label)
-                ; Decoration, and marked as such. The chevron says "there is
-                ; more this way" to the eye; `aria-expanded` on the row already
-                ; says it to a reader, and without `aria-hidden` here the row
-                ; announces as "Share greater-than".
-                (Shortcut (props (className "mb-shortcut mb-chevron") (a11yHidden true)) "›")))
-    }
-
-    ; The indicator is always present and always the same width, so the labels
-    ; of checked and unchecked items line up. Radix does this with an `inset`
-    ; class; here the glyph is simply empty when the item is off.
-    sfn checkItem:EVGElement (label:string on:boolean) {
-        def glyph:string " "
-        def state:int (EVGA11yTri.no())
-        if on {
-            glyph = "✓"
-            state = (EVGA11yTri.yes())
-        }
-        return (tree Menubar
-            (CheckRow (props (id (MenubarDemo.rowId(label))) (a11yChecked state))
-                (Indicator glyph)
-                (Label (props (className "mb-label mb-label-inset")) label)))
-    }
-
-    sfn radioItem:EVGElement (label:string on:boolean) {
-        def glyph:string " "
-        def state:int (EVGA11yTri.no())
-        if on {
-            glyph = "●"
-            state = (EVGA11yTri.yes())
-        }
-        return (tree Menubar
-            (RadioRow (props (id (MenubarDemo.rowId(label))) (a11yChecked state))
-                (Indicator glyph)
-                (Label (props (className "mb-label mb-label-inset")) label)))
-    }
-
-    ; --- submenus --------------------------------------------------------------
-    ; A submenu is a Menu: an anchor row, and a surface beside it. Its surface
-    ; finds that row exactly the way a top-level surface finds its trigger, so
-    ; nothing here knows it is nested.
-
-    sfn shareMenu:EVGElement (open:boolean) {
-        if (open == false) {
-            return (MenubarDemo.subRow("Share" false))
-        }
-        return (tree Menubar
-            (Menu (props (id "menu-share"))
-                (child (MenubarDemo.subRow("Share" true)))
-                (SubContent (props (id "menu-share-content") (a11yLabel "Share"))
-                    (child (MenubarDemo.item("Email Link" "")))
-                    (child (MenubarDemo.item("Messages" "")))
-                    (child (MenubarDemo.item("Notes" ""))))))
-    }
-
-    sfn findMenu:EVGElement (open:boolean) {
-        if (open == false) {
-            return (MenubarDemo.subRow("Find" false))
-        }
-        return (tree Menubar
-            (Menu (props (id "menu-find"))
-                (child (MenubarDemo.subRow("Find" true)))
-                (SubContent (props (id "menu-find-content") (a11yLabel "Find"))
-                    (child (MenubarDemo.item("Search the web…" "")))
-                    (Separator)
-                    (child (MenubarDemo.item("Find…" "")))
-                    (child (MenubarDemo.item("Find Next" "")))
-                    (child (MenubarDemo.item("Find Previous" ""))))))
-    }
-
-    ; --- the four menus --------------------------------------------------------
-    ; Each is a Trigger, plus a Content when it is the open one. A closed menu is
-    ; its trigger and nothing else, which is what the reference does too: the
-    ; surface is not in the tree at all until the menu opens.
 
     sfn triggerId:string (label:string) {
         return ("trigger-" + label)
     }
 
-    sfn trigger:EVGElement (label:string open:boolean) {
-        if open {
-            return (tree Menubar
-                (Trigger (props (className "mb-trigger mb-trigger-open") (id (MenubarDemo.triggerId(label))) (a11yExpanded (EVGA11yTri.yes()))) label))
-        }
-        return (tree Menubar
-            (Trigger (props (id (MenubarDemo.triggerId(label))) (a11yExpanded (EVGA11yTri.no()))) label))
+    ; --- drawing ----------------------------------------------------------------------
+
+    sfn icon:EVGElement (path:string cls:string) {
+        return (tree Menubar (Icon (props (className cls) (svgPath path))))
     }
 
-    sfn fileMenu:EVGElement (open:boolean submenu:boolean) {
-        if (open == false) {
-            return (tree Menubar
-                (Menu (props (id "menu-file"))
-                    (child (MenubarDemo.trigger("File" false)))))
-        }
-        return (tree Menubar
-            (Menu (props (id "menu-file"))
-                (child (MenubarDemo.trigger("File" true)))
-                (Content (props (id "menu-file-content") (a11yLabel "File"))
-                    (child (MenubarDemo.item("New Tab" "⌘ T")))
-                    (child (MenubarDemo.item("New Window" "⌘ N")))
-                    (child (MenubarDemo.disabledItem("New Incognito Window" "")))
-                    (Separator)
-                    (child (MenubarDemo.shareMenu(submenu)))
-                    (Separator)
-                    (child (MenubarDemo.item("Print…" "⌘ P"))))))
-    }
-
-    sfn editMenu:EVGElement (open:boolean submenu:boolean) {
-        if (open == false) {
-            return (tree Menubar
-                (Menu (props (id "menu-edit"))
-                    (child (MenubarDemo.trigger("Edit" false)))))
-        }
-        return (tree Menubar
-            (Menu (props (id "menu-edit"))
-                (child (MenubarDemo.trigger("Edit" true)))
-                (Content (props (id "menu-edit-content") (a11yLabel "Edit"))
-                    (child (MenubarDemo.item("Undo" "⌘ Z")))
-                    (child (MenubarDemo.item("Redo" "⇧ ⌘ Z")))
-                    (Separator)
-                    (child (MenubarDemo.findMenu(submenu)))
-                    (Separator)
-                    (child (MenubarDemo.item("Cut" "")))
-                    (child (MenubarDemo.item("Copy" "")))
-                    (child (MenubarDemo.item("Paste" ""))))))
-    }
-
-    ; The View menu is where the reference maps over an array, and the point of
-    ; this one is that a loop is an ordinary loop: build the children, then hand
-    ; them to the parent.
-    sfn viewMenu:EVGElement (open:boolean checked:[string]) {
-        if (open == false) {
-            return (tree Menubar
-                (Menu (props (id "menu-view"))
-                    (child (MenubarDemo.trigger("View" false)))))
-        }
-        def content (tree Menubar (Content (props (id "menu-view-content") (a11yLabel "View"))))
-        def labels:[string]
-        push labels "Always Show Bookmarks Bar"
-        push labels "Always Show Full URLs"
-        def i:int 0
-        while (i < (array_length labels)) {
-            def label:string (itemAt labels i)
-            def on:boolean false
-            def j:int 0
-            while (j < (array_length checked)) {
-                if ((itemAt checked j) == label) {
-                    on = true
-                }
-                j = (j + 1)
+    fn indicator:EVGElement (it:UiItem dot:boolean) {
+        def ind (tree Menubar (Indicator))
+        if it.checked {
+            if dot {
+                ind.alt = "●"
+                ind.addChild((MenubarDemo.icon((MenubarDemo.dotPath()) "mb-icon mb-dot")))
+            } {
+                ind.alt = "✓"
+                ind.addChild((MenubarDemo.icon((MenubarDemo.checkPath()) "mb-icon mb-check")))
             }
-            content.addChild((MenubarDemo.checkItem(label on)))
-            i = (i + 1)
         }
-        content.addChild((tree Menubar (Separator)))
-        content.addChild((MenubarDemo.item("Reload" "⌘ R")))
-        content.addChild((MenubarDemo.disabledItem("Force Reload" "⇧ ⌘ R")))
-        content.addChild((tree Menubar (Separator)))
-        content.addChild((MenubarDemo.item("Toggle Fullscreen" "")))
-        content.addChild((tree Menubar (Separator)))
-        content.addChild((MenubarDemo.item("Hide Sidebar" "")))
-        return (tree Menubar
-            (Menu (props (id "menu-view"))
-                (child (MenubarDemo.trigger("View" true)))
-                (child content)))
+        return ind
     }
 
-    sfn profilesMenu:EVGElement (open:boolean selected:string) {
-        if (open == false) {
+    ; One row, and — for an open sub-trigger — the submenu beside it.
+    fn row:EVGElement (mc:MenuCtl tid:string it:UiItem radioDot:boolean) {
+        def rid:string (this.rowIdOf(tid it.name))
+        def destructive:boolean (MenubarDemo.isDestructive(it.value))
+        if ((array_length it.kids) > 0) {
+            def open:boolean (mc.isOpenSub(tid))
+            def cls:string "mb-item mb-item-sub"
+            def state:int (EVGA11yTri.no())
+            if open {
+                cls = "mb-item mb-item-sub mb-item-open"
+                state = (EVGA11yTri.yes())
+            }
+            def sr (tree Menubar
+                (SubRow (props (id rid) (className cls) (a11yExpanded state))
+                    (Label it.name)))
+            sr.addChild((MenubarDemo.icon((MenubarDemo.chevronPath()) "mb-icon mb-chevron")))
+            if (open == false) {
+                return sr
+            }
+            def surf (tree Menubar (SubContent (props (id (this.subContentIdOf(tid it.name))) (a11yLabel it.name))))
+            this.fillRows(surf mc tid it.kids radioDot)
             return (tree Menubar
-                (Menu (props (id "menu-profiles"))
-                    (child (MenubarDemo.trigger("Profiles" false)))))
+                (Menu (props (id (this.subMenuIdOf(tid it.name))) (className "mb-menu mb-submenu"))
+                    (child sr)
+                    (child surf)))
         }
-        def content (tree Menubar (Content (props (id "menu-profiles-content") (a11yLabel "Profiles"))))
-        def names:[string]
-        push names "Andy"
-        push names "Benoît"
-        push names "Luis"
+        def rowCls:string "mb-item"
+        def labelCls:string "mb-label"
+        def iconCls:string "mb-icon mb-icon-muted"
+        if it.disabled {
+            rowCls = "mb-item mb-item-disabled"
+            labelCls = "mb-label mb-label-disabled"
+        }
+        if destructive {
+            rowCls = "mb-item mb-item-destructive"
+            labelCls = "mb-label mb-label-destructive"
+            iconCls = "mb-icon mb-icon-destructive"
+        }
+        def r:EVGElement (tree Menubar (Row (props (id rid) (className rowCls))))
+        if (it.kind == "checkbox") {
+            r = (tree Menubar (CheckRow (props (id rid))))
+        }
+        if (it.kind == "radio") {
+            r = (tree Menubar (RadioRow (props (id rid))))
+        }
+        if ((it.kind == "checkbox") || (it.kind == "radio")) {
+            if it.checked {
+                r.a11yChecked = (EVGA11yTri.yes())
+            } {
+                r.a11yChecked = (EVGA11yTri.no())
+            }
+            r.addChild((this.indicator(it ((it.kind == "radio") && radioDot))))
+        }
+        if it.disabled {
+            r.a11yDisabled = true
+        }
+        def ip:string (MenubarDemo.iconPath(it.value))
+        if ((strlen ip) > 0) {
+            r.addChild((MenubarDemo.icon(ip iconCls)))
+        }
+        r.addChild((tree Menubar (Label (props (className labelCls)) it.name)))
+        def sc:string (MenubarDemo.shortcutFor(it.value))
+        if ((strlen sc) > 0) {
+            r.addChild((tree Menubar (Shortcut sc)))
+        }
+        return r
+    }
+
+    ; A menu's rows, in order: separators as separators, and consecutive items
+    ; of one group (a radio group, the Account group) inside a role=group.
+    fn fillRows:void (surface:EVGElement mc:MenuCtl prefix:string list:[UiItem] radioDot:boolean) {
+        def target:EVGElement surface
+        def gName:string ""
         def i:int 0
-        while (i < (array_length names)) {
-            def name:string (itemAt names i)
-            content.addChild((MenubarDemo.radioItem(name (name == selected))))
+        while (i < (array_length list)) {
+            def it:UiItem (itemAt list i)
+            def g:string (MenubarDemo.groupFor(it))
+            if (g != gName) {
+                gName = g
+                if ((strlen g) > 0) {
+                    def grp (tree Menubar (Group (props (a11yLabel (MenubarDemo.groupLabel(g))))))
+                    surface.addChild(grp)
+                    target = grp
+                } {
+                    target = surface
+                }
+            }
+            if (it.kind == "separator") {
+                target.addChild((tree Menubar (Separator)))
+            } {
+                def tid:string (MenuCtl.itemTidUnder(prefix it.value))
+                target.addChild((this.row(mc tid it radioDot)))
+            }
             i = (i + 1)
         }
-        content.addChild((tree Menubar (Separator)))
-        content.addChild((MenubarDemo.item("Edit…" "")))
-        content.addChild((tree Menubar (Separator)))
-        content.addChild((MenubarDemo.item("Add Profile…" "")))
-        return (tree Menubar
-            (Menu (props (id "menu-profiles"))
-                (child (MenubarDemo.trigger("Profiles" true)))
-                (child content)))
     }
 
-    ; --- the whole thing -------------------------------------------------------
-    ; One structure, one state. There is no separate "picture" any more: what a
-    ; screen shows and what `describe()` prints are the same tree, because the
-    ; surfaces place themselves.
-
-    sfn bar:EVGElement (checked:[string] profile:string openMenu:string submenu:boolean) {
-        return (tree Menubar
-            (Bar (props (id "menubar") (role "menubar") (a11yLabel "Main"))
-                (child (MenubarDemo.fileMenu((openMenu == "File") submenu)))
-                (child (MenubarDemo.editMenu((openMenu == "Edit") submenu)))
-                (child (MenubarDemo.viewMenu((openMenu == "View") checked)))
-                (child (MenubarDemo.profilesMenu((openMenu == "Profiles") profile)))))
+    fn drawBar:EVGElement (bar:MenubarCtl) {
+        def barEl (tree Menubar (Bar (props (id (this.barIdOf(bar))) (a11yLabel bar.name))))
+        def radioDot:boolean (bar.tid == "mb3")
+        def i:int 0
+        while (i < (array_length bar.menus)) {
+            def m:UiMenu (itemAt bar.menus i)
+            def open:boolean (m.value == bar.openValue)
+            def menuEl (tree Menubar (Menu (props (id (this.menuIdOf(bar m))))))
+            def trig (tree Menubar (Trigger (props (id (this.triggerIdOf(bar m)))) m.name))
+            if open {
+                trig.className = "mb-trigger mb-trigger-open"
+                trig.a11yExpanded = (EVGA11yTri.yes())
+                trig.a11yControls = (this.contentIdOf(bar m))
+            } {
+                trig.a11yExpanded = (EVGA11yTri.no())
+            }
+            menuEl.addChild((tree Menubar (Anchor)))
+            menuEl.addChild(trig)
+            if open {
+                def content (tree Menubar (Content (props (id (this.contentIdOf(bar m))) (className (this.contentClass(bar m.value))) (a11yLabel m.name))))
+                this.fillRows(content m.menu m.menu.tid m.menu.items radioDot)
+                menuEl.addChild(content)
+            }
+            barEl.addChild(menuEl)
+            i = (i + 1)
+        }
+        return barEl
     }
 
-    ; `atBottom` pushes the bar to the bottom edge, where the menus have no room
-    ; below their triggers and the overlay pass flips them upwards. The demo
-    ; does not know that happens: it moves a bar, and the placement follows.
+    fn card:EVGElement (n:int caption:string tall:string bar:MenubarCtl) {
+        def id:string ("mb-card-" + (to_string n))
+        def stage (tree Menubar (Stage (props (id (id + "-stage")) (className ("mb-stage mb-stage-" + tall)))))
+        stage.addChild((this.drawBar(bar)))
+        return (tree Menubar (Card (props (id id) (className ("mb-card mb-card-" + tall)))
+            (child stage)
+            (Foot (Caption (props (id (id + "-caption"))) caption))))
+    }
+
+    fn pageBody:EVGElement () {
+        def cards (tree Menubar (Cards (props (id "mb-page"))))
+        cards.addChild((this.card(1 "Menubar with icons, shortcuts and a destructive item" "a" bar1)))
+        cards.addChild((this.card(2 "Menubar with checkbox and radio items" "a" bar2)))
+        cards.addChild((this.card(3 "Radix example: submenus, disabled rows, checkbox and radio items" "b" bar3)))
+        return cards
+    }
+
+    fn rebuild:void () {
+        root = (this.pageBody())
+        dirty = true
+    }
+
+    ; --- layout -----------------------------------------------------------------------
+
+    fn markStates:void (el:EVGElement) {
+        el.isHovered = ((strlen hovered) > 0) && (el.id == hovered)
+        el.isFocused = ((strlen focused) > 0) && (el.id == focused)
+        el.isPressed = ((strlen pressed) > 0) && (el.id == pressed)
+        def i:int 0
+        while (i < (array_length el.children)) {
+            this.markStates((itemAt el.children i))
+            i = (i + 1)
+        }
+    }
+
+    sfn deepestBottom:double (el:EVGElement) {
+        def bottom:double ((el.calculatedY) + (el.calculatedHeight))
+        def i:int 0
+        while (i < (array_length el.children)) {
+            def b:double (MenubarDemo.deepestBottom((itemAt el.children i)))
+            if (b > bottom) {
+                bottom = b
+            }
+            i = (i + 1)
+        }
+        return bottom
+    }
+
+    ; A fresh tree for every pass: EVGLayout reads some of its own answers from
+    ; the last pass back as inputs.
+    fn layOnce:EVGLayout () {
+        root = (this.pageBody())
+        def r:EVGElement (unwrap root)
+        def s:EVGStyleSheet (unwrap sheet)
+        this.markStates(r)
+        s.setViewport(pageW pageH false)
+        s.applyTree(r "")
+        def lay (new EVGLayout())
+        lay.setPageSize(pageW pageH)
+        lay.layout(r)
+        layout = lay
+        return lay
+    }
+
+    fn laidOut:EVGLayout () {
+        if (dirty == false) {
+            if layout {
+                return (unwrap layout)
+            }
+        }
+        dirty = false
+        def lay:EVGLayout (this.layOnce())
+        def r:EVGElement (unwrap root)
+        def bottom:double 0.0
+        def i:int 0
+        while (i < (array_length r.children)) {
+            def b:double (MenubarDemo.deepestBottom((itemAt r.children i)))
+            if (b > bottom) {
+                bottom = b
+            }
+            i = (i + 1)
+        }
+        def want:double (to_double (to_int ((bottom + r.box.paddingBottomPx) + 0.999)))
+        if (want != pageH) {
+            pageH = want
+            return (this.layOnce())
+        }
+        return lay
+    }
+
+    ; --- input ------------------------------------------------------------------------
+
+    ; Radix dismisses an open menu on a pointer down anywhere outside it; a
+    ; press on another bar is outside this one.
+    fn closeOthers:boolean (keep:int) {
+        def changed:boolean false
+        def a:[MenubarCtl] (this.bars())
+        def i:int 0
+        while (i < (array_length a)) {
+            def b:MenubarCtl (itemAt a i)
+            if ((i != keep) && ((strlen b.openValue) > 0)) {
+                b.closeMenu()
+                changed = true
+            }
+            i = (i + 1)
+        }
+        return changed
+    }
+
+    fn press:boolean (target:string) {
+        def k:int (this.barIndexOf(target))
+        def changed:boolean (this.closeOthers(k))
+        if (k < 0) {
+            if changed {
+                focused = ""
+            }
+            this.rebuild()
+            return changed
+        }
+        def bar:MenubarCtl (this.barAt(k))
+        def next:string (bar.activate(target))
+        if ((strlen next) > 0) {
+            focused = next
+        }
+        this.rebuild()
+        return true
+    }
+
+    fn key:boolean (k:string) {
+        return (this.keyWith(k false false))
+    }
+
+    fn keyWith:boolean (k:string shift:boolean ctrl:boolean) {
+        if (k == "Tab") {
+            return false
+        }
+        def b:int (this.barIndexOf(focused))
+        if (b < 0) {
+            return false
+        }
+        def bar:MenubarCtl (this.barAt(b))
+        def wasOpen:boolean ((strlen bar.openValue) > 0)
+        def next:string (bar.keyDown(focused k))
+        if ((strlen next) > 0) {
+            focused = next
+        }
+        this.rebuild()
+        ; While a menu is open every key is the menu's, used or not.
+        return (((strlen next) > 0) || wasOpen)
+    }
+
+    ; The pointer: a trigger switches the open menu, a row takes the focus
+    ; (and starts a submenu's clock), and leaving the rows hands the focus back
+    ; to the menu's surface, as Radix does on pointerleave.
+    fn setHover:boolean (id:string) {
+        if (id == hovered) {
+            return false
+        }
+        hovered = id
+        def a:[MenubarCtl] (this.bars())
+        def i:int 0
+        while (i < (array_length a)) {
+            def bar:MenubarCtl (itemAt a i)
+            if ((strlen bar.openValue) > 0) {
+                def next:string (bar.hover(id))
+                if ((strlen next) > 0) {
+                    focused = next
+                } {
+                    def om:UiMenu (bar.menuAt(bar.openValue))
+                    def onRow:boolean ((om.menu.rowIndexOf(focused)) >= 0)
+                    def overRow:boolean ((om.menu.rowIndexOf(id)) >= 0)
+                    if (onRow && (overRow == false)) {
+                        focused = (om.menu.ownerOf(focused))
+                        om.menu.activeTid = focused
+                        bar.activeItem = ""
+                    }
+                }
+            }
+            i = (i + 1)
+        }
+        this.rebuild()
+        return true
+    }
+
+    fn setPressed:void (id:string) {
+        pressed = id
+    }
+
+    ; Focus arriving from the page (a Tab, a reader).
+    fn setFocus:void (id:string) {
+        if (id == focused) {
+            return
+        }
+        focused = id
+        def b:int (this.barIndexOf(id))
+        if (b >= 0) {
+            def bar:MenubarCtl (this.barAt(b))
+            bar.onFocus(id)
+        }
+        this.rebuild()
+    }
+
+    ; A submenu the pointer rests on opens after MenuCtl's delay.
+    fn tick:boolean (dtMs:double) {
+        def a:[MenubarCtl] (this.bars())
+        def i:int 0
+        while (i < (array_length a)) {
+            def bar:MenubarCtl (itemAt a i)
+            def r:string (bar.tickCtl(dtMs))
+            if ((strlen r) > 0) {
+                focused = r
+                this.rebuild()
+            }
+            i = (i + 1)
+        }
+        return (this.busyNow())
+    }
+
+    fn busyNow:boolean () {
+        def a:[MenubarCtl] (this.bars())
+        def i:int 0
+        while (i < (array_length a)) {
+            def bar:MenubarCtl (itemAt a i)
+            if (bar.pendingSub()) {
+                return true
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    ; --- what the page asks for ---------------------------------------------------------
+
+    fn displayListJson:string () {
+        def lay:EVGLayout (this.laidOut())
+        def r:EVGElement (unwrap root)
+        def dl (new EVGDisplayList())
+        dl.setTextEngine((lay.getTextEngine()))
+        dl.build(r)
+        return (dl.toJson())
+    }
+
+    fn hitAt:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def hit (new EVGHitTest())
+        return (hit.idAt(r px py))
+    }
+
+    fn cursorAt:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def hit (new EVGHitTest())
+        return (hit.cursorAt(r px py))
+    }
+
+    fn a11yTreeJson:string (generation:int focusId:string) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Menubar demo" generation focusId))
+        return (t.toJson())
+    }
+
+    fn a11yLint:[string] () {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Menubar demo" 1 ""))
+        return (t.lint())
+    }
+
+    fn overlayErrorList:[string] () {
+        def lay:EVGLayout (this.laidOut())
+        return (lay.getOverlayErrors())
+    }
+
+    fn styleErrorCount:int () {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (s.getErrorCount())
+    }
+
+    fn styleErrorAt:string (i:int) {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (s.getError(i))
+    }
+
+    fn widthPx:double () { return pageW }
+
+    fn heightPx:double () {
+        this.laidOut()
+        return pageH
+    }
+
+    ; Which menu each bar has open, the checked values, and the focus.
+    fn summary:string () {
+        def out:string ""
+        def a:[MenubarCtl] (this.bars())
+        def i:int 0
+        while (i < (array_length a)) {
+            def bar:MenubarCtl (itemAt a i)
+            out = ((out + bar.tid) + "=") + bar.openValue + ";"
+            i = (i + 1)
+        }
+        def v2:MenuCtl ((bar2.menuAt("view")).menu)
+        def t2:MenuCtl ((bar2.menuAt("theme")).menu)
+        def bm:string "0"
+        if (v2.isChecked("bookmarks")) {
+            bm = "1"
+        }
+        def ur:string "0"
+        if (v2.isChecked("urls")) {
+            ur = "1"
+        }
+        out = out + "bookmarks=" + bm + ";urls=" + ur + ";theme=" + (t2.radioValue("theme"))
+        return ((out + "|") + focused)
+    }
+
+    ; --- the static API (Ranger's tree-literals test, the a11y audit, render.mjs) -----
+
+    ; The third card's bar in the state the arguments describe, with the first
+    ; version's ids, on a 1240 × 560 page. `checked` names the checked rows of
+    ; View, `profile` the chosen profile, `openMenu` the open menu's label ("" for
+    ; none), `submenu` whether that menu's submenu (Share, Find) is open, and
+    ; `atBottom` pushes the bar to the bottom edge so its menus flip upwards.
+    sfn legacyModel:MenubarDemo (checked:[string] profile:string openMenu:string submenu:boolean) {
+        def d (new MenubarDemo())
+        d.legacy = true
+        d.buildModels()
+        def bar:MenubarCtl d.bar3
+        def v:MenuCtl ((bar.menuAt("view")).menu)
+        def vi:int 0
+        while (vi < (array_length v.items)) {
+            def it:UiItem (itemAt v.items vi)
+            if (it.kind == "checkbox") {
+                def on:boolean false
+                def j:int 0
+                while (j < (array_length checked)) {
+                    if ((itemAt checked j) == it.name) {
+                        on = true
+                    }
+                    j = (j + 1)
+                }
+                it.checked = on
+            }
+            vi = (vi + 1)
+        }
+        def p:MenuCtl ((bar.menuAt("profiles")).menu)
+        def pi:int 0
+        while (pi < (array_length p.items)) {
+            def it:UiItem (itemAt p.items pi)
+            if (it.kind == "radio") {
+                it.checked = (it.name == profile)
+            }
+            pi = (pi + 1)
+        }
+        if ((strlen openMenu) > 0) {
+            def value:string (to_lowercase openMenu)
+            bar.openMenu(value)
+            if submenu {
+                def om:MenuCtl ((bar.menuAt(value)).menu)
+                if (value == "file") {
+                    om.openSub((om.itemTid("share")) false)
+                }
+                if (value == "edit") {
+                    om.openSub((om.itemTid("find")) false)
+                }
+            }
+        }
+        return d
+    }
+
+    sfn legacyBar:EVGElement (checked:[string] profile:string openMenu:string submenu:boolean) {
+        def d:MenubarDemo (MenubarDemo.legacyModel(checked profile openMenu submenu))
+        return (d.drawBar(d.bar3))
+    }
+
     sfn page:EVGElement (checked:[string] profile:string openMenu:string submenu:boolean atBottom:boolean) {
         def cls:string "mb-page"
         if atBottom {
             cls = "mb-page mb-page-bottom"
         }
         return (tree Menubar
-            (Bar (props (id "page") (className cls))
-                (child (MenubarDemo.bar(checked profile openMenu submenu)))))
+            (Page (props (id "page") (className cls))
+                (child (MenubarDemo.legacyBar(checked profile openMenu submenu)))))
     }
 
-    ; --- one pipeline, four answers -------------------------------------------
-    ; Build, style, lay out. The pixels, the hit test and the accessible tree
-    ; are then three readings of ONE laid-out tree, which is the only reason
-    ; they cannot disagree: a click lands on what was drawn because it is the
-    ; same rectangle, and a reader is told about the row that is actually there.
-
-    sfn laidOut:EVGLayout (root:EVGElement css:string) {
+    sfn laidOutPage:EVGLayout (root:EVGElement css:string) {
         def sheet (new EVGStyleSheet())
         sheet.parse(css)
         sheet.setViewport(1240.0 560.0 false)
@@ -372,53 +925,41 @@ class MenubarDemo {
         return lay
     }
 
-    sfn displayListJson:string (css:string checked:[string] profile:string openMenu:string submenu:boolean atBottom:boolean) {
+    sfn displayListJsonFor:string (css:string checked:[string] profile:string openMenu:string submenu:boolean atBottom:boolean) {
         def root:EVGElement (MenubarDemo.page(checked profile openMenu submenu atBottom))
-        def lay:EVGLayout (MenubarDemo.laidOut(root css))
+        def lay:EVGLayout (MenubarDemo.laidOutPage(root css))
         def dl (new EVGDisplayList())
         dl.setTextEngine((lay.getTextEngine()))
         dl.build(root)
         return (dl.toJson())
     }
 
-    ; What is under the pointer: the id of the topmost element there, "" for
-    ; empty space. Topmost, not first in the tree — an open panel covers the
-    ; trigger beside it, and a click inside the panel belongs to the panel.
     sfn hitId:string (css:string checked:[string] profile:string openMenu:string submenu:boolean atBottom:boolean px:double py:double) {
         def root:EVGElement (MenubarDemo.page(checked profile openMenu submenu atBottom))
-        MenubarDemo.laidOut(root css)
+        MenubarDemo.laidOutPage(root css)
         def hit (new EVGHitTest())
         return (hit.idAt(root px py))
     }
 
-    ; The accessible tree, derived from the same elements. Nothing here
-    ; describes the menu a second time: the roles are on the tags, the names
-    ; are the text that was drawn, and the rectangles are where layout put
-    ; them — including the surfaces, which the overlay pass moved.
     sfn a11yJson:string (css:string checked:[string] profile:string openMenu:string submenu:boolean atBottom:boolean generation:int focusId:string) {
         def root:EVGElement (MenubarDemo.page(checked profile openMenu submenu atBottom))
-        MenubarDemo.laidOut(root css)
+        MenubarDemo.laidOutPage(root css)
         def b (new EVGA11yFromTree())
         def t:EVGA11yTree (b.build(root "Menubar demo" generation focusId))
         return (t.toJson())
     }
 
-    ; The same tree's structural lint: a focusable row with no name, a
-    ; duplicate id, a parent that is not in the tree. Invisible on screen and
-    ; total for someone using a reader, so a test asserts on it.
     sfn a11yProblems:[string] (css:string checked:[string] profile:string openMenu:string submenu:boolean atBottom:boolean) {
         def root:EVGElement (MenubarDemo.page(checked profile openMenu submenu atBottom))
-        MenubarDemo.laidOut(root css)
+        MenubarDemo.laidOutPage(root css)
         def b (new EVGA11yFromTree())
         def t:EVGA11yTree (b.build(root "Menubar demo" 1 ""))
         return (t.lint())
     }
 
-    ; Overlay surfaces the layout could not place. An unanchored surface would
-    ; otherwise sit in the corner and read as a styling mistake.
     sfn overlayErrors:[string] (css:string checked:[string] profile:string openMenu:string submenu:boolean atBottom:boolean) {
         def root:EVGElement (MenubarDemo.page(checked profile openMenu submenu atBottom))
-        def lay:EVGLayout (MenubarDemo.laidOut(root css))
+        def lay:EVGLayout (MenubarDemo.laidOutPage(root css))
         return (lay.getOverlayErrors())
     }
 
@@ -428,8 +969,8 @@ class MenubarDemo {
         return (sheet.getErrorCount())
     }
 
-    ; A flat description of what was built, so a test can assert on the shape
-    ; without a browser.
+    ; A flat description of what was built: each element's classes and its
+    ; text — or, for a drawn mark with no text, its `alt`.
     sfn describe:string (el:EVGElement depth:int) {
         def pad:string ""
         def i:int 0
@@ -440,6 +981,10 @@ class MenubarDemo {
         def line:string (pad + el.className)
         if ((strlen el.textContent) > 0) {
             line = ((line + " ") + el.textContent)
+        } {
+            if ((strlen el.alt) > 0) {
+                line = ((line + " ") + el.alt)
+            }
         }
         def out:string (line + "\n")
         def j:int 0
@@ -451,8 +996,8 @@ class MenubarDemo {
     }
 
     ; A closed menu has no surface in the tree, so one dump cannot show the
-    ; checkbox and radio rows at the same time as the File menu. Three dumps,
-    ; one per open menu — which is also what a user sees, one at a time.
+    ; checkbox and radio rows at the same time as the File menu: three dumps,
+    ; one per open menu.
     sfn main:void () {
         def checked:[string]
         push checked "Always Show Full URLs"
