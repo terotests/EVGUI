@@ -1031,7 +1031,33 @@
           <section data-for="eventcal">
             <h2>what to try</h2>
             <p class="hint">
-              <strong>Look at the three boxes stacked at 16:00.</strong> They all
+              <strong>Open Settings.</strong> Every switch and select changes the
+              calendar: hide the weekends, number the weeks, shade the off days,
+              put an add button on every day, start the week on Monday. In a week,
+              day or resource view the <em>Time grid</em> tab sets the day's hours,
+              the grid interval and the drag snap.
+            </p>
+            <p class="hint">
+              <strong>Drag an event</strong> in a week to move it (across days
+              too), drag its bottom edge to resize it, and drag on an empty slot to
+              create one &mdash; all on the snap you chose, and each switched off by
+              its <em>Behavior</em> toggle. From the keyboard: focus an event, then
+              &uarr;/&darr; move it, Shift+&uarr;/&darr; resize it and &larr;/&rarr;
+              move it a day (or a person). Escape cancels a drag.
+            </p>
+            <p class="hint">
+              <strong>Region:</strong> six languages &mdash; Arabic turns the whole
+              calendar right to left &mdash; and a time zone that moves every clock
+              time, across midnight where it has to.
+            </p>
+            <p class="hint">
+              <strong>The booking board</strong> scrolls inside its card; drag a
+              booking to another room or stretch it. New booking adds a check-in at
+              noon in 101.
+            </p>
+            <p class="hint">
+              <em>The measured week, at the bottom:</em>
+              <strong>look at the three boxes stacked at 16:00.</strong> They all
               end at the <em>same right edge</em>, and each one is narrower than
               the last &mdash; 100%, 66.67%, 33.33%. Almost every hand-written
               calendar gives three overlapping events a third of the width each,
@@ -1072,9 +1098,10 @@
               of its box ends in an ellipsis.
             </p>
             <p class="hint">
-              ReUI&rsquo;s own chrome is <em>not</em> drawn here: reui.io is
-              refused by the egress proxy, so its view switcher and its colours
-              were never seen. What is measured is where the events go.
+              The two patterns follow the ReUI code and screenshots the user
+              supplied (reui.io itself is refused by the egress proxy); the
+              measured week at the bottom is where the overlap placement they
+              all use was taken from.
             </p>
           </section>
           <section data-for="timeline">
@@ -1416,8 +1443,8 @@
  "eventcal": {
   "title": "Event Calendar",
   "src": "EventCalDemo",
-  "caption": "EventCalCtl · measured against @schedule-x/calendar",
-  "desc": "A week of events drawn where EventCalCtl says they go, measured against a rendered @schedule-x/calendar, with Day, Week and Month views, Today, and a keyboard ring through every control and event. What is measured is the placement; ReUI's own chrome is not copied because reui.io could not be reached."
+  "caption": "EventCalCtl · ReUI's patterns, placement measured against @schedule-x/calendar",
+  "desc": "ReUI's event calendar: month, week, day, N days, agenda and resource views, a Settings popover whose every switch and select changes the calendar (weekends, week numbers, now line, off days, per-day add, week start, day hours, grid interval, drag snap, drag toggles, tooltips, six languages with Arabic right to left, time zones), and drag to move, resize and create. Under it a hotel's booking board in the resource view, and the measured week where the overlap layout comes from."
  },
  "message": {
   "title": "Message",

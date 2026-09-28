@@ -131,12 +131,12 @@ console.log("the events are reachable and legible");
 console.log("navigation moves the week");
 {
   const d = fresh();
-  const first = JSON.parse(d.a11yJson(1, "")).nodes.find((n) => n.role === "status");
+  const first = JSON.parse(d.a11yJson(1, "")).nodes.find((n) => n.id === "ec-caption");
   ok("the caption names the week", /May 11th/.test(first.name), first.name);
   const nav = byId(d, "ec-next");
   d.press(d.hitId(nav.calculatedX + nav.calculatedWidth / 2, nav.calculatedY + nav.calculatedHeight / 2));
   d.displayListJson();
-  const next = JSON.parse(d.a11yJson(2, "")).nodes.find((n) => n.role === "status");
+  const next = JSON.parse(d.a11yJson(2, "")).nodes.find((n) => n.id === "ec-caption");
   ok("clicking next moves it a week", /May 18th/.test(next.name), next.name);
   // The events belong to the week that was left, so the new one is empty —
   // which is worth asserting because an empty column is where a layout bug
@@ -162,7 +162,7 @@ console.log("the view switcher says which view it is in");
   d.displayListJson();
   ok("clicking another view marks that one", (byId(d, "ec-view-day").className || "").includes("ec-viewbtn-on"));
   ok("and unmarks the last", !(byId(d, "ec-view-week").className || "").includes("ec-viewbtn-on"));
-  const cap = JSON.parse(d.a11yJson(3, "")).nodes.find((n) => n.role === "status");
+  const cap = JSON.parse(d.a11yJson(3, "")).nodes.find((n) => n.id === "ec-caption");
   ok("and the caption narrows to one day", !/–/.test(cap.name), cap.name);
 }
 
@@ -271,7 +271,7 @@ console.log("every view can be left for every other one");
     return true;
   };
   const on = (v) => (byId(d, "ec-view-" + v)?.className || "").includes("ec-viewbtn-on");
-  const caption = () => JSON.parse(d.a11yJson(5, "")).nodes.find((n) => n.role === "status")?.name || "";
+  const caption = () => JSON.parse(d.a11yJson(5, "")).nodes.find((n) => n.id === "ec-caption")?.name || "";
   for (const from of ["day", "week", "month"]) {
     for (const to of ["day", "week", "month"]) {
       if (from === to) continue;
@@ -318,17 +318,23 @@ console.log("the keyboard reaches every control");
   // The mirror is one tab stop; the demo walks its own ring. Before it, no
   // node was focusable and prev/next, the views and the events were
   // pointer-only.
+  // The page now holds ReUI's two patterns above this card, so the ring
+  // reaches the measured week after them; what is asserted is the week's own
+  // stretch of it.
   const d = fresh();
-  const seen = [];
-  for (let i = 0; i < 40; i++) {
+  const all = [];
+  for (let i = 0; i < 400; i++) {
     if (!d.keyWith("Tab", false, false)) break;
     d.displayListJson();
-    seen.push(d.focused);
+    all.push(d.focused);
   }
+  const seen = all.filter((id) => id.startsWith("ec-"));
+  ok("the week's stretch of the ring comes after the two patterns, in one run",
+    all.indexOf(seen[0]) + seen.length === all.length, `${all.indexOf(seen[0])} + ${seen.length} of ${all.length}`);
   ok("Tab visits the arrows, Today and the three views first",
     seen.slice(0, 6).join(",") === "ec-prev,ec-next,ec-today,ec-view-day,ec-view-week,ec-view-month", seen.slice(0, 6).join(","));
   ok("and then the events", seen.includes("ec-a") && seen.includes("ec-j"), seen.join(","));
-  ok("and lets go at the end, so focus can leave", seen.length < 40, String(seen.length));
+  ok("and lets go at the end, so focus can leave", all.length < 400, String(all.length));
   ok("Shift+Tab walks back", d.keyWith("Tab", true, false) && d.focused === seen[seen.length - 2], d.focused);
   const nodes = JSON.parse(d.a11yJson(4, d.focused)).nodes;
   ok("every button is focusable in the mirror",

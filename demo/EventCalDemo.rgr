@@ -27,6 +27,7 @@
 ; =============================================================================
 
 Import "../src/EventCalCtl.rgr"
+Import "EventCalBoard.rgr"
 Import "../src/UiTree.rgr"
 Import "../src/UiDate.rgr"
 Import "../src/UiText.rgr"
@@ -44,6 +45,8 @@ treefactory Ec {
     child addChild
     text  textContent
 
+    tag Shell    EVGElement (props (className "ec-shell"))
+    tag Cap      EVGElement (props (className "ec-cap") (elementType 1))
     tag Page     EVGElement (props (className "ec-page"))
     tag Head     EVGElement (props (className "ec-head"))
     tag NavBtn   EVGElement (props (className "ec-navbtn") (role "button") (a11yFocusable true))
@@ -92,8 +95,17 @@ class EventCalDemo {
     def hovered:string ""
     def pressed:string ""
     def focused:string ""
-    def pageW:double 900.0
-    def pageH:double 580.0
+    def pageW:double 1000.0
+    def pageH:double 2400.0
+    ; ReUI's two patterns, above the measured week: A is the full calendar
+    ; with its Settings popover, B the hotel's resource day.
+    def boardA:EcBoard (new EcBoard())
+    def boardB:EcBoard (new EcBoard())
+    ; The width the tree was built for, and where the pointer last was (the
+    ; wheel says how far, not where).
+    def builtW:double 0.0
+    def lastX:double 0.0
+    def lastY:double 0.0
     ; Measures titles so a box too narrow for one ends in an ellipsis rather
     ; than a word cut in half ("Desigr"). Owns no tree; it only hands out the
     ; engine, as in FormDemo.
@@ -151,7 +163,29 @@ class EventCalDemo {
         model.addAllDay("k" "Offsite" (mon + 2) (mon + 4))
         model.layout()
 
-        root = (this.page())
+        this.useClock(2026 9 28 630 0)
+    }
+
+    ; The boards' today and now. The page passes the real clock; the checks
+    ; keep the default, Monday 28 September 2026 at 10:30, UTC.
+    fn useClock:void (y:int m:int d:int minute:int offset:int) {
+        def day:int (UiDate.toDays(y m d))
+        boardA = (new EcBoard())
+        boardB = (new EcBoard())
+        boardA.browserOff = offset
+        boardB.browserOff = offset
+        boardA.setup("ea" false day minute)
+        boardB.setup("eb" true day minute)
+        this.rebuild()
+    }
+
+    ; The measured week's card: as wide as it was, or the room there is.
+    fn oldW:double () {
+        def w:double (pageW - 40.0)
+        if (w > 900.0) {
+            return 900.0
+        }
+        return w
     }
 
     ; --- fractions to pixels -------------------------------------------------
@@ -192,7 +226,7 @@ class EventCalDemo {
     ; Clipped events are drawn at their clipped width; one that begins before
     ; the grid begins is drawn from the first cell it reaches.
     fn monthCellWidth:double () {
-        return (((pageW - 120.0) - (colGap * 6.0)) / 7.0)
+        return ((((this.oldW()) - 120.0) - (colGap * 6.0)) / 7.0)
     }
 
     ; Lanes a cell has room for. The rest are counted into "+N more", which
@@ -337,7 +371,7 @@ class EventCalDemo {
     fn colWidth:double () {
         def n:int (this.colCount())
         def gaps:double (colGap * (to_double (n - 1)))
-        return (((pageW - 120.0) - gaps) / (to_double n))
+        return ((((this.oldW()) - 120.0) - gaps) / (to_double n))
     }
 
     ; A CSS length. Rounded to two places: the fractions are thirds, and a
@@ -407,8 +441,31 @@ class EventCalDemo {
             "Three overlapping events fan out to the right: the first keeps the full width and each later one overlays it. Measured, not guessed."))
     }
 
+    ; The page: the two ReUI patterns, then the measured week.
     fn page:EVGElement () {
+        builtW = pageW
+        def narrow:boolean (pageW < 600.0)
+        boardA.cardW = (pageW - 40.0)
+        boardA.narrow = narrow
+        boardB.cardW = (pageW - 40.0)
+        boardB.narrow = narrow
+        boardA.focused = focused
+        boardA.hovered = hovered
+        boardB.focused = focused
+        boardB.hovered = hovered
+        def shell (tree Ec (Shell))
+        shell.addChild((tree Ec (Cap "Event calendar · month, week, day, N days, agenda and resource views, with Settings")))
+        shell.addChild((boardA.card()))
+        shell.addChild((tree Ec (Cap "Resource view · a hotel's booking board: drag to move between rooms, drag the bottom edge to resize")))
+        shell.addChild((boardB.card()))
+        shell.addChild((tree Ec (Cap "Overlap layout · measured against @schedule-x/calendar")))
+        shell.addChild((this.oldCard()))
+        return shell
+    }
+
+    fn oldCard:EVGElement () {
         def page (tree Ec (Page))
+        UiTree.inline(page "width" (EventCalDemo.px((this.oldW()))))
 
         def unit:string (this.unitName())
         def head (tree Ec
@@ -575,10 +632,160 @@ class EventCalDemo {
 
     ; --- events --------------------------------------------------------------
 
-    fn press:boolean (target:string) {
-        if (target == "") {
+    ; --- the boards' input ------------------------------------------------------
+    ; An id says whose it is: "ea-" is Pattern A, "eb-" Pattern B, and the
+    ; rest is the measured week, which keeps every rule it had.
+
+    fn boardFor:int (id:string) {
+        if (boardA.owns(id)) {
+            return 1
+        }
+        if (boardB.owns(id)) {
+            return 2
+        }
+        return 0
+    }
+
+    fn boardAt:EcBoard (which:int) {
+        if (which == 2) {
+            return boardB
+        }
+        return boardA
+    }
+
+    ; Open lists and popovers close when the press lands anywhere else.
+    fn closeOthers:boolean (except:int) {
+        def did:boolean false
+        if (except != 1) {
+            if (boardA.closeOverlays()) {
+                did = true
+            }
+        }
+        if (except != 2) {
+            if (boardB.closeOverlays()) {
+                did = true
+            }
+        }
+        return did
+    }
+
+    fn onBoard:boolean (which:int target:string) {
+        def b:EcBoard (this.boardAt(which))
+        this.closeOthers(which)
+        b.focused = focused
+        b.hovered = hovered
+        def r:boolean (b.press(target))
+        focused = b.focused
+        model.activeId = focused
+        this.rebuild()
+        return r
+    }
+
+    ; The pointer, for the gestures: a press on an event, its bottom edge or
+    ; an empty slot arms one; everything else is a click at once.
+    fn pointerDown:boolean (id:string x:double y:double) {
+        this.laidOut()
+        lastX = x
+        lastY = y
+        def which:int (this.boardFor(id))
+        if (which == 0) {
+            this.closeOthers(0)
+            this.press(id)
+            return true
+        }
+        this.closeOthers(which)
+        def b:EcBoard (this.boardAt(which))
+        b.focused = focused
+        b.hovered = hovered
+        b.pointerDown(id x y)
+        focused = b.focused
+        this.rebuild()
+        return true
+    }
+
+    fn pointerMove:boolean (x:double y:double) {
+        lastX = x
+        lastY = y
+        def which:int 0
+        if ((strlen boardA.armed) > 0) {
+            which = 1
+        }
+        if ((strlen boardB.armed) > 0) {
+            which = 2
+        }
+        if (which == 0) {
             return false
         }
+        this.laidOut()
+        def b:EcBoard (this.boardAt(which))
+        if (b.pointerMove(x y)) {
+            this.rebuild()
+            return true
+        }
+        return false
+    }
+
+    fn pointerUp:boolean () {
+        def which:int 0
+        if ((strlen boardA.armed) > 0) {
+            which = 1
+        }
+        if ((strlen boardB.armed) > 0) {
+            which = 2
+        }
+        if (which == 0) {
+            return false
+        }
+        def b:EcBoard (this.boardAt(which))
+        b.focused = focused
+        def r:boolean (b.pointerUp())
+        focused = b.focused
+        this.rebuild()
+        return r
+    }
+
+    ; The wheel scrolls the time grid under the pointer.
+    fn scrollBy:boolean (dy:double) {
+        def which:int (this.boardFor((this.hitId(lastX lastY))))
+        if (which == 0) {
+            return false
+        }
+        def b:EcBoard (this.boardAt(which))
+        if (b.scrollBy(dy)) {
+            this.rebuild()
+            return true
+        }
+        return false
+    }
+
+    fn cursorAt:string (x:double y:double) {
+        lastX = x
+        lastY = y
+        def id:string (this.hitId(x y))
+        def which:int (this.boardFor(id))
+        if (which == 0) {
+            return ""
+        }
+        def b:EcBoard (this.boardAt(which))
+        return (b.cursorFor(id))
+    }
+
+    fn statusOf:string (which:int) {
+        def b:EcBoard (this.boardAt(which))
+        return b.status
+    }
+
+    fn press:boolean (target:string) {
+        if (target == "") {
+            this.closeOthers(0)
+            this.rebuild()
+            return false
+        }
+        def owner:int (this.boardFor(target))
+        if (owner > 0) {
+            return (this.onBoard(owner target))
+        }
+        this.closeOthers(0)
         if (target == "ec-prev") {
             focused = target
             return (this.go(-1))
@@ -757,7 +964,33 @@ class EventCalDemo {
 
     fn keyWith:boolean (k:string shift:boolean ctrl:boolean) {
         if (k == "Tab") {
+            ; An open list closes as the focus leaves it, onto its trigger.
+            def which0:int (this.boardFor(focused))
+            if (which0 > 0) {
+                def b0:EcBoard (this.boardAt(which0))
+                def back:string (b0.closeLists())
+                if ((strlen back) > 0) {
+                    focused = back
+                }
+            }
             return (this.tab(shift))
+        }
+        def which:int (this.boardFor(focused))
+        if ((which > 0) || ((strlen boardA.armed) > 0) || ((strlen boardB.armed) > 0)) {
+            if (which == 0) {
+                which = 1
+                if ((strlen boardB.armed) > 0) {
+                    which = 2
+                }
+            }
+            def b:EcBoard (this.boardAt(which))
+            b.focused = focused
+            b.hovered = hovered
+            def r:boolean (b.keyWith(k shift))
+            focused = b.focused
+            model.activeId = focused
+            this.rebuild()
+            return r
         }
         if ((k == "Enter") || (k == " ")) {
             if ((strlen focused) > 0) {
@@ -769,6 +1002,9 @@ class EventCalDemo {
     }
 
     fn key:boolean (k:string) {
+        if ((this.boardFor(focused)) > 0) {
+            return (this.keyWith(k false false))
+        }
         if (k == "ArrowLeft") {
             return (this.go(-1))
         }
@@ -779,7 +1015,15 @@ class EventCalDemo {
     }
 
     fn setHover:void (id:string) {
+        def was:string hovered
         hovered = id
+        ; A tooltip follows the pointer, so a hover that starts or ends one
+        ; redraws the tree.
+        if (boardA.tooltips && (was != id)) {
+            if ((boardA.owns(was)) || (boardA.owns(id))) {
+                this.rebuild()
+            }
+        }
     }
 
     fn setPressed:void (id:string) {
@@ -817,8 +1061,15 @@ class EventCalDemo {
     }
 
     fn laidOut:EVGLayout () {
+        ; The page decides the width; the cards are built for one, so a new
+        ; width is a new tree.
+        if (pageW != builtW) {
+            this.rebuild()
+        }
         def r:EVGElement (unwrap root)
         def s:EVGStyleSheet (unwrap sheet)
+        UiTree.inline(r "width" (EventCalDemo.px(pageW)))
+        UiTree.inline(r "height" ((to_string (to_int pageH)) + "px"))
         s.setViewport(pageW pageH false)
         this.markStates(r)
         s.applyTree(r "")
@@ -827,7 +1078,9 @@ class EventCalDemo {
         if layout {
             def lay:EVGLayout (unwrap layout)
             if ((s.layoutClean()) == false) {
+                lay.setPageSize(pageW pageH)
                 lay.layout(r)
+                this.fitHeight(lay)
             }
             return lay
         }
@@ -835,7 +1088,35 @@ class EventCalDemo {
         fresh.setPageSize(pageW pageH)
         layout = fresh
         fresh.layout(r)
+        this.fitHeight(fresh)
         return fresh
+    }
+
+    ; The page is as tall as what it holds: the lowest child, and the page's
+    ; own padding under it.
+    fn fitHeight:void (lay:EVGLayout) {
+        def r:EVGElement (unwrap root)
+        def bottom:double 0.0
+        def i:int 0
+        while (i < (r.getChildCount())) {
+            def c:EVGElement (r.getChild(i))
+            def b:double (c.calculatedY + c.calculatedHeight)
+            if (b > bottom) {
+                bottom = b
+            }
+            i = (i + 1)
+        }
+        def want:double (to_double (to_int ((bottom + 20.0) + 0.999)))
+        def diff:double (want - pageH)
+        if ((diff > 0.5) || (diff < -0.5)) {
+            pageH = want
+            def s:EVGStyleSheet (unwrap sheet)
+            UiTree.inline(r "height" ((to_string (to_int pageH)) + "px"))
+            s.setViewport(pageW pageH false)
+            s.applyTree(r "")
+            lay.setPageSize(pageW pageH)
+            lay.layout(r)
+        }
     }
 
     fn displayListJson:string () {
@@ -893,7 +1174,12 @@ class EventCalDemo {
         return (t.busy(r))
     }
 
+    fn widthPx:double () {
+        return pageW
+    }
+
     fn heightPx:double () {
+        this.laidOut()
         return pageH
     }
 }
