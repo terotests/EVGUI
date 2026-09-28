@@ -1,0 +1,271 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * ReUI / shadcn Combobox, as an EVG stylesheet: a 36px input with a 1px
+ * #e4e4e7 border and an 8px radius, a muted chevron at its right, and under
+ * it a white popup as wide as the input with a hairline border, a soft shadow
+ * and 32px rows whose highlight is a rounded #f4f4f5, a ✓ at the right of the
+ * chosen one. Zinc palette, as shadcn's default theme.
+ *
+ * `ui-combobox-*` and `ui-input-*` are the controllers' own classes (every
+ * box is a ComboboxCtl); `cb-*` are this page's. Class-first, one token per
+ * selector, no descendant selectors.
+ */
+
+/* --- the page ---------------------------------------------------------------- */
+
+.cb-page {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  align-content: flex-start;
+  gap: 16px;
+  padding: 24px;
+  width: 900px;
+  background-color: #ffffff;
+}
+
+.cb-card {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  width: 418px;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  background-color: #ffffff;
+}
+
+.cb-caption {
+  height: 40px;
+  line-height: 40px;
+  padding: 0 16px;
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 500;
+  border-bottom: 1px solid #f4f4f5;
+}
+
+.cb-stage {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: center;
+  padding: 24px 24px 24px 24px;
+}
+
+.cb-field {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 8px;
+  width: 320px;
+}
+
+.cb-label { color: #09090b; font-size: 14px; font-weight: 500; height: 20px; line-height: 20px; }
+.cb-hint  { color: #71717a; font-size: 12px; height: 16px; line-height: 16px; font-family: monospace; }
+
+/* --- the input ----------------------------------------------------------------- */
+
+.ui-combobox { display: flex; flex-direction: column; width: 100%; position: relative; }
+
+.ui-combobox-group {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  height: 36px;
+  padding: 0 4px 0 12px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background-color: #ffffff;
+  shadow-color: rgba(0, 0, 0, 0.05);
+  shadow-radius: 2px;
+  shadow-offset-y: 1px;
+  transition: border-color 120ms ease-out;
+}
+/* The chip box: as tall as its chips, wrapping onto a second line. */
+.ui-combobox-group-multiple {
+  flex-wrap: wrap;
+  height: auto;
+  min-height: 36px;
+  padding: 3px 34px 3px 4px;
+  gap: 4px;
+}
+/* shadcn's focus-visible: the border goes zinc-400. */
+.cb-group-focus { border-color: #a1a1aa; }
+
+.ui-combobox-input {
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  height: 34px;
+  flex-grow: 1;
+  background-color: transparent;
+}
+.ui-combobox-input-single { min-width: 0; white-space: nowrap; }
+.ui-combobox-input-multiple { min-width: 64px; height: 28px; padding: 0 0 0 4px; }
+.ui-combobox-grow { flex-grow: 0; min-width: 0; width: 0; height: 4px; }
+
+.ui-input {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+  background-color: transparent;
+  cursor: text;
+}
+.ui-input-text { color: #09090b; font-family: Arial; font-size: 14px; height: 20px; line-height: 20px; white-space: pre; }
+.ui-input-placeholder { color: #71717a; }
+.ui-input-caret { position: absolute; top: 8px; width: 1px; height: 18px; background-color: #09090b; }
+.cb-band { position: absolute; top: 8px; height: 18px; background-color: #bfdbfe; }
+
+/* The trigger and the clear: a muted Lucide glyph in a 28px square. */
+.ui-combobox-trigger {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  background-color: transparent;
+}
+.ui-combobox-clear {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  background-color: transparent;
+}
+.ui-combobox-clear:hover { background-color: #f4f4f5; }
+/* The chip box's trigger keeps the top-right corner while the chips wrap. */
+.cb-trigger-corner { position: absolute; top: 0px; right: -30px; }
+.ui-combobox-trigger:hover { background-color: #f4f4f5; }
+
+.cb-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: #09090b;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.cb-icon-muted { stroke: #71717a; }
+.cb-icon-check { stroke: #09090b; }
+.cb-icon-lead { stroke: #71717a; margin-right: 8px; }
+.cb-icon-chip { width: 12px; height: 12px; stroke: #71717a; }
+
+/* --- the chips ------------------------------------------------------------------ */
+
+.ui-combobox-chips { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px; flex-shrink: 1; min-width: 0; }
+.ui-combobox-chip {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 2px;
+  height: 26px;
+  padding: 0 2px 0 8px;
+  border-radius: 6px;
+  background-color: #f4f4f5;
+}
+.ui-combobox-chip-focused { background-color: #e4e4e7; }
+.ui-combobox-chip-text { color: #09090b; font-size: 12px; font-weight: 500; height: 16px; line-height: 16px; white-space: pre; }
+.ui-combobox-chip-text-focused { color: #09090b; }
+.ui-combobox-chip-remove {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: transparent;
+}
+.ui-combobox-chip-remove:hover { background-color: #e4e4e7; }
+
+/* --- the popup ------------------------------------------------------------------ */
+
+.ui-combobox-content {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  margin-top: 4px;
+  padding: 4px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background-color: #ffffff;
+  shadow-color: rgba(0, 0, 0, 0.10);
+  shadow-radius: 12px;
+  shadow-offset-y: 4px;
+}
+
+.ui-combobox-item {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: #09090b;
+  font-size: 14px;
+  cursor: pointer;
+  /* Stated, not left to default: the rows are the controller's elements,
+   * kept from one build to the next, and a sheet re-applied to an element
+   * does not take back a property a rule that no longer matches once set. */
+  background-color: transparent;
+}
+.ui-combobox-item-active { background-color: #f4f4f5; }
+.cb-item-tall { height: 44px; gap: 8px; }
+
+.cb-item-text { color: #09090b; font-size: 14px; height: 20px; line-height: 20px; white-space: pre; flex-grow: 1; }
+.ui-combobox-item-disabled { opacity: 0.5; cursor: default; }
+.cb-item-lines { display: flex; flex-direction: column; flex-grow: 1; }
+.cb-item-sub { color: #71717a; font-size: 12px; height: 16px; line-height: 16px; white-space: pre; }
+.cb-check-slot { display: flex; flex-direction: row; align-items: center; justify-content: center; width: 16px; height: 16px; flex-grow: 0; }
+.cb-avatar {
+  width: 28px;
+  height: 28px;
+  line-height: 28px;
+  border-radius: 14px;
+  background-color: #f4f4f5;
+  color: #52525b;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.ui-combobox-section { display: flex; flex-direction: column; align-items: stretch; width: 100%; }
+.ui-combobox-section-label {
+  height: 28px; line-height: 28px; padding: 0 8px;
+  color: #71717a; font-size: 12px; font-weight: 500;
+}
+.cb-sep { height: 1px; margin: 4px 0; background-color: #e4e4e7; }
+
+.ui-combobox-empty {
+  height: 36px; line-height: 36px; padding: 0 8px;
+  color: #71717a; font-size: 14px; text-align: center;
+}
+
+/* --- a phone ------------------------------------------------------------------ */
+
+@media (max-width: 600px) {
+  .cb-page { width: 100%; padding: 12px; gap: 12px; }
+  .cb-card { width: 100%; }
+  .cb-stage { padding: 20px 16px; }
+  .cb-field { width: 100%; }
+}

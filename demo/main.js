@@ -61,6 +61,8 @@ import { RadioGroupDemo } from "./generated-host.js";
 import { RADIO_CSS } from "./generated.js";
 import { RatingDemo } from "./generated-host.js";
 import { RATING_CSS } from "./generated.js";
+import { ComboboxDemo } from "./generated-host.js";
+import { COMBOBOX_CSS } from "./generated.js";
 import { MENUBAR_CSS, TOOLBAR_CSS, SORTABLE_CSS, MOTION_CSS, TABLE_CSS, DROPDOWN_CSS, DIALOG_CSS, TREE_CSS, TIMELINE_CSS, RESIZE_CSS, FORM_CSS, PROFILE_CSS, DASHBOARD_CSS, CALENDAR_CSS, FILTERS_CSS, EVENTCAL_CSS, MESSAGE_CSS, CONTROLS_CSS, OTP_CSS, METADATA_CSS, EFFECTS_CSS, SEPARATOR_CSS, TABS_CSS, EFFECT_PRESETS_CSS } from "./generated.js";
 
 // The default stage width. A demo wider than this says so — the dashboard
@@ -453,6 +455,11 @@ let lastRadioHover = "";
 let rating = new RatingDemo();
 rating.init(RATING_CSS);
 let lastRatingHover = "";
+// Combobox: ReUI's patterns, every box a ComboboxCtl in its default mode (the
+// value is the chosen item), on the page's text session like the autocomplete.
+let combobox = new ComboboxDemo();
+combobox.init(COMBOBOX_CSS);
+let lastComboboxHover = "";
 // ONE DRIVER FOR THE PAGE. It reads the effect instances off whatever display
 // list is being painted, so it works for any demo whose stylesheet declares an
 // effect and costs nothing on the nineteen that do not.
@@ -1512,6 +1519,47 @@ DEMOS.rating = {
     root: () => null,
   }),
 };
+// Combobox. The generic Tab walk (each box one stop; `setFocus` closes a
+// list and puts its label back as the focus leaves). The arrows, and in the
+// chip box Backspace / ArrowLeft at the start, are claimed from the editing
+// session (`ownsKey`); a focused chip gets the keys through `keyWith`.
+DEMOS.combobox = {
+  height: () => combobox.heightPx(),
+  list: () => combobox.displayListJson(),
+  hit: (x, y) => combobox.hitId(x, y),
+  a11y: (gen, focus) => combobox.a11yJson(gen, focus),
+  cursorAt: (x, y) => combobox.cursorAt(x, y),
+  textSession: {
+    focused: () => combobox.focusedField(),
+    state: (tid) => JSON.parse(combobox.fieldStateJson(tid)),
+    apply: (tid, v, a, b) => combobox.applyEdit(tid, v, a, b),
+  },
+  press: (id, x, y, ev) => combobox.beginSelection(id, x, !!(ev && ev.shiftKey)),
+  drag: (id, ev) => combobox.extendSelection(ev.offsetX),
+  drop: () => combobox.endSelection(),
+  dblclick: (id, x) => combobox.selectWordAt(id, x),
+  hover: (id) => {
+    if (id === lastComboboxHover) return false;
+    lastComboboxHover = id;
+    combobox.setHover(id);
+    return true;
+  },
+  keyWith: (k, shift, ctrl) => combobox.keyWith(k, shift, ctrl),
+  key: (k) => combobox.key(k),
+  ownsKey: (k) => combobox.ownsKey(k),
+  host: () => ({
+    tick: (dt) => combobox.tick(dt),
+    busy: () => combobox.busyNow(),
+    setHover: (id) => {
+      if (id === lastComboboxHover) return false;
+      lastComboboxHover = id;
+      combobox.setHover(id);
+      return true;
+    },
+    setPressed: (id) => combobox.setPressed(id),
+    root: () => null,
+  }),
+};
 
 /**
  * Put the floating copy under the pointer, by mutating the element rather than
@@ -1794,6 +1842,7 @@ const INSTANCE = {
 INSTANCE.radio = () => radio;
 INSTANCE.popover = () => popover;
 INSTANCE.rating = () => rating;
+INSTANCE.combobox = () => combobox;
 // A press on the page outside the canvas is outside the popover too, and
 // Radix dismisses on a pointer down outside wherever it lands.
 window.addEventListener("pointerdown", (ev) => {
@@ -1933,6 +1982,8 @@ NARROW.radio = { min: 320, h: "own", grow: true };
 NARROW.popover = { min: 320, h: "auto", keep: true };
 // The page is as tall as its cards lay out.
 NARROW.rating = { min: 320, h: "own" };
+// The page grows under an open list, so its height is the demo's own.
+NARROW.combobox = { min: 320, h: "own" };
 const NARROW_AT = 600;
 const naturalSize = {};
 const fittedHeight = new Map();
@@ -2656,6 +2707,7 @@ DEMO_NAMES.push("autocomplete");
 DEMO_NAMES.push("pagination");
 DEMO_NAMES.push("radio");
 DEMO_NAMES.push("rating");
+DEMO_NAMES.push("combobox");
 const wanted = new URLSearchParams(location.search).get("demo");
 if (wanted && DEMO_NAMES.includes(wanted)) state.which = wanted;
 
@@ -3346,6 +3398,7 @@ window.__resetDemo = (name) => {
   else if (name === "pagination") { pagination = new PaginationDemo(); pagination.init(PAGINATION_CSS); lastPaginationHover = ""; }
   else if (name === "radio") { radio = new RadioGroupDemo(); radio.init(RADIO_CSS); lastRadioHover = ""; }
   else if (name === "rating") { rating = new RatingDemo(); rating.init(RATING_CSS); lastRatingHover = ""; }
+  else if (name === "combobox") { combobox = new ComboboxDemo(); combobox.init(COMBOBOX_CSS); lastComboboxHover = ""; }
   else if (name === "dialog") { dialog = new DialogDemo(); dialog.init(DIALOG_CSS); lastDialogHover = ""; }
   else if (name === "popover") { popover = new PopoverDemo(); popover.init(POPOVER_CSS); lastPopoverHover = ""; }
   else return false;
