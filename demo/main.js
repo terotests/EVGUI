@@ -3604,6 +3604,12 @@ stage.appendChild(kbRing);
  */
 let kbStrokes = { src: null, list: [] };
 function kbRingBox(node) {
+  // A demo that knows better names the box itself (a chip box's input).
+  const inst = instance();
+  if (inst && typeof inst.ringBoxJson === "function") {
+    const b = String(inst.ringBoxJson(node.id) || "").split(",").map(Number);
+    if (b.length === 4 && b.every(Number.isFinite) && b[2] > 0) return [b[0], b[1], b[2], b[3], 8];
+  }
   const src = window.__lastList;
   if (src !== kbStrokes.src) {
     let list = [];

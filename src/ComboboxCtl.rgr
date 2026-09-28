@@ -1258,10 +1258,17 @@ class ComboboxCtl extends UiCtl {
         ; Two tokens, because the sheet matches one class per selector.
         if multiple {
             UiTree.addClass(box "ui-combobox-input-multiple")
+            ; The input is the last thing on the chips' line, as in the
+            ; reference: inside the wrapping strip, after the last chip, and
+            ; onto a line of its own only when that line has no room left. A
+            ; sibling of the strip would wrap under the WHOLE strip instead.
+            ; Layout only: the rows below give the a11y tree its parents.
+            def strip:EVGElement (unwrap chipsEl)
+            strip.addChild(box)
         } {
             UiTree.addClass(box "ui-combobox-input-single")
+            group.addChild(box)
         }
-        group.addChild(box)
         ; A spacer, so the clear and the trigger sit at the far edge of a box
         ; whose input has a stated width. Decoration: no id, no role.
         def grow:EVGElement (UiTree.div("" "ui-combobox-grow"))

@@ -340,6 +340,30 @@ class ComboboxDemo {
         return target
     }
 
+    ; The box the page's keyboard ring goes round when `id` has the focus:
+    ; the bordered group for a combobox's input, as "x,y,w,h", or "" to let
+    ; the page choose. A chip box's input is one line of a box that can be
+    ; several chip lines tall and far wider than the input, and no size rule
+    ; on the page tells that box from the card around it.
+    fn ringBoxJson:string (id:string) {
+        if (!(null? root)) {
+            def r:EVGElement (unwrap root)
+            def all:[ComboboxCtl] (this.ctls())
+            def i:int 0
+            while (i < (array_length all)) {
+                def c:ComboboxCtl (itemAt all i)
+                if (id == (c.inputTid())) {
+                    def g:EVGElement (ComboboxDemo.byId(r (c.tid + "-group")))
+                    if (g.id == (c.tid + "-group")) {
+                        return ((to_string g.calculatedX) + "," + (to_string g.calculatedY) + "," + (to_string g.calculatedWidth) + "," + (to_string g.calculatedHeight))
+                    }
+                }
+                i = (i + 1)
+            }
+        }
+        return ""
+    }
+
     sfn byId:EVGElement (el:EVGElement tid:string) {
         if (el.id == tid) {
             return el

@@ -85,9 +85,10 @@
   shadow-offset-y: 1px;
   transition: border-color 120ms ease-out;
 }
-/* The chip box: as tall as its chips, wrapping onto a second line. */
+/* The chip box: as tall as its chips. The strip inside it wraps (the chips
+   and, after the last one, the input); the box itself keeps one row. */
 .ui-combobox-group-multiple {
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   height: auto;
   min-height: 36px;
   padding: 3px 34px 3px 4px;
@@ -167,7 +168,7 @@
 
 /* --- the chips ------------------------------------------------------------------ */
 
-.ui-combobox-chips { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px; flex-shrink: 1; min-width: 0; }
+.ui-combobox-chips { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px; flex-grow: 1; flex-shrink: 1; min-width: 0; }
 .ui-combobox-chip {
   display: flex;
   flex-direction: row;
