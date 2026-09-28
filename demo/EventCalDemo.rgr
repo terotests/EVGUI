@@ -767,7 +767,7 @@ class EventCalDemo {
             return ""
         }
         def b:EcBoard (this.boardAt(which))
-        return (b.cursorFor(id))
+        return (b.cursorFor((b.refine(id x y))))
     }
 
     fn statusOf:string (which:int) {

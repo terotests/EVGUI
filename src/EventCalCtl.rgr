@@ -824,6 +824,7 @@ class EventCalCtl extends UiCtl {
     def dragChanged:boolean false
     ; What the event was before the gesture, for Escape.
     def origDay:int 0
+    def origEndDay:int 0
     def origStart:int 0
     def origEnd:int 0
     def origRes:string ""
@@ -885,6 +886,7 @@ class EventCalCtl extends UiCtl {
 
     fn remember:void (e:CalEvent) {
         origDay = e.startDay
+        origEndDay = e.endDay
         origStart = e.startMin
         origEnd = e.endMin
         origRes = e.resource
@@ -1032,7 +1034,7 @@ class EventCalCtl extends UiCtl {
         } {
             def e:CalEvent (this.event(dragId))
             e.startDay = origDay
-            e.endDay = origDay
+            e.endDay = origEndDay
             e.startMin = origStart
             e.endMin = origEnd
             e.resource = origRes
@@ -1286,5 +1288,54 @@ class EventCalCtl extends UiCtl {
             i = (i + 1)
         }
         return most
+    }
+    ; --- moving by whole days (a month, the all-day band) ----------------------
+    ; A month cell has no time axis, so a drag there moves an event by DAYS:
+    ; a timed event keeps its time of day and length, a multi-day or all-day
+    ; bar keeps its length. The day the pointer took hold of is the anchor, so
+    ; a three-day bar grabbed by its middle lands with its middle under the
+    ; pointer.
+    def dragGrabDay:int 0
+
+    fn beginMoveDays:boolean (id:string grabDay:int) {
+        if ((canMove == false) || ((this.has(id)) == false)) {
+            return false
+        }
+        def e:CalEvent (this.event(id))
+        this.remember(e)
+        dragMode = "days"
+        dragId = id
+        dragGrabDay = grabDay
+        return true
+    }
+
+    ; Where the pointer is now, as a day. The event is put at its original
+    ; days plus the distance travelled — not stepped from where it was, so a
+    ; drag that wanders and comes back leaves it where it started.
+    fn dragToDay:boolean (day:int) {
+        if (dragMode != "days") {
+            return false
+        }
+        def e:CalEvent (this.event(dragId))
+        def delta:int (day - dragGrabDay)
+        def s:int (origDay + delta)
+        if (s == e.startDay) {
+            return false
+        }
+        e.startDay = s
+        e.endDay = (origEndDay + delta)
+        dragChanged = true
+        return true
+    }
+
+    ; The keyboard's version: whole days, the same toggle.
+    fn moveDaysBy:boolean (id:string dDays:int) {
+        if ((canMove == false) || ((this.has(id)) == false) || (dDays == 0)) {
+            return false
+        }
+        def e:CalEvent (this.event(id))
+        e.startDay = (e.startDay + dDays)
+        e.endDay = (e.endDay + dDays)
+        return true
     }
 }

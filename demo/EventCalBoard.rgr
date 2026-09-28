@@ -115,6 +115,16 @@ class EcBoard {
     def dragging:boolean false
     def lastDay:int 0
     def lastRes:string ""
+    ; A month gesture: the day it was grabbed on, the day under the pointer,
+    ; and the ghost that follows the pointer (its offset inside the chip, and
+    ; where it is drawn, relative to the month grid).
+    def grabDay:int 0
+    def overDay:int 0
+    def grabDX:double 0.0
+    def grabDY:double 0.0
+    def ghostW:double 0.0
+    def ghostX:double 0.0
+    def ghostY:double 0.0
 
     Constructor () {
     }
@@ -1219,7 +1229,49 @@ class EcBoard {
             }
             row = (row + 1)
         }
+        if (this.monthMoving()) {
+            m.addChild((this.ghost()))
+        }
         return m
+    }
+
+    ; The chip being dragged, following the pointer. No id, so the hit test
+    ; looks through it to the cell underneath; hidden from readers, who are
+    ; told where the event went instead.
+    fn ghost:EVGElement () {
+        def e:CalEvent (model.event(model.dragId))
+        def g:EVGElement (this.chip(e "" ghostW))
+        g.id = ""
+        g.role = ""
+        g.a11yFocusable = false
+        g.a11yLabel = ""
+        g.a11yHidden = true
+        UiTree.addClass(g "eb-ghost")
+        UiTree.inline(g "position" "absolute")
+        UiTree.inline(g "z-index" "50")
+        EcBoard.place(g ghostX ghostY)
+        return g
+    }
+
+    ; The days a month drag would land on: the moved event's new span, or the
+    ; range a create has swept.
+    fn targetHas:boolean (d:int) {
+        if (this.monthCreating()) {
+            def lo:int grabDay
+            def hi:int overDay
+            if (hi < lo) {
+                lo = overDay
+                hi = grabDay
+            }
+            return ((d >= lo) && (d <= hi))
+        }
+        if (this.monthMoving()) {
+            def delta:int (overDay - grabDay)
+            def a:int (model.origDay + delta)
+            def b:int (model.origEndDay + delta)
+            return ((d >= a) && (d <= b))
+        }
+        return false
     }
 
     ; Behind a row's cells: the off-day shading and the lines between cells,
@@ -1243,6 +1295,12 @@ class EcBoard {
                 EcBoard.dims(sh cw ch)
                 EcBoard.place(sh x 0.0)
                 bg.addChild(sh)
+            }
+            if (this.targetHas(d)) {
+                def tg:EVGElement (EcBoard.box("eb-shade eb-shade-target"))
+                EcBoard.dims(tg cw ch)
+                EcBoard.place(tg x 0.0)
+                bg.addChild(tg)
             }
             if ((c > 0) || (wn > 0.0)) {
                 def lx:double x
@@ -1386,6 +1444,9 @@ class EcBoard {
         UiTree.inline(ch "border-color" (EcBoard.edge(col)))
         if (focused == cid) {
             UiTree.addClass(ch "eb-chip-focus")
+        }
+        if ((this.monthMoving()) && (model.dragId == e.id)) {
+            UiTree.addClass(ch "eb-chip-held")
         }
         def room:double (w - 14.0)
         if ((e.kind == "avatars") && (w >= 90.0)) {
@@ -2389,7 +2450,42 @@ class EcBoard {
         return ((startH * 60) + (to_int (rel * 60.0)))
     }
 
-    fn pointerDown:boolean (id:string x:double y:double) {
+    ; A bar that runs on into later cells is drawn in the cell it starts in,
+    ; and the later cells come after it in the tree — so the hit test, which
+    ; takes the last box under the point, answers the cell. The bar is what
+    ; is under the pointer, so a cell hit is checked against the chips.
+    fn refine:string (id:string x:double y:double) {
+        if ((view != "month") || ((UiTree.beginsWith(id (p + "-cell-"))) == false)) {
+            return id
+        }
+        def mf@(optional):EVGElement (this.findEl((p + "-month")))
+        if (null? mf) {
+            return id
+        }
+        def hit:string (EcBoard.chipIn((unwrap mf) (p + "-chip-") x y))
+        if ((strlen hit) > 0) {
+            return hit
+        }
+        return id
+    }
+
+    sfn chipIn:string (el:EVGElement prefix:string x:double y:double) {
+        if ((UiTree.beginsWith(el.id prefix)) && ((((x >= el.calculatedX) && (x < (el.calculatedX + el.calculatedWidth))) && (y >= el.calculatedY)) && (y < (el.calculatedY + el.calculatedHeight)))) {
+            return el.id
+        }
+        def i:int 0
+        while (i < (el.getChildCount())) {
+            def r:string (EcBoard.chipIn((el.getChild(i)) prefix x y))
+            if ((strlen r) > 0) {
+                return r
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    fn pointerDown:boolean (id0:string x:double y:double) {
+        def id:string (this.refine(id0 x y))
         armed = ""
         armKind = ""
         dragging = false
@@ -2408,6 +2504,21 @@ class EcBoard {
             if (((strlen ci) > 0) && model.canCreate) {
                 armed = id
                 armKind = "create"
+            }
+            ; An all-day bar moves by whole days along the band.
+            if ((UiTree.beginsWith(id (p + "-band-"))) && model.canMove) {
+                armed = id
+                armKind = "band"
+            }
+        }
+        if (view == "month") {
+            if ((UiTree.beginsWith(id (p + "-chip-"))) && model.canMove) {
+                armed = id
+                armKind = "mmove"
+            }
+            if ((UiTree.beginsWith(id (p + "-cell-"))) && model.canCreate) {
+                armed = id
+                armKind = "mcreate"
             }
         }
         if ((strlen armed) > 0) {
@@ -2443,6 +2554,28 @@ class EcBoard {
             }
             dragging = true
         }
+        if ((armKind == "mmove") || (armKind == "mcreate")) {
+            def d:int (this.cellAt(x y))
+            if (d != -99999) {
+                overDay = d
+            }
+            def mf@(optional):EVGElement (this.findEl((p + "-month")))
+            if (!null? mf) {
+                def m:EVGElement (unwrap mf)
+                ghostX = ((x - m.calculatedX) - grabDX)
+                ghostY = ((y - m.calculatedY) - grabDY)
+            }
+            return true
+        }
+        if (armKind == "band") {
+            def bi:int (this.colAt(x))
+            if (bi >= 0) {
+                def bcols:[EcCol] (this.columns())
+                def bc:EcCol (itemAt bcols bi)
+                model.dragToDay(bc.day)
+            }
+            return true
+        }
         def ci:int (this.colAt(x))
         def cols:[EcCol] (this.columns())
         if (ci >= 0) {
@@ -2455,6 +2588,41 @@ class EcBoard {
     }
 
     fn beginGesture:boolean () {
+        if ((armKind == "mmove") || (armKind == "mcreate")) {
+            def d:int (this.cellAt(armX armY))
+            if (d == -99999) {
+                return false
+            }
+            grabDay = d
+            overDay = d
+            if (armKind == "mcreate") {
+                return true
+            }
+            ; The ghost is the chip, held where it was taken hold of.
+            def cf@(optional):EVGElement (this.findEl(armed))
+            if (!null? cf) {
+                def c:EVGElement (unwrap cf)
+                grabDX = (armX - c.calculatedX)
+                grabDY = (armY - c.calculatedY)
+                ghostW = c.calculatedWidth
+                def mf@(optional):EVGElement (this.findEl((p + "-month")))
+                if (!null? mf) {
+                    def m:EVGElement (unwrap mf)
+                    ghostX = (c.calculatedX - m.calculatedX)
+                    ghostY = (c.calculatedY - m.calculatedY)
+                }
+            }
+            return (model.beginMoveDays((this.chipEventId(armed)) d))
+        }
+        if (armKind == "band") {
+            def bi:int (this.colAt(armX))
+            if (bi < 0) {
+                return false
+            }
+            def bcols:[EcCol] (this.columns())
+            def bc:EcCol (itemAt bcols bi)
+            return (model.beginMoveDays((this.after(armed (p + "-band-"))) bc.day))
+        }
         def cols:[EcCol] (this.columns())
         def ci:int (this.colAt(armX))
         if (ci < 0) {
@@ -2490,6 +2658,33 @@ class EcBoard {
         def kind:string armKind
         armed = ""
         armKind = ""
+        if (dragging && (kind == "mcreate")) {
+            dragging = false
+            this.createDays(grabDay overDay)
+            return true
+        }
+        if (dragging && ((kind == "mmove") || (kind == "band"))) {
+            dragging = false
+            ; In a month the event stayed put while its ghost travelled: it
+            ; goes to the day it was dropped on now.
+            if (kind == "mmove") {
+                model.dragToDay(overDay)
+            }
+            def moved:boolean model.dragChanged
+            def mid:string (model.endDrag())
+            if ((strlen mid) > 0) {
+                def me:CalEvent (model.event(mid))
+                if (kind == "mmove") {
+                    focused = (p + "-chip-" + mid)
+                } {
+                    focused = (p + "-band-" + mid)
+                }
+                if moved {
+                    this.say(("Moved " + (this.evLabel(me))))
+                }
+            }
+            return true
+        }
         if dragging {
             dragging = false
             def id:string (model.endDrag())
@@ -2512,6 +2707,9 @@ class EcBoard {
         if (kind == "create") {
             return true
         }
+        if (kind == "mcreate") {
+            return (this.press(was))
+        }
         return (this.press(was))
     }
 
@@ -2519,11 +2717,74 @@ class EcBoard {
         if dragging {
             dragging = false
             armed = ""
+            armKind = ""
             model.cancelDrag()
             this.say("Drag cancelled")
             return true
         }
         return false
+    }
+
+    ; The day of the month cell under the point, or -99999.
+    fn cellAt:int (x:double y:double) {
+        def start:int (this.monthStart())
+        def i:int 0
+        while (i < 42) {
+            def f@(optional):EVGElement (this.findEl((p + "-cell-" + (to_string (start + i)))))
+            if (!null? f) {
+                def el:EVGElement (unwrap f)
+                if ((((x >= el.calculatedX) && (x < (el.calculatedX + el.calculatedWidth))) && (y >= el.calculatedY)) && (y < (el.calculatedY + el.calculatedHeight))) {
+                    return (start + i)
+                }
+            }
+            i = (i + 1)
+        }
+        return -99999
+    }
+
+    ; "ea-chip-e6-w4" is e6: a chip's id is its event's, and a bar that runs
+    ; on into another week row says which row after it.
+    fn chipEventId:string (target:string) {
+        def rest:string (this.after(target (p + "-chip-")))
+        def i:int 0
+        while (i < (strlen rest)) {
+            if (((substring rest i (i + 2)) == "-w") && (i > 0)) {
+                return (substring rest 0 i)
+            }
+            i = (i + 1)
+        }
+        return rest
+    }
+
+    fn monthMoving:boolean () {
+        return (dragging && (armKind == "mmove"))
+    }
+
+    fn monthCreating:boolean () {
+        return (dragging && (armKind == "mcreate"))
+    }
+
+    ; A drag across empty days in a month: one day is an hour at 9:00, as
+    ; New event is an hour; several are an all-day event over them.
+    fn createDays:void (a:int b:int) {
+        def lo:int a
+        def hi:int b
+        if (b < a) {
+            lo = b
+            hi = a
+        }
+        created = (created + 1)
+        def id:string ("n" + (to_string created))
+        if (lo == hi) {
+            model.addEvent(id "New event" lo 540 600 "alex" "blue")
+        } {
+            def e0:CalEvent (model.addAllDay(id "New event" lo hi))
+            e0.color = "blue"
+            e0.resource = "alex"
+        }
+        def e:CalEvent (model.event(id))
+        focused = (p + "-chip-" + id)
+        this.say(("Created " + (this.evLabel(e))))
     }
 
     ; What the pointer looks like over `id`.
@@ -2545,6 +2806,14 @@ class EcBoard {
                     return "crosshair"
                 }
                 return "default"
+            }
+            if ((UiTree.beginsWith(id (p + "-band-"))) && model.canMove) {
+                return "grab"
+            }
+        }
+        if (view == "month") {
+            if ((UiTree.beginsWith(id (p + "-chip-"))) && model.canMove) {
+                return "grab"
             }
         }
         return ""
@@ -2606,12 +2875,66 @@ class EcBoard {
             }
             return false
         }
+        ; A focused month chip or all-day bar: the arrows move it by days.
+        if ((UiTree.beginsWith(focused (p + "-chip-"))) || (UiTree.beginsWith(focused (p + "-band-")))) {
+            return (this.keyDays(k))
+        }
         ; A focused event in a time grid: the keyboard's move and resize.
         def ev:string (this.eventIdOf(focused))
         if (((strlen ev) > 0) && (this.isGrid())) {
             return (this.keyEvent(ev k shift))
         }
         return false
+    }
+
+    ; ←/→ a day (the other way in Arabic), ↑/↓ a week — in a month; in the
+    ; all-day band of a time grid ←/→ only.
+    fn keyDays:boolean (k:string) {
+        def band:boolean (UiTree.beginsWith(focused (p + "-band-")))
+        def id:string (this.chipEventId(focused))
+        if band {
+            id = (this.after(focused (p + "-band-")))
+        }
+        def d:int 0
+        if (k == "ArrowRight") {
+            d = 1
+        }
+        if (k == "ArrowLeft") {
+            d = -1
+        }
+        if (EcI18n.isRtl(lang)) {
+            d = (0 - d)
+        }
+        if (band == false) {
+            if (k == "ArrowDown") {
+                d = 7
+            }
+            if (k == "ArrowUp") {
+                d = -7
+            }
+        }
+        if (d == 0) {
+            return false
+        }
+        if ((model.moveDaysBy(id d)) == false) {
+            if (model.canMove == false) {
+                this.say("Moving is off")
+            }
+            return true
+        }
+        def e:CalEvent (model.event(id))
+        if band {
+            focused = (p + "-band-" + id)
+        } {
+            focused = (p + "-chip-" + id)
+            ; Off the six weeks shown: the month follows it.
+            def start:int (this.monthStart())
+            if ((e.startDay < start) || (e.startDay > (start + 41))) {
+                cursor = e.startDay
+            }
+        }
+        this.say(("Moved " + (this.evLabel(e))))
+        return true
     }
 
     fn keyEvent:boolean (ev:string k:string shift:boolean) {

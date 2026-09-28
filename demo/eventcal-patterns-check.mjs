@@ -323,6 +323,131 @@ console.log("Pattern A: drag to move, resize and create in a week");
   ok("a click without travel does not move it, it focuses it", (() => { click(d, "ea-ev-e3"); return d.focused === "ea-ev-e3" && `${e3.startDay}/${e3.startMin}` === was; })());
 }
 
+console.log("Pattern A: drag in the month");
+{
+  // From a point inside `id` to the centre of day `day`'s cell, in steps, as
+  // a mouse would; `finish` false leaves the gesture in the air.
+  const dragTo = (d, id, day, finish = true, fx = 0.3) => {
+    d.displayListJson();
+    const e = byId(d, id);
+    if (!e) throw new Error("not drawn: " + id);
+    const x = e.calculatedX + e.calculatedWidth * fx, y = e.calculatedY + e.calculatedHeight / 2;
+    const cell = byId(d, "ea-cell-" + day);
+    const [tx, ty] = centre(cell);
+    d.pointerDown(d.hitId(x, y), x, y);
+    for (let i = 1; i <= 12; i++) { d.pointerMove(x + ((tx - x) * i) / 12, y + ((ty - y) * i) / 12); d.displayListJson(); }
+    if (finish) { d.pointerUp(); d.displayListJson(); }
+  };
+  let d = fresh();
+  const e1 = ev(A(d), "e1");
+  dragTo(d, "ea-chip-e1", MON + 2, false);
+  const ghost = withClass(d, "eb-ghost")[0];
+  ok("mid-drag a ghost of the chip follows the pointer", !!ghost && text(ghost).startsWith("Team s") && !ghost.id);
+  const tcell = byId(d, "ea-cell-" + (MON + 2));
+  ok("under the pointer", ghost && Math.abs(ghost.calculatedY + ghost.calculatedHeight / 2 - centre(tcell)[1]) < 14, ghost && `${ghost.calculatedY} vs ${centre(tcell)[1]}`);
+  const shade = withClass(d, "eb-shade-target");
+  ok("the target day is highlighted", shade.length === 1 && Math.abs(shade[0].calculatedX - tcell.calculatedX) < 2, shade.map((e) => e.calculatedX).join(","));
+  ok("the chip itself stays, dimmed", cls(byId(d, "ea-chip-e1")).includes("eb-chip-held"));
+  eq("and the event has not moved yet", e1.startDay, MON);
+  eq("the hit test looks through the ghost", d.hitId(...centre(tcell)), "ea-cell-" + (MON + 2));
+  d.pointerUp(); d.displayListJson();
+  eq("dropped on Wednesday it moves there", e1.startDay, MON + 2);
+  eq("keeping its time and length", `${e1.startMin}/${e1.endMin}/${e1.endDay}`, `540/570/${MON + 2}`);
+  ok("the ghost and the highlight go", withClass(d, "eb-ghost").length === 0 && withClass(d, "eb-shade-target").length === 0);
+  ok("announced", /^Moved Team sync, Wednesday, September 30, 2026, 9:00 AM - 9:30 AM/.test(statusA(d)), statusA(d));
+  eq("and the chip keeps the focus", d.focused, "ea-chip-e1");
+  dragTo(d, "ea-chip-e1", MON + 9);
+  eq("a week down and a day on", e1.startDay, MON + 9);
+
+  const off = ev(A(d), "e6");
+  const len = off.endDay - off.startDay;
+  dragTo(d, "ea-chip-e6", MON - 4, true, 0.8);
+  // Grabbed on its second day (Friday Oct 2) and dropped on Thursday Sep 24:
+  // the bar moves eight days back and keeps both its days.
+  eq("an all-day bar moves by whole days from where it was held", `${off.startDay}/${off.endDay}`, `${MON - 5}/${MON - 5 + len}`);
+  const e2 = ev(A(d), "e2"), e5 = ev(A(d), "e5");
+  dragTo(d, "ea-chip-e2", MON + 3);
+  eq("Design review (the avatars chip) drags", `${e2.startDay}/${e2.startMin}`, `${MON + 3}/660`);
+  dragTo(d, "ea-chip-e5", MON + 5);
+  eq("Client call (the 30m chip) drags", `${e5.startDay}/${e5.startMin}`, `${MON + 5}/840`);
+
+  d = fresh();
+  dragTo(d, "ea-chip-e3", MON + 5, false);
+  d.keyWith("Escape", false, false); d.pointerUp(); d.displayListJson();
+  eq("Escape cancels: the event stays", ev(A(d), "e3").startDay, MON + 2);
+  ok("and the ghost is gone", withClass(d, "eb-ghost").length === 0);
+  click(d, "ea-chip-e3");
+  ok("a click without travel still selects the chip", d.focused === "ea-chip-e3" && ev(A(d), "e3").startDay === MON + 2);
+
+  d = fresh();
+  toggle(d, "behavior", "move");
+  click(d, "ea-title");
+  dragTo(d, "ea-chip-e3", MON + 5, false);
+  ok("drag to move off: no ghost", withClass(d, "eb-ghost").length === 0);
+  d.pointerUp(); d.displayListJson();
+  eq("and nothing moves", ev(A(d), "e3").startDay, MON + 2);
+
+  d = fresh();
+  const n = A(d).model.events.length;
+  const from = byId(d, "ea-cell-" + (MON - 20));
+  const [fx, fy] = centre(from);
+  const to = byId(d, "ea-cell-" + (MON - 18));
+  d.pointerDown(d.hitId(fx, fy - 20), fx, fy - 20);
+  for (let i = 1; i <= 8; i++) { d.pointerMove(fx + ((centre(to)[0] - fx) * i) / 8, fy - 20); d.displayListJson(); }
+  eq("drag to create sweeps a range of days", withClass(d, "eb-shade-target").length, 3);
+  d.pointerUp(); d.displayListJson();
+  const made = A(d).model.events[A(d).model.events.length - 1];
+  ok("dropped, it is an all-day event over them", A(d).model.events.length === n + 1 && made.allDay && made.startDay === MON - 20 && made.endDay === MON - 18,
+    JSON.stringify([made.allDay, made.startDay, made.endDay]));
+  ok("announced", /^Created New event/.test(statusA(d)), statusA(d));
+  const one = byId(d, "ea-cell-" + (MON - 13));
+  const [ox, oy] = centre(one);
+  d.pointerDown(d.hitId(ox, oy - 20), ox, oy - 20);
+  for (let i = 1; i <= 4; i++) d.pointerMove(ox + 3 * i, oy - 20);
+  d.pointerUp(); d.displayListJson();
+  const one2 = A(d).model.events[A(d).model.events.length - 1];
+  eq("one day swept is an hour at 9:00", `${one2.startDay}/${one2.startMin}/${one2.endMin}/${one2.allDay}`, `${MON - 13}/540/600/false`);
+  d = fresh();
+  toggle(d, "behavior", "create");
+  click(d, "ea-title");
+  const n2 = A(d).model.events.length;
+  const [cx, cy] = centre(byId(d, "ea-cell-" + (MON - 20)));
+  d.pointerDown(d.hitId(cx, cy - 20), cx, cy - 20);
+  for (let i = 1; i <= 6; i++) d.pointerMove(cx + 20 * i, cy - 20);
+  d.pointerUp(); d.displayListJson();
+  eq("drag to create off: nothing", A(d).model.events.length, n2);
+
+  d = fresh();
+  click(d, "ea-chip-e1");
+  d.keyWith("ArrowRight", false, false); d.displayListJson();
+  eq("the keyboard: ArrowRight moves a chip a day", ev(A(d), "e1").startDay, MON + 1);
+  d.keyWith("ArrowDown", false, false); d.displayListJson();
+  eq("ArrowDown a week", ev(A(d), "e1").startDay, MON + 8);
+  eq("the time stays", ev(A(d), "e1").startMin, 540);
+  eq("the focus stays on it", d.focused, "ea-chip-e1");
+  ok("announced", /^Moved Team sync, Tuesday, October 6/.test(statusA(d)), statusA(d));
+  for (let i = 0; i < 3; i++) d.keyWith("ArrowDown", false, false);
+  d.displayListJson();
+  ok("moved past the six weeks, the month follows it", text(byId(d, "ea-title")) === "October 2026" && !!byId(d, "ea-chip-e1"), text(byId(d, "ea-title")));
+
+  d = fresh();
+  openSettings(d, "region");
+  choose(d, "lang", "ar");
+  click(d, "ea-chip-e1");
+  d.keyWith("ArrowLeft", false, false);
+  eq("in Arabic ArrowLeft is the next day", ev(A(d), "e1").startDay, MON + 1);
+  dragTo(d, "ea-chip-e1", MON + 3);
+  eq("and a drag in Arabic lands on the cell dropped on", ev(A(d), "e1").startDay, MON + 3);
+
+  d = fresh();
+  pickView(d, "week");
+  const w = byId(d, "ea-col-2").calculatedWidth;
+  drag(d, "ea-band-e6", -w, 0);
+  eq("in a week, the all-day bar drags along the band by days", `${ev(A(d), "e6").startDay}/${ev(A(d), "e6").endDay}`, `${MON + 2}/${MON + 3}`);
+  d.keyWith("ArrowRight", false, false);
+  eq("and moves a day from the keyboard", ev(A(d), "e6").startDay, MON + 3);
+}
+
 console.log("Pattern A: the drag snap is the one set");
 {
   for (const [snap, want] of [["5", 735], ["30", 750]]) {

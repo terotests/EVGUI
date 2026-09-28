@@ -2108,6 +2108,7 @@ window.__ecBox = (id) => {
   const e = f(eventcal.root);
   return e ? { x: e.calculatedX, y: e.calculatedY, w: e.calculatedWidth, h: e.calculatedHeight, pw: eventcal.pageW } : null;
 };
+window.__ecEvents = (which) => Array.from((which === 2 ? eventcal.boardB : eventcal.boardA).model.events).map((e) => ({ id: e.id, day: e.startDay, end: e.endDay, s: e.startMin, e: e.endMin, res: e.resource }));
 window.__ecHit = (x, y) => eventcal.hitId(x, y);
 window.__ecState = () => ({ focus: eventcal.focused, a: eventcal.statusOf(1), b: eventcal.statusOf(2), view: eventcal.boardA.view, lang: eventcal.boardA.lang });
 const NARROW_AT = 600;

@@ -592,6 +592,7 @@
 /* --- the month -------------------------------------------------------------------- */
 
 .eb-month {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex-wrap: nowrap;
@@ -636,6 +637,17 @@
 }
 .eb-mbg { position: absolute; left: 0px; top: 0px; }
 .eb-shade { position: absolute; background-color: #f7f7f8; }
+/* The days a month drag would land on. */
+.eb-shade-target { background-color: #eef2ff; border: 1px solid #a5b4fc; }
+/* A chip while its ghost travels, and the ghost. */
+.eb-chip-held { opacity: 0.4; }
+.eb-ghost {
+  opacity: 0.95;
+  shadow-color: rgba(0, 0, 0, 0.22);
+  shadow-radius: 12px;
+  shadow-offset-y: 6px;
+  cursor: grabbing;
+}
 
 /* Hairlines. EVG draws a border on all four sides or none, so a rule
  * between two things is a 1px box of its own. */
