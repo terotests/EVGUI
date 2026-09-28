@@ -102,6 +102,8 @@ class MenuCtl extends UiCtl {
     def rowDisabled:[boolean]
     def rowIsSub:[boolean]
     def rowItem:[UiItem]
+    ; "" / "checkbox" / "radio" / "separator", as UiItem.kind.
+    def rowKind:[string]
 
     Constructor () {
         rootEl = (EVGElement.createDiv())
@@ -123,6 +125,8 @@ class MenuCtl extends UiCtl {
         rowIsSub = e5
         def e6:[UiItem]
         rowItem = e6
+        def e7:[string]
+        rowKind = e7
     }
 
     fn addItem:void (itemValue:string itemName:string itemDisabled:boolean) {
@@ -152,6 +156,106 @@ class MenuCtl extends UiCtl {
         it.disabled = itemDisabled
         push parent.kids it
         return it
+    }
+
+    ; --- checkable rows and separators ------------------------------------------
+    ; Radix's CheckboxItem, RadioItem and Separator. A checkbox toggles and a
+    ; radio checks itself (and unchecks its group) when chosen, and choosing
+    ; either CLOSES the menu, as every Radix item does unless the app prevents
+    ; it. A separator is a row with no value to choose: never focused, skipped
+    ; by the arrows, published as role separator.
+
+    fn addCheckbox:UiItem (itemValue:string itemName:string isChecked:boolean) {
+        def it (new UiItem())
+        it.value = itemValue
+        it.name = itemName
+        it.kind = "checkbox"
+        it.checked = isChecked
+        push items it
+        return it
+    }
+
+    fn addRadio:UiItem (itemValue:string itemName:string groupName:string isChecked:boolean) {
+        def it (new UiItem())
+        it.value = itemValue
+        it.name = itemName
+        it.kind = "radio"
+        it.group = groupName
+        it.checked = isChecked
+        push items it
+        return it
+    }
+
+    sfn addKidSeparator:void (parent:UiItem) {
+        def it (new UiItem())
+        it.value = ("sep-" + (array_length parent.kids))
+        it.kind = "separator"
+        push parent.kids it
+    }
+
+    fn addSeparator:void () {
+        def it (new UiItem())
+        it.value = ("sep-" + (array_length items))
+        it.kind = "separator"
+        push items it
+    }
+
+    ; Check `it` and uncheck its group's other radios, in whichever list holds it.
+    sfn checkRadioIn:boolean (list:[UiItem] it:UiItem) {
+        def found:boolean false
+        def i:int 0
+        while (i < (array_length list)) {
+            if ((itemAt list i) == it) {
+                found = true
+            }
+            i = (i + 1)
+        }
+        if found {
+            def j:int 0
+            while (j < (array_length list)) {
+                def x:UiItem (itemAt list j)
+                if ((x.kind == "radio") && (x.group == it.group)) {
+                    x.checked = (x == it)
+                }
+                j = (j + 1)
+            }
+            return true
+        }
+        def k:int 0
+        while (k < (array_length list)) {
+            def y:UiItem (itemAt list k)
+            if (MenuCtl.checkRadioIn(y.kids it)) {
+                return true
+            }
+            k = (k + 1)
+        }
+        return false
+    }
+
+    ; The value of the checked radio in `groupName` among the root items.
+    fn radioValue:string (groupName:string) {
+        def i:int 0
+        while (i < (array_length items)) {
+            def it:UiItem (itemAt items i)
+            if (((it.kind == "radio") && (it.group == groupName)) && it.checked) {
+                return it.value
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    ; A root checkbox's (or radio's) aria-checked, by value.
+    fn isChecked:boolean (itemValue:string) {
+        def i:int 0
+        while (i < (array_length items)) {
+            def it:UiItem (itemAt items i)
+            if (it.value == itemValue) {
+                return it.checked
+            }
+            i = (i + 1)
+        }
+        return false
     }
 
     fn baseClass:string () {
@@ -233,6 +337,8 @@ class MenuCtl extends UiCtl {
         rowIsSub = e5
         def e6:[UiItem]
         rowItem = e6
+        def e7:[string]
+        rowKind = e7
 
         def trig:EVGElement (unwrap triggerEl)
         trig.id = (this.triggerTid())
@@ -286,13 +392,26 @@ class MenuCtl extends UiCtl {
             if it.disabled {
                 UiTree.addClass(el (base + "-item-disabled"))
             }
+            def isSep:boolean (it.kind == "separator")
+            if isSep {
+                el.className = (base + "-separator")
+            }
+            if ((it.kind == "checkbox") || (it.kind == "radio")) {
+                def cw:string "unchecked"
+                if it.checked {
+                    cw = "checked"
+                }
+                UiTree.setState(el (base + "-item") cw)
+            }
             UiTree.leafText(el it.name)
             surface.addChild(el)
 
             push rowTid myTid
             push rowOwner ownerTid
             push rowName it.name
-            push rowDisabled it.disabled
+            ; A separator counts as disabled for every scan: nothing lands on it.
+            push rowDisabled (it.disabled || isSep)
+            push rowKind it.kind
             push rowIsSub isSub
             push rowItem it
 
@@ -535,6 +654,13 @@ class MenuCtl extends UiCtl {
         if (itemAt rowIsSub idx) {
             return (this.openSub(target true))
         }
+        def chosen:UiItem (itemAt rowItem idx)
+        if (chosen.kind == "checkbox") {
+            chosen.checked = (chosen.checked == false)
+        }
+        if (chosen.kind == "radio") {
+            MenuCtl.checkRadioIn(items chosen)
+        }
         return (this.closeMenu())
     }
 
@@ -594,6 +720,36 @@ class MenuCtl extends UiCtl {
             return (this.closeSub())
         }
 
+        ; Home/End (and PageUp/PageDown, which Radix's roving group reads the
+        ; same way): the first or last enabled row of the focused row's menu.
+        def ends:int 0
+        if ((key == "Home") || (key == "PageUp")) {
+            ends = 1
+        }
+        if ((key == "End") || (key == "PageDown")) {
+            ends = -1
+        }
+        if (ends != 0) {
+            def own:string (this.menuAround(target))
+            def at:int -1
+            if (ends > 0) {
+                at = (this.scanIn(own (this.firstOf(own)) 1))
+            } {
+                at = (this.scanIn(own (this.lastOf(own)) -1))
+            }
+            if (at < 0) {
+                return ""
+            }
+            activeTid = (itemAt rowTid at)
+            return activeTid
+        }
+        ; Typeahead, one character at a time: the next enabled row after the
+        ; focused one whose name starts with it, wrapping — pressing the same
+        ; letter again walks the rows that share it.
+        if (((strlen key) == 1) && (key != " ")) {
+            return (this.typeahead(target key))
+        }
+
         def delta:int 0
         if (key == "ArrowDown") {
             delta = 1
@@ -635,6 +791,43 @@ class MenuCtl extends UiCtl {
         }
         activeTid = (itemAt rowTid landed)
         return activeTid
+    }
+
+    ; The menu a key on `target` walks: the menu of the focused row, or the
+    ; surface itself when focus is on it.
+    fn menuAround:string (target:string) {
+        def ri:int (this.rowIndexOf(target))
+        if (ri >= 0) {
+            return (itemAt rowOwner ri)
+        }
+        return (this.activeOwner())
+    }
+
+    fn typeahead:string (target:string key:string) {
+        def own:string (this.menuAround(target))
+        def low:string (to_lowercase key)
+        def n:int (array_length rowTid)
+        def from:int (this.rowIndexOf(target))
+        def step:int 1
+        while (step <= n) {
+            def i:int ((from + step) % n)
+            if (i < 0) {
+                i = (i + n)
+            }
+            if ((itemAt rowOwner i) == own) {
+                if ((itemAt rowDisabled i) == false) {
+                    def nm:string (itemAt rowName i)
+                    if ((strlen nm) > 0) {
+                        if ((to_lowercase (substring nm 0 1)) == low) {
+                            activeTid = (itemAt rowTid i)
+                            return activeTid
+                        }
+                    }
+                }
+            }
+            step = (step + 1)
+        }
+        return ""
     }
 
     ; --- the pointer -----------------------------------------------------------
@@ -804,9 +997,33 @@ class MenuCtl extends UiCtl {
         def i:int 0
         while (i < (array_length rowTid)) {
             def rtid:string (itemAt rowTid i)
-            def row:UiRow (UiRow.of(rtid (EVGA11yRole.menuItem()) (itemAt rowName i)))
+            def kindOf:string (itemAt rowKind i)
+            def role:int (EVGA11yRole.menuItem())
+            if (kindOf == "checkbox") {
+                role = (EVGA11yRole.menuItemCheckbox())
+            }
+            if (kindOf == "radio") {
+                role = (EVGA11yRole.menuItemRadio())
+            }
+            def rowNm:string (itemAt rowName i)
+            if (kindOf == "separator") {
+                role = (EVGA11yRole.separator())
+            }
+            def row:UiRow (UiRow.of(rtid role rowNm))
             row.parentTid = (itemAt rowOwner i)
             row.disabled = (itemAt rowDisabled i)
+            if (kindOf == "separator") {
+                row.disabled = false
+                row.orientation = "horizontal"
+            }
+            if ((kindOf == "checkbox") || (kindOf == "radio")) {
+                def src:UiItem (itemAt rowItem i)
+                if src.checked {
+                    row.checked = (EVGA11yTri.yes())
+                } {
+                    row.checked = (EVGA11yTri.no())
+                }
+            }
             if ((itemAt rowDisabled i) == false) {
                 row.focusable = true
                 ; Each MENU keeps its own roving tab stop, and a submenu is a

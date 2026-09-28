@@ -18,16 +18,41 @@
 ;   open       focus lands on the CONTENT, not on the first item — nothing is
 ;              announced until the user arrows in, exactly as a dropdown does.
 ;   ArrowRight closes this menu and opens the NEXT one, with focus on its
-;              content. It does not wrap.
+;              content. It wraps: Radix's Menubar has `loop` on by default
+;              (the two-menu fixture never reached the end, so this is read
+;              off @radix-ui/react-menubar rather than a trace).
 ;   ArrowDown  from the content focuses the first item; the item takes the tab
 ;              stop and the content gives it up.
 ;   Escape     closes and returns focus to the trigger, which keeps the tab
 ;              stop so Tab resumes from where the user was.
 ;   an item    closes the menu and returns focus to the trigger.
+;
+; Read off @radix-ui/react-menubar's source, for the bar's keyboard with no
+; menu open (none of it reached by the two traces above):
+;
+;   roving     ArrowLeft/ArrowRight move focus between the triggers, wrapping;
+;              Home/End go to the ends. Nothing opens.
+;   keyboard   Enter, Space or ArrowDown on a trigger opens its menu and — the
+;   open       difference from a pointer open — focus goes on to the FIRST
+;              item (`wasKeyboardTriggerOpenRef`).
+;   hover      with a menu open, the pointer entering another trigger opens
+;              that one instead.
+;
+; --- MENUS WITH A MenuCtl -----------------------------------------------------
+; A menu may carry a `MenuCtl` (`attachMenu`) instead of a flat item list, and
+; that is how Radix is built too: Menubar.Menu is a Menu primitive, and the
+; inside of an open menu — the arrows, Home/End, typeahead, submenus with their
+; hover delay, checkbox and radio items, separators — is the MenuCtl's, which
+; the dropdown specs measure. The bar keeps what is the bar's: which menu is
+; open, the triggers' roving focus, and a sideways arrow that the menu did not
+; use (not a sub-trigger's ArrowRight, not ArrowLeft inside a submenu) moving
+; the open menu. The MenuCtl's tid is `<bar>-<menu>`, so its trigger, content
+; and item tids are exactly the ones this controller already publishes.
 ; =============================================================================
 
 Import "UiCtl.rgr"
 Import "UiTree.rgr"
+Import "MenuCtl.rgr"
 Import "pkg:evg/EVGElement.rgr"
 Import "pkg:evg/EVGA11yTree.rgr"
 
@@ -39,6 +64,9 @@ class UiMenu {
     def items:[UiItem]
     def triggerEl:EVGElement
     def contentEl:EVGElement
+    ; Does `menu` own this menu's inside? See MENUS WITH A MenuCtl above.
+    def hasMenu:boolean false
+    def menu:MenuCtl (new MenuCtl())
 
     Constructor () {
         triggerEl = (EVGElement.createDiv())
@@ -58,6 +86,8 @@ class MenubarCtl extends UiCtl {
     def currentValue:string ""
     ; The focused item inside the open menu, "" while focus is on the content.
     def activeItem:string ""
+    ; Radix Menubar's `loop`: the sideways arrows wrap at the ends of the bar.
+    def loop:boolean true
 
     Constructor () {
         rootEl = (EVGElement.createDiv())
@@ -84,6 +114,43 @@ class MenubarCtl extends UiCtl {
         it.name = itemName
         it.disabled = itemDisabled
         push m.items it
+    }
+
+    ; Hand this menu's inside to a MenuCtl, and return it for the caller to
+    ; fill (addItem, addSub, addCheckbox, addRadio, addSeparator). Call it
+    ; after `tid` is set: the MenuCtl's tid is derived from it.
+    fn attachMenu:MenuCtl (menuValue:string) {
+        def i:int (this.indexOfMenu(menuValue))
+        def m:UiMenu (itemAt menus i)
+        m.hasMenu = true
+        m.menu.tid = ((tid + "-") + menuValue)
+        m.menu.name = m.name
+        def mc:MenuCtl m.menu
+        return mc
+    }
+
+    fn menuAt:UiMenu (menuValue:string) {
+        def i:int (this.indexOfMenu(menuValue))
+        return (itemAt menus i)
+    }
+
+    ; Does `target` belong to the inside of this MenuCtl-backed menu?
+    fn insideMenu:boolean (m:UiMenu target:string) {
+        if (m.hasMenu == false) {
+            return false
+        }
+        if (target == (this.contentTid(m.value))) {
+            return true
+        }
+        if ((m.menu.rowIndexOf(target)) >= 0) {
+            return true
+        }
+        if m.menu.open {
+            if (m.menu.isFocusable(target)) {
+                return (target != (this.triggerTid(m.value)))
+            }
+        }
+        return false
     }
 
     ; --- ids --------------------------------------------------------------------
@@ -121,6 +188,9 @@ class MenubarCtl extends UiCtl {
                 return m.value
             }
             if (target == (this.contentTid(m.value))) {
+                return m.value
+            }
+            if (this.insideMenu(m target)) {
                 return m.value
             }
             def j:int 0
@@ -163,16 +233,51 @@ class MenubarCtl extends UiCtl {
     ; --- opening and closing -----------------------------------------------------
 
     fn openMenu:string (menuValue:string) {
+        this.closeInner()
         openValue = menuValue
         currentValue = menuValue
         activeItem = ""
+        def om:UiMenu (this.menuAt(menuValue))
+        if om.hasMenu {
+            om.menu.openMenu()
+        }
         this.build()
         ; Focus lands on the content. Not on the first item: the reference
         ; announces the menu, and says nothing about a row until one is chosen.
         return (this.contentTid(menuValue))
     }
 
+    ; Shut the open menu's MenuCtl, if it has one. The bar's own state is the
+    ; caller's to change.
+    fn closeInner:void () {
+        if ((strlen openValue) == 0) {
+            return
+        }
+        def i:int (this.indexOfMenu(openValue))
+        if (i < 0) {
+            return
+        }
+        def m:UiMenu (itemAt menus i)
+        if m.hasMenu {
+            if m.menu.open {
+                m.menu.closeMenu()
+            }
+        }
+    }
+
+    ; A keyboard open: open, then put focus on the first enabled item — or
+    ; leave it on the content when there is none.
+    fn openFromKey:string (menuValue:string) {
+        def landed:string (this.openMenu(menuValue))
+        def next:string (this.keyDown(landed "ArrowDown"))
+        if ((strlen next) > 0) {
+            return next
+        }
+        return landed
+    }
+
     fn closeMenu:string () {
+        this.closeInner()
         def was:string openValue
         openValue = ""
         activeItem = ""
@@ -202,6 +307,26 @@ class MenubarCtl extends UiCtl {
                 return (this.closeMenu())
             }
             return (this.openMenu(menuValue))
+        }
+        if m.hasMenu {
+            if (menuValue != openValue) {
+                return ""
+            }
+            ; Through the MenuCtl: a sub-trigger opens its submenu and leaves
+            ; everything open; a leaf (checkbox and radio included, which it
+            ; toggles or checks first) closes, and then the bar does too.
+            def r:string (m.menu.activate(target))
+            if m.menu.open {
+                if ((strlen r) > 0) {
+                    activeItem = r
+                }
+                this.build()
+                return r
+            }
+            if ((strlen r) == 0) {
+                return ""
+            }
+            return (this.closeMenu())
         }
         def itemValue:string (this.itemOf(target))
         if ((strlen itemValue) > 0) {
@@ -249,15 +374,48 @@ class MenubarCtl extends UiCtl {
         if (at < 0) {
             return ""
         }
+        def next:int (this.nextMenu(at delta))
+        if (next < 0) {
+            return ""
+        }
+        def m:UiMenu (itemAt menus next)
+        return (this.openMenu(m.value))
+    }
+
+    ; The next enabled menu from index `at`, stepping by `delta` and wrapping
+    ; when `loop` is on. -1 when there is none (or only `at` itself).
+    fn nextMenu:int (at:int delta:int) {
+        def n:int (array_length menus)
         def next:int (at + delta)
-        while ((next >= 0) && (next < (array_length menus))) {
+        def tries:int 0
+        while (tries < n) {
+            if (loop) {
+                next = (((next % n) + n) % n)
+            }
+            if ((next < 0) || (next >= n)) {
+                return -1
+            }
+            if (next == at) {
+                return -1
+            }
             def m:UiMenu (itemAt menus next)
             if (m.disabled == false) {
-                return (this.openMenu(m.value))
+                return next
             }
             next = (next + delta)
+            tries = (tries + 1)
         }
-        return ""
+        return -1
+    }
+
+    ; Roving focus along a CLOSED bar: focus moves, nothing opens.
+    fn roveTo:string (index:int) {
+        if (index < 0) {
+            return ""
+        }
+        def m:UiMenu (itemAt menus index)
+        currentValue = m.value
+        return (this.triggerTid(m.value))
     }
 
     fn keyDown:string (target:string key:string) {
@@ -274,9 +432,62 @@ class MenubarCtl extends UiCtl {
             }
             return ""
         }
+        def onTrigger:boolean (target == (this.triggerTid(menuValue)))
+        def mAt:int (this.indexOfMenu(menuValue))
+        def mm:UiMenu (itemAt menus mAt)
         if ((strlen openValue) == 0) {
+            if onTrigger {
+                if (key == "ArrowRight") {
+                    return (this.roveTo((this.nextMenu(mAt 1))))
+                }
+                if (key == "ArrowLeft") {
+                    return (this.roveTo((this.nextMenu(mAt -1))))
+                }
+                if (key == "Home") {
+                    return (this.roveTo((this.nextMenu(-1 1))))
+                }
+                if (key == "End") {
+                    return (this.roveTo((this.nextMenu((array_length menus) -1))))
+                }
+                if mm.disabled {
+                    return ""
+                }
+                if ((UiCtl.activatesOn(key)) || (key == "ArrowDown")) {
+                    return (this.openFromKey(menuValue))
+                }
+                return ""
+            }
             if (UiCtl.activatesOn(key)) {
                 return (this.activate(target))
+            }
+            return ""
+        }
+        if onTrigger {
+            if ((key == "ArrowDown") && (menuValue == openValue)) {
+                return (this.keyDown((this.contentTid(menuValue)) "ArrowDown"))
+            }
+            if ((key == "ArrowDown") || (UiCtl.activatesOn(key))) {
+                if (menuValue != openValue) {
+                    return (this.openFromKey(menuValue))
+                }
+            }
+        }
+        if (mm.hasMenu && (onTrigger == false)) {
+            if (UiCtl.activatesOn(key)) {
+                return (this.activate(target))
+            }
+            def r:string (mm.menu.keyDown(target key))
+            if ((strlen r) > 0) {
+                activeItem = r
+                this.build()
+                return r
+            }
+            ; A sideways arrow the menu had no use for moves the bar.
+            if (key == "ArrowRight") {
+                return (this.stepMenu(1))
+            }
+            if (key == "ArrowLeft") {
+                return (this.stepMenu(-1))
             }
             return ""
         }
@@ -333,6 +544,71 @@ class MenubarCtl extends UiCtl {
         return (this.itemTid(openValue hit.value))
     }
 
+    ; --- the pointer ----------------------------------------------------------------
+
+    ; With a menu open, the pointer entering another trigger opens that one
+    ; (focus to its content, as Radix's does after focusing the trigger); on a
+    ; row of a MenuCtl-backed menu it is that MenuCtl's hover — focus the row,
+    ; start a submenu's clock. Returns the new focus, "" for no change.
+    fn hover:string (target:string) {
+        if disabled {
+            return ""
+        }
+        if ((strlen openValue) == 0) {
+            return ""
+        }
+        def menuValue:string (this.menuOf(target))
+        if ((strlen menuValue) == 0) {
+            return ""
+        }
+        def m:UiMenu (this.menuAt(menuValue))
+        if (target == (this.triggerTid(menuValue))) {
+            if m.disabled {
+                return ""
+            }
+            if (menuValue == openValue) {
+                return ""
+            }
+            return (this.openMenu(menuValue))
+        }
+        if (m.hasMenu && (menuValue == openValue)) {
+            def r:string (m.menu.hover(target))
+            if ((strlen r) > 0) {
+                activeItem = r
+            }
+            return r
+        }
+        return ""
+    }
+
+    ; The open MenuCtl's clock (a submenu the pointer rests on opens after its
+    ; delay). The new focus when one opened, else "".
+    fn tickCtl:string (dtMs:double) {
+        if ((strlen openValue) == 0) {
+            return ""
+        }
+        def m:UiMenu (this.menuAt(openValue))
+        if (m.hasMenu == false) {
+            return ""
+        }
+        def r:string (m.menu.tickCtl(dtMs))
+        if ((strlen r) > 0) {
+            activeItem = r
+        }
+        return r
+    }
+
+    fn pendingSub:boolean () {
+        if ((strlen openValue) == 0) {
+            return false
+        }
+        def m:UiMenu (this.menuAt(openValue))
+        if (m.hasMenu == false) {
+            return false
+        }
+        return ((strlen m.menu.pendingTid) > 0)
+    }
+
     ; --- the tree -----------------------------------------------------------------
 
     fn build:void () {
@@ -365,6 +641,18 @@ class MenubarCtl extends UiCtl {
                 UiTree.setState(content "ui-menubar-content" word)
                 UiTree.surface(content "bottom" "start")
                 UiTree.clearChildren(content)
+                if m.hasMenu {
+                    ; The MenuCtl's own surface, rows and submenus, moved under
+                    ; this root; its root element is never drawn.
+                    m.menu.build()
+                    def inner:EVGElement (unwrap m.menu.contentEl)
+                    def kids:[EVGElement] inner.children
+                    def ki:int 0
+                    while (ki < (array_length kids)) {
+                        content.addChild((itemAt kids ki))
+                        ki = (ki + 1)
+                    }
+                }
                 def j:int 0
                 while (j < (array_length m.items)) {
                     def it:UiItem (itemAt m.items j)
@@ -392,6 +680,17 @@ class MenubarCtl extends UiCtl {
             def m:UiMenu (itemAt menus i)
             push a (this.triggerTid(m.value))
             push a (this.contentTid(m.value))
+            if m.hasMenu {
+                def inner:[string] (m.menu.tids())
+                def q:int 0
+                while (q < (array_length inner)) {
+                    def t:string (itemAt inner q)
+                    if (((t != m.menu.tid) && (t != (this.triggerTid(m.value)))) && (t != (this.contentTid(m.value)))) {
+                        push a t
+                    }
+                    q = (q + 1)
+                }
+            }
             def j:int 0
             while (j < (array_length m.items)) {
                 def it:UiItem (itemAt m.items j)
@@ -425,6 +724,9 @@ class MenubarCtl extends UiCtl {
         if (target == (this.contentTid(menuValue))) {
             return true
         }
+        if m.hasMenu {
+            return (m.menu.isFocusable(target))
+        }
         def itemValue:string (this.itemOf(target))
         def j:int 0
         while (j < (array_length m.items)) {
@@ -438,6 +740,17 @@ class MenubarCtl extends UiCtl {
     }
 
     fn onFocus:void (target:string) {
+        def fm:string (this.menuOf(target))
+        if ((strlen fm) > 0) {
+            def m:UiMenu (this.menuAt(fm))
+            if (m.hasMenu && (this.insideMenu(m target))) {
+                m.menu.onFocus(target)
+                if (target != (this.contentTid(fm))) {
+                    activeItem = target
+                }
+                return
+            }
+        }
         def itemValue:string (this.itemOf(target))
         if ((strlen itemValue) > 0) {
             activeItem = itemValue
@@ -486,6 +799,16 @@ class MenubarCtl extends UiCtl {
                 contentRow.focusable = true
                 push out contentRow
 
+                if m.hasMenu {
+                    ; The MenuCtl's rows after its trigger and content, which
+                    ; are this bar's. Non-modal, as Radix's menubar menus are.
+                    def inner:[UiRow] (m.menu.rows())
+                    def q:int 2
+                    while (q < (array_length inner)) {
+                        push out (itemAt inner q)
+                        q = (q + 1)
+                    }
+                }
                 def j:int 0
                 while (j < (array_length m.items)) {
                     def it:UiItem (itemAt m.items j)

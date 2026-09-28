@@ -216,6 +216,15 @@ class UiItem {
     ; `contentEl` above is the surface they hang in. One list rather than a
     ; separate submenu class, so nesting is the same shape at every depth.
     def kids:[UiItem]
+    ; What sort of menu row this is: "" an ordinary item, "checkbox"
+    ; (menuitemcheckbox), "radio" (menuitemradio) or "separator" (not an item
+    ; at all: never focused, skipped by every key). Only MenuCtl reads these.
+    def kind:string ""
+    ; A checkbox's or radio's aria-checked.
+    def checked:boolean false
+    ; A radio's group: checking one unchecks the others in the same list with
+    ; the same group, as a Radix Menu.RadioGroup does.
+    def group:string ""
 
     Constructor () {
         el = (EVGElement.createDiv())

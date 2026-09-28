@@ -1,173 +1,248 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * The Radix menubar example's look, as an EVG stylesheet. Class-first: every
- * class here is one the tree literal in MenubarDemo.rgr writes, and the
- * literal itself carries no appearance at all.
+ * Menubar, as an EVG stylesheet: ReUI / shadcn's look in the neutral palette —
+ * a pill bar with a 1px #e5e5e5 edge, 14px medium triggers that turn #f5f5f5
+ * while their menu is open, and white menus with a border, a shadow, 4px of
+ * padding and 28px rows whose highlight is #f5f5f5. Measured off the two
+ * reference screenshots (bar 32px, menu 8px under its trigger and 4px left of
+ * it, rows 28px, separators edge to edge).
  *
- * EVGStyleSheet matches ONE class token per selector, so the compound classes
- * the demo writes ("mb-item mb-item-disabled") are matched by their own token
- * rather than by a compound selector. That limit is in gallery/ui/PLAN.md.
+ * Class-first, one token per selector (EVG has no descendant selectors).
+ * Which menu is open, which row is focused or hovered and which rows are
+ * checked are written by MenubarDemo; nothing here decides them.
  */
 
+/* --- the card page ------------------------------------------------------------ */
+
+.mb-cards {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  row-gap: 16px;
+  padding: 16px;
+  width: 100%;
+  background-color: #ffffff;
+}
+
+.mb-card {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  width: 48.5%;
+  border: 1px solid #e5e5e5;
+  border-radius: 14px;
+  background-color: #ffffff;
+  padding: 4px 4px 0 4px;
+  shadow-color: rgba(0, 0, 0, 0.04);
+  shadow-radius: 2px;
+  shadow-offset-y: 1px;
+}
+.mb-card-b { width: 100%; }
+
+/* The bar near the top, the room below it for the menus. */
+.mb-stage {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 44px 12px 16px 12px;
+  border: 1px solid #ececec;
+  border-radius: 10px;
+  background-color: #ffffff;
+}
+.mb-stage-a { height: 236px; }
+.mb-stage-b { height: 360px; }
+
+.mb-foot {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  height: 44px;
+  padding: 0 12px;
+}
+.mb-caption { color: #737373; font-size: 13px; line-height: 18px; }
+
+/* The first version's single-bar page, kept for the static API (the
+ * tree-literal test, the audit, render.mjs). */
 .mb-page {
   display: flex;
   flex-direction: column;
-  background-color: #6d5ce7;
+  background-color: #fafafa;
   padding: 40px;
   width: 100%;
   height: 100%;
 }
+/* The bar pushed to the bottom edge: the menus have no room below their
+ * triggers, and the overlay pass flips them upwards. */
+.mb-page-bottom { justify-content: flex-end; }
 
-/* The same page with the bar pushed to the bottom edge. Nothing else changes:
-   the menus then have no room below their triggers, and the overlay pass flips
-   them so they open upwards. It is here to make that visible rather than only
-   tested. */
-.mb-page-bottom {
-  justify-content: flex-end;
-}
-
-/* --- the bar ---------------------------------------------------------------- */
+/* --- the bar ------------------------------------------------------------------ */
 
 .mb-root {
   display: flex;
   flex-direction: row;
-  /* EVG's default is `wrap`, and it decides whether to wrap from the child's
-     width BEFORE that child's own fit-content shrink has happened — so every
-     menu still looked full-width at the moment the row was deciding, and each
-     one wrapped onto its own line. */
+  /* EVG's default is `wrap`, decided before each menu's fit-content shrink. */
   flex-wrap: nowrap;
-  background-color: #ffffff;
-  border-radius: 8px;
-  padding: 4px;
-  /* As wide as its four triggers: a fixed 320px left a white strip to the
-     right of "Profiles". */
+  align-items: center;
+  gap: 4px;
   width: fit-content;
-  height: 44px;
+  height: 32px;
+  padding: 3px;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  background-color: #ffffff;
+  shadow-color: rgba(0, 0, 0, 0.05);
+  shadow-radius: 2px;
+  shadow-offset-y: 1px;
 }
 
-/* fit-content, so a menu is as wide as its trigger and the four sit side by
-   side. Without it every one of them is as wide as the whole bar, the first
-   fills the row, and the rest wrap underneath — which is exactly what the bar
-   did before this existed. */
-.mb-menu { display: flex; flex-direction: column; width: fit-content; }
-.mb-dropdown-row { display: flex; flex-direction: row; gap: 14px; margin-top: 10px; }
+.mb-menu { display: flex; flex-direction: column; flex-wrap: nowrap; width: fit-content; }
+/* See the Anchor tag: the menu's edge 4px left of its trigger. */
+.mb-anchor { position: absolute; left: -4px; right: -4px; top: 0px; height: 24px; }
+/* A submenu's row and its surface, inside a menu: as wide as the menu. */
+.mb-submenu { width: 100%; }
 
 .mb-trigger {
-  color: #4c2889;
-  font-size: 15px;
-  font-weight: 600;
-  padding: 9px 14px;
-  border-radius: 6px;
+  color: #0a0a0a;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  height: 24px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  transition: background-color 120ms ease-out;
 }
-.mb-trigger-open { background-color: #ece7fd; }
+.mb-trigger:hover { background-color: #f5f5f5; }
+.mb-trigger:focus { background-color: #f5f5f5; }
+.mb-trigger-open { background-color: #f5f5f5; }
 
-/* --- a dropdown ------------------------------------------------------------- */
+/* --- a menu ------------------------------------------------------------------- */
 
+/* 8px under the trigger (shadcn's sideOffset), and 4px left of it (its
+ * alignOffset): the menu's edge lines up with the bar's. */
 .mb-content {
   display: flex;
   flex-direction: column;
-  background-color: #ffffff;
+  flex-wrap: nowrap;
+  width: 224px;
+  padding: 4px;
+  border: 1px solid #e5e5e5;
   border-radius: 8px;
-  padding: 6px;
-  width: 300px;
-}
-
-.mb-subcontent {
-  display: flex;
-  flex-direction: column;
   background-color: #ffffff;
-  border-radius: 8px;
-  padding: 6px;
-  width: 200px;
+  shadow-color: rgba(0, 0, 0, 0.1);
+  shadow-radius: 10px;
+  shadow-offset-y: 4px;
+  overlay-gap: 8;
+  /* Near the right edge, end-aligned under the trigger before shifting;
+     no room below, above. */
+  position-try-fallbacks: bottom end, top start, top end;
 }
-/* Radix's submenu: its FIRST ROW level with the row that opened it (so the
-   panel starts one padding above that row) and its edge just over the parent
-   panel's padding. Placed by edge rather than by side, which is why it is
-   only said where there is room for it to the right — on a phone the panel
-   keeps `overlay-side: right` and the collision pass slides it back on. */
-@media (min-width: 601px) {
-  .mb-subcontent {
-    left: calc(anchor(right) + 2px);
-    top: calc(anchor(top) - 6px);
-  }
-}
+.mb-content-sm { width: 146px; }
+/* ReUI's View menu is `w-64`. */
+.mb-content-lg { width: 256px; }
+/* Radix's submenu: no side offset, its top level with the sub-trigger's. */
+.mb-subcontent { width: 196px; overlay-gap: 0; position-try-fallbacks: left start; }
 
-/* No fixed height: a label longer than its column wraps, and a row that cannot
-   grow would paint the second line over the row beneath it. */
+.mb-group { display: flex; flex-direction: column; flex-wrap: nowrap; width: 100%; }
+
+/* 28px rows: 4px + a 20px line + 4px. No fixed height, so a label too long
+ * for its column wraps instead of painting over the row below. */
 .mb-item {
   display: flex;
   flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
-  padding: 7px 10px;
+  gap: 8px;
+  padding: 4px 8px;
   border-radius: 4px;
-}
-.mb-item-inset { padding: 7px 10px; }
-
-/* Fixed, not `fill`: EVG's `fill` resolves to the parent's full width rather
- * than to what the siblings leave, so a filled label pushes the shortcut onto
- * the next line. Measured, and the reason these are numbers. */
-.mb-label { color: #4c2889; font-size: 14px; width: 200px; }
-.mb-shortcut { color: #9d8bd4; font-size: 13px; text-align: right; width: 60px; }
-/* The submenu row's chevron: a real one, larger than the shortcut text, in
-   place of an ASCII ">". */
-.mb-chevron { font-size: 18px; color: #7c6bc4; }
-.mb-indicator { color: #4c2889; font-size: 13px; width: 22px; }
-
-/* Disabled is the one state visible in a still picture, and the reference makes
- * it grey rather than translucent, so this does too. */
-.mb-label-disabled { color: #b3a7d9; }
-
-.mb-separator {
-  background-color: #e6e0fb;
-  height: 1px;
   width: 100%;
-  margin-top: 5px;
-  margin-bottom: 5px;
+}
+.mb-item:hover { background-color: #f5f5f5; }
+.mb-item:focus { background-color: #f5f5f5; }
+/* A sub-trigger whose submenu is open stays highlighted. */
+.mb-item-open { background-color: #f5f5f5; }
+/* Checkbox and radio rows: the tick sits in the first 24px (`pl-8`). */
+.mb-item-inset { padding: 4px 8px 4px 8px; gap: 8px; }
+/* The disabled row does not highlight (and is never focused). */
+.mb-item-disabled:hover { background-color: rgba(0, 0, 0, 0); }
+/* Destructive: red text and icon, a red-tinted highlight. */
+.mb-item-destructive:hover { background-color: #fde6e7; }
+.mb-item-destructive:focus { background-color: #fde6e7; }
+
+.mb-label {
+  color: #0a0a0a;
+  font-size: 14px;
+  line-height: 20px;
+  flex-grow: 1;
+  flex-shrink: 1;
+}
+.mb-label-disabled { color: #a3a3a3; }
+.mb-label-destructive { color: #e7000b; }
+
+/* Right-aligned by the label's grow; muted and small, as MenubarShortcut. */
+.mb-shortcut {
+  color: #737373;
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 1.5px;
+  flex-shrink: 0;
 }
 
-.mb-content-narrow { width: 230px; }
-.mb-content-wide { width: 300px; }
-/* An inset row spends 22px on the indicator, so its label is narrower by that
- * much or the row wraps and the tick lands on its own line. */
-.mb-label-inset { width: 176px; }
-
-/* --- the pointer -------------------------------------------------------------
-   None of this existed. The page had a menubar that opened on a click and
-   looked identical whether or not anything was under the cursor, which is the
-   first thing that makes a canvas UI read as a picture of a UI.
-
-   The transitions go on the BASE rules and not on `:hover`, because a
-   transition describes the property and not the direction — declared only
-   under `:hover` a trigger tints in and snaps out.
-
-   Kept in the purple the rest of this sheet uses: `#ece7fd` is what an OPEN
-   menu already tints its trigger, so hover is a lighter step of the same
-   colour rather than a new one. */
-.mb-trigger,
-.mb-item,
-.mb-row {
-  transition: background-color 130ms ease-out, transform 130ms ease-out;
+.mb-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }
 
-.mb-trigger:hover { background-color: #f4f1fe; }
-.mb-item:hover,
-.mb-row:hover { background-color: #f4f1fe; }
+.mb-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: #0a0a0a;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.mb-icon-muted { stroke: #737373; }
+.mb-icon-destructive { stroke: #e7000b; }
+.mb-check { stroke: #0a0a0a; }
+.mb-dot { fill: #0a0a0a; stroke: none; }
+.mb-chevron { stroke: #737373; }
 
-/* Pressed is a step darker AND a small squeeze, so a click registers even on
-   a trigger that was already tinted by being open. */
-.mb-trigger:active,
-.mb-item:active,
-.mb-row:active { background-color: #ded4fb; transform: scale(0.97); }
+/* Edge to edge across the menu's padding, as shadcn's `-mx-1 my-1`. */
+.mb-separator {
+  background-color: #e5e5e5;
+  height: 1px;
+  align-self: stretch;
+  margin: 4px -4px;
+  flex-shrink: 0;
+}
 
-/* --- a phone ------------------------------------------------------------------
-   The page is laid out at the preview's width (main.js `fitDemo`). Narrower
-   panels; the submenu cannot sit beside its parent at this width, so the
-   collision pass lays it over the parent's right-hand side. */
+/* --- a phone ------------------------------------------------------------------ */
+
 @media (max-width: 600px) {
-  .mb-page { padding: 16px; }
-  .mb-trigger { padding: 9px 11px; }
-  .mb-content { width: 272px; }
-  .mb-subcontent { width: 180px; border: 1px solid #d9d0fa; }
-  .mb-label { width: 180px; }
-  .mb-label-inset { width: 158px; }
+  .mb-cards { padding: 12px; row-gap: 12px; }
+  .mb-card { width: 100%; }
+  .mb-stage { padding: 36px 8px 12px 8px; }
+  .mb-stage-a { height: 220px; }
+  .mb-stage-b { height: 380px; }
+  .mb-content { width: 212px; }
+  .mb-content-sm { width: 146px; }
+  .mb-content-lg { width: 256px; }
+  /* No room beside the menu for a submenu at this width — neither side
+   fits — so it drops below its row, indented, over the rows under it,
+   and the row that opened it stays readable. */
+  .mb-subcontent {
+    width: 176px;
+    left: calc(anchor(left) + 28px);
+    top: calc(anchor(bottom) + 2px);
+  }
 }
