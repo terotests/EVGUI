@@ -719,6 +719,30 @@
               Column To Do, position 1 of 3.&rdquo;
             </p>
           </section>
+          <section data-for="drawer">
+            <h2>what to try</h2>
+            <p class="hint">
+              <strong>Right Drawer</strong> slides ReUI&rsquo;s panel in from the
+              right over a dimmed, blurred page. Its ten paragraphs scroll
+              <em>inside</em> it &mdash; wheel, arrow keys, Page Up/Down, Home,
+              End &mdash; while the title and Submit / Cancel stay put.
+            </p>
+            <p class="hint">
+              <strong>Drag a panel towards its edge</strong> (the header, the
+              text, the handle): it follows the pointer. Let go past a quarter of
+              its size, or flick it, and it is dismissed; let go early and it
+              snaps back. The buttons are buttons and do not start a drag.
+            </p>
+            <p class="hint">
+              Tab stays inside an open drawer. <strong>Escape</strong>, a click on
+              the dimmed page, Cancel or &times; close it and hand the focus back to
+              the trigger. <strong>Open Drawer</strong> steps the goal with
+              &minus; / +, <strong>Menu</strong> picks a section (arrow keys walk
+              it), <strong>Notifications</strong> drops from the top, and
+              <strong>Edit preferences</strong> is a dialog on a wide demo and a
+              bottom drawer on a phone.
+            </p>
+          </section>
           <section data-for="rating">
             <h2>what to try</h2>
             <p class="hint">
@@ -1439,6 +1463,12 @@
   "src": "AutocompleteDemo",
   "caption": "ComboboxCtl in autocomplete mode · after Base UI's Autocomplete, ReUI's look",
   "desc": "ReUI's Autocomplete patterns, one card each: basic, grouped suggestions, a clear button, inline completion, an async search with a loading state, and a limit with a count of the rest. The text is the value and the suggestions only complete it. Every box is a ComboboxCtl — the controller measured against Base UI's Combobox — in its autocomplete mode, which follows Base UI's documented Autocomplete and the WAI-ARIA combobox pattern (aria-autocomplete list / both, aria-activedescendant) rather than a measurement of its own; the text is edited on the page's text session."
+ },
+ "drawer": {
+  "title": "Drawer",
+  "src": "DrawerDemo",
+  "caption": "DrawerCtl · after Base UI's Drawer and vaul, ReUI's look",
+  "desc": "ReUI's Drawer patterns, one card each: the Right Drawer (Move Goal, ten paragraphs scrolling inside, Submit and Cancel pinned), shadcn's bottom drawer with a handle, a goal stepper and a bar chart, a left navigation drawer, a top drawer, and a responsive one that is a dialog on a wide demo and a drawer on a narrow one. Each is a modal DrawerCtl: open and closed, the focus in and back to the trigger, Escape and the overlay press, the 300ms ease-out slide from its edge and the drag towards that edge that dismisses past a quarter of the panel or on a fling and snaps back otherwise. The page behind is dimmed and blurred (backdrop-filter) and inert, and the demo traps Tab. The behaviour follows Base UI's and vaul's documented Drawer; there is no recorded trace of either, so it is specified, not measured."
  },
  "rating": {
   "title": "Rating",
