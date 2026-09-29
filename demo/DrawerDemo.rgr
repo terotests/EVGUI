@@ -51,6 +51,7 @@ treefactory Dw {
     tag Page     EVGElement (props (className "drw-page"))
     tag Card     EVGElement (props (className "drw-card"))
     tag Caption  EVGElement (props (className "drw-caption") (elementType 1))
+    tag CapRule  EVGElement (props (className "drw-caption-rule") (a11yHidden true))
     tag Stage    EVGElement (props (className "drw-stage"))
     tag Trigger  EVGElement (props (className "drw-btn drw-btn-outline") (role "button") (a11yFocusable true) (a11yHasPopup "dialog"))
     tag BtnTx    EVGElement (props (className "drw-btn-text") (elementType 1))
@@ -59,6 +60,10 @@ treefactory Dw {
     tag Overlay  EVGElement (props (className "drw-overlay"))
     tag Panel    EVGElement (props (className "drw-panel"))
     tag Handle   EVGElement (props (className "drw-handle") (a11yHidden true))
+    ; The 1px line along the panel's inner edge, and over the sidebar's user
+    ; row: one-sided borders in the reference, which EVG cannot draw.
+    tag Edge     EVGElement (props (className "drw-edge") (a11yHidden true))
+    tag Line     EVGElement (props (className "drw-line") (a11yHidden true))
     tag Inner    EVGElement (props (className "drw-inner"))
     tag Header   EVGElement (props (className "drw-header"))
     tag Title    EVGElement (props (className "drw-title") (elementType 1) (role "heading") (a11yLevel 2))
@@ -301,7 +306,8 @@ class DrawerDemo {
     fn card:EVGElement (key:string caption:string d:DrawerCtl status:string) {
         def c (tree Dw
             (Card (props (id ("drw-card-" + key)))
-                (Caption caption)))
+                (Caption caption)
+                (CapRule)))
         ; Two to a row on a phone, the width written because a percentage of
         ; a wrapping row is not something the layout shares out.
         if (this.isNarrow()) {
@@ -355,7 +361,25 @@ class DrawerDemo {
         } {
             p.width = (EVGUnit.px(pageW))
         }
+        ; The inner edge's line. Beside a side panel it is out of flow, as tall
+        ; as the panel less its rounded corners; over a bottom sheet it is the
+        ; first row (a top sheet adds its own last, under the handle).
+        if ((d.side == "left") || (d.side == "right")) {
+            def edge (tree Dw (Edge (props (className ("drw-edge drw-edge-" + d.side)))))
+            UiTree.inline(edge "height" ((to_string (to_int (pageH - 32.0))) + "px"))
+            p.addChild(edge)
+        }
+        if (d.side == "bottom") {
+            p.addChild((this.sheetEdge("bottom")))
+        }
         return p
+    }
+
+    ; A sheet's straight 1px edge, between its two rounded corners.
+    fn sheetEdge:EVGElement (side:string) {
+        def edge (tree Dw (Edge (props (className ("drw-edge drw-edge-" + side)))))
+        UiTree.inline(edge "width" ((to_string (to_int (pageW - 32.0))) + "px"))
+        return edge
     }
 
     ; The dim and the blur behind, as much of them as the panel is in.
@@ -546,6 +570,7 @@ class DrawerDemo {
             i = (i + 1)
         }
         p.addChild(nav)
+        p.addChild((tree Dw (Line)))
         def foot (tree Dw (Footer (props (id "drw-left-footer") (className "drw-footer drw-footer-user"))))
         foot.addChild((tree Dw
             (Row (props (id "drw-left-user") (className "drw-row drw-user"))
@@ -592,6 +617,7 @@ class DrawerDemo {
         inner.addChild(foot)
         p.addChild(inner)
         p.addChild((tree Dw (Handle (props (id "drw-top-handle") (className "drw-handle drw-handle-bottom")))))
+        p.addChild((this.sheetEdge("top")))
         return p
     }
 

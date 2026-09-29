@@ -200,6 +200,7 @@ treefactory Db {
     tag Body    EVGElement (props (className "db-tbody") (role "rowgroup"))
     tag Row     EVGElement (props (className "db-tr") (role "row"))
     tag RowOn   EVGElement (props (className "db-tr db-tr-on") (role "row"))
+    tag RowLine EVGElement (props (className "db-tr-line") (a11yHidden true))
     tag Th      EVGElement (props (className "db-th") (role "columnheader"))
     tag Td      EVGElement (props (className "db-td") (role "cell"))
     tag CellTx  EVGElement (props (className "db-cell-text") (elementType 1))
@@ -1266,6 +1267,7 @@ class DashboardDemo {
         t.a11yRowCount = (virt.rowCount())
         def thead (tree Db (Head))
         thead.addChild((this.headRow()))
+        thead.addChild((tree Db (RowLine)))
         t.addChild(thead)
         ; THE VIRTUALISED BODY, and it is NOT built the way a DOM one is.
         ;
@@ -1325,6 +1327,7 @@ class DashboardDemo {
                 ; the table four thousand rows down.
                 row.a11yRowIndex = (virt.rowIndexOf(i))
                 win.addChild(row)
+                win.addChild((tree Db (RowLine)))
             }
             i = (i + 1)
         }

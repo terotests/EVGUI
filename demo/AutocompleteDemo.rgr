@@ -54,6 +54,7 @@ treefactory Au {
     tag Page     EVGElement (props (className "au-page"))
     tag Card     EVGElement (props (className "au-card"))
     tag Caption  EVGElement (props (className "au-caption") (elementType 1) (role "heading") (a11yLevel 2))
+    tag CapRule  EVGElement (props (className "au-caption-rule") (a11yHidden true))
     tag Stage    EVGElement (props (className "au-stage"))
     tag Field    EVGElement (props (className "au-field"))
     ; The input carries the label as its name; the drawn one is not read twice.
@@ -61,6 +62,7 @@ treefactory Au {
     tag Hint     EVGElement (props (className "au-hint") (elementType 1) (a11yHidden true))
     tag Status   EVGElement (props (className "au-hint") (elementType 1) (role "status"))
     tag Band     EVGElement (props (className "au-band") (a11yHidden true))
+    tag MoreRule EVGElement (props (className "au-more-rule") (a11yHidden true))
 }
 
 class AutocompleteDemo {
@@ -296,6 +298,26 @@ class AutocompleteDemo {
         }
     }
 
+    ; A rule over the "N more" line: the reference draws it as the row's top
+    ; border, and EVG draws borders on all four sides or none.
+    fn dressMore:void (c:ComboboxCtl) {
+        if (c.open == false) {
+            return
+        }
+        def content:EVGElement (unwrap c.contentEl)
+        def kids:[EVGElement]
+        def k:int 0
+        while (k < (array_length content.children)) {
+            def kid:EVGElement (itemAt content.children k)
+            if (UiTree.hasClass(kid "ui-combobox-more")) {
+                push kids (tree Au (MoreRule (props (id (c.tid + "-more-rule")))))
+            }
+            push kids kid
+            k = (k + 1)
+        }
+        content.children = kids
+    }
+
     fn remoteStatus:string () {
         if remote.loading {
             return "Searching…"
@@ -316,6 +338,7 @@ class AutocompleteDemo {
     fn card:EVGElement (c:ComboboxCtl title:string hint:string) {
         UiTree.dress(c)
         this.dressBox(c)
+        this.dressMore(c)
         def body:EVGElement (unwrap c.rootEl)
         def field (tree Au (Field (Label c.name)))
         field.addChild(body)
@@ -327,6 +350,7 @@ class AutocompleteDemo {
         return (tree Au
             (Card (props (id (c.tid + "-card")))
                 (Caption (props (id (c.tid + "-caption"))) title)
+                (CapRule)
                 (Stage (child field))))
     }
 

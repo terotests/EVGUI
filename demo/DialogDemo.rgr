@@ -59,6 +59,7 @@ treefactory Dg {
     tag Page     EVGElement (props (className "dg-page"))
     tag Card     EVGElement (props (className "dg-card"))
     tag Caption  EVGElement (props (className "dg-caption") (elementType 1))
+    tag CapRule  EVGElement (props (className "dg-caption-rule") (a11yHidden true))
     tag Stage    EVGElement (props (className "dg-stage"))
     tag Trigger  EVGElement (props (className "dg-btn dg-btn-outline") (role "button") (a11yFocusable true) (a11yHasPopup "dialog"))
     tag BtnTx    EVGElement (props (className "dg-btn-text") (elementType 1))
@@ -295,7 +296,8 @@ class DialogDemo {
     fn card:EVGElement (key:string caption:string trig:EVGElement status:string) {
         def c (tree Dg
             (Card (props (id ("dg-card-" + key)))
-                (Caption caption)))
+                (Caption caption)
+                (CapRule)))
         def st (tree Dg (Stage (child trig)))
         st.addChild((tree Dg (Status (props (id ("dg-status-" + key))) status)))
         c.addChild(st)

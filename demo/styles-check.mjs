@@ -20,6 +20,8 @@
 //   * THE LAYOUT HOLDS: opening the panel moves no canvas pixel and no mirror
 //     node, and the page grows no horizontal scrollbar, on a desktop and on a
 //     phone.
+//   * THE SHIPPED SHEETS ARE CLEAN: the panel's validator reports nothing on
+//     any demo's default stylesheet.
 //
 // STYLES_SHOTS=<dir> also saves the screenshots the feature was reviewed with.
 
@@ -476,6 +478,33 @@ console.log("--- every demo ---");
     try { return Object.keys(localStorage).filter((k) => k.startsWith("evgui-styles:")); } catch (e) { return []; }
   });
   ok("…and Reset leaves nothing saved", leftovers.length === 0, leftovers.join(","));
+  await page.close();
+}
+
+// --- 6. every shipped stylesheet is clean ---------------------------------------------------
+//
+// The panel's own validator — the engine's parse errors and what
+// `EVGElement.setAttribute` refuses — over every demo's DEFAULT sheet, read
+// here from the file it ships as. A demo that ships a declaration EVG ignores
+// (a `border-bottom`, a `z-index`, a two-value `gap`) fails, with file:line.
+console.log("--- every demo's default stylesheet has no problems ---");
+{
+  const { page, problems } = await openPage(context, "menubar");
+  const names = await page.evaluate(() => [...document.querySelectorAll("#demos input[type=radio]")].map((r) => r.value));
+  const found = [];
+  let sheets = 0;
+  for (const n of names) {
+    const { css, file } = await page.evaluate((d) => ({ css: window.__styles.defaultCss(d), file: window.__styles.fileName(d) }), n);
+    if (typeof css !== "string") continue;
+    sheets++;
+    const onDisk = fs.existsSync(path.join(HERE, file)) ? fs.readFileSync(path.join(HERE, file), "utf8") : null;
+    if (onDisk !== css) found.push(`${n}: the page's default sheet is not ${file} as shipped`);
+    const list = await page.evaluate((c) => window.__styles.validate(c), css);
+    for (const p of list) found.push(`${file}:${p.line} ${p.message}`);
+  }
+  ok(`all ${sheets} default stylesheets validate with no problems`, sheets >= 30 && found.length === 0,
+    found.length ? "\n      " + found.join("\n      ") : `only ${sheets} sheets`);
+  ok("no page error while validating", problems.length === 0, problems.join("; "));
   await page.close();
 }
 

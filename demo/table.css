@@ -58,9 +58,15 @@
   height: 40px;
 }
 
+/* 51px under a 1px `.tb-line`: the reference's 52px row and its `border-t`,
+ * which EVG cannot draw on one side. The demo puts a line before every row
+ * and before the footer. */
+.tb-line { height: 1px; width: 100%; flex-shrink: 0; background-color: #f4f4f5; }
+
 .tb-row {
-  height: 52px;
-  border-top: 1px solid #f4f4f5;
+  height: 51px;
+  /* The row's content stays centred where it was in the 52px row. */
+  padding: 0 16px 1px 16px;
   background-color: #ffffff;
   /* The transition is on the BASE rule, not on `:hover`. A transition
    * describes the property and not the direction — declared only under
@@ -208,9 +214,8 @@
   flex-direction: row;
   align-items: center;
   gap: 12px;
-  border-top: 1px solid #f4f4f5;
-  padding: 0 16px;
-  height: 56px;
+  padding: 0 16px 1px 16px;
+  height: 55px;
 }
 
 /* The footer is one flex row, and EVG gives a row child no width of its own —

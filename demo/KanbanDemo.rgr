@@ -51,6 +51,7 @@ treefactory Kb {
     tag Page     EVGElement (props (className "kb-page"))
     tag Panel    EVGElement (props (className "kb-panel"))
     tag Caption  EVGElement (props (className "kb-caption") (elementType 1) (role "heading") (a11yLevel 2))
+    tag CapRule  EVGElement (props (className "kb-caption-rule") (a11yHidden true))
     tag Stage    EVGElement (props (className "kb-stage"))
     tag Board    EVGElement (props (className "kb-board"))
     ; A column: a named region, its name carrying the count so a reader hears
@@ -285,7 +286,8 @@ class KanbanDemo {
         def p (tree Kb (Page (props (id "kb-page"))))
         def panel (tree Kb
             (Panel (props (id "kb-panel-board"))
-                (Caption (props (id "kb-panel-board-caption")) "Board")))
+                (Caption (props (id "kb-panel-board-caption")) "Board")
+                (CapRule)))
         def stage (tree Kb (Stage (props (id "kb-stage"))))
         def b (tree Kb (Board (props (id "kb-board") (a11yLabel "Kanban board"))))
         def i:int 0

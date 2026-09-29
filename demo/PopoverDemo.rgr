@@ -54,6 +54,7 @@ treefactory Pv {
     tag Page     EVGElement (props (className "pv-page"))
     tag Card     EVGElement (props (className "pv-card"))
     tag Caption  EVGElement (props (className "pv-caption") (elementType 1))
+    tag CapRule  EVGElement (props (className "pv-caption-rule") (a11yHidden true))
     tag Stage    EVGElement (props (className "pv-stage"))
     tag Slot     EVGElement (props (className "pv-slot"))
     tag Grid     EVGElement (props (className "pv-grid"))
@@ -551,7 +552,8 @@ class PopoverDemo {
     fn card:EVGElement (key:string caption:string) {
         return (tree Pv
             (Card (props (id ("pv-card-" + key)) (className ("pv-card pv-card-" + key)))
-                (Caption caption)))
+                (Caption caption)
+                (CapRule)))
     }
 
     fn dimStatus:string () {

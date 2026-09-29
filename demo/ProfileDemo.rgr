@@ -71,6 +71,7 @@ treefactory Pf {
     tag Card    EVGElement (props (className "pf-card"))
     tag Head    EVGElement (props (className "pf-head"))
     tag HeadTx  EVGElement (props (className "pf-head-text"))
+    tag Line    EVGElement (props (className "pf-line") (a11yHidden true))
     tag Title   EVGElement (props (className "pf-title") (elementType 1) (role "heading") (a11yLevel 1))
     tag Sub     EVGElement (props (className "pf-sub") (elementType 1))
     tag Badge   EVGElement (props (className "pf-badge") (role "status"))
@@ -1000,6 +1001,7 @@ class ProfileDemo {
         badge.addChild((tree Pf (BadgeTx ((to_string pct) + "% complete"))))
         head.addChild(badge)
         card.addChild(head)
+        card.addChild((tree Pf (Line)))
 
         def body (tree Pf (Body (props (id "pf"))))
         body.addChild((this.rowFor2((this.rowFor("pf-photo")) (this.photoRow()))))
@@ -1013,6 +1015,7 @@ class ProfileDemo {
         body.addChild((this.rowFor2((this.rowFor("pf-hire")) (this.switchRow()))))
         card.addChild(body)
 
+        card.addChild((tree Pf (Line)))
         def foot (tree Pf (Foot))
         foot.addChild((tree Pf (FootTx "Changes stay private until saved.")))
         foot.addChild((tree Pf (Spacer)))

@@ -1024,6 +1024,8 @@ export function createStylesPanel(host) {
       inventory: (name) => inventory(name || which),
       guideSelectors: () => [...sgBody.querySelectorAll("[data-selector]")].map((e) => e.dataset.selector),
       validate,
+      defaultCss: (name) => host.defaultCss(name || which),
+      fileName: (name) => host.fileName(name || which),
       applyNow,
       lastApply: () => lastApply,
       jumpTo,

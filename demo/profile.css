@@ -31,9 +31,14 @@
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
-  border-bottom: 1px solid #f4f4f5;
-  padding: 20px 24px 20px 24px;
+  padding: 20px 24px 19px 24px;
 }
+
+/* The 1px line under the header and over the footer: the reference's
+ * `border-b` and `border-t`, which EVG cannot draw on one side. The pixel
+ * comes out of the header's bottom and the footer's top padding, so nothing
+ * else moves. */
+.pf-line { height: 1px; width: 100%; flex-shrink: 0; background-color: #f4f4f5; }
 
 .pf-head-text {
   display: flex;
@@ -248,8 +253,7 @@
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
-  border-top: 1px solid #f4f4f5;
-  padding: 16px 24px 16px 24px;
+  padding: 15px 24px 16px 24px;
 }
 
 .pf-foot-text { color: #71717a; font-size: 13px; height: 20px; line-height: 20px; }
@@ -630,12 +634,12 @@
 @media (max-width: 600px) {
   .pf-page { width: 100%; padding: 12px; }
   .pf-card { width: 100%; }
-  .pf-head { padding: 16px; }
+  .pf-head { padding: 16px 16px 15px 16px; }
   .pf-body { padding: 4px 16px 4px 16px; }
   .pf-row { flex-direction: column; align-items: stretch; gap: 6px; padding: 8px 0 8px 0; }
   .pf-label { width: 100%; }
   .pf-label-bad { height: auto; }
   .pf-ctl { width: 100%; }
-  .pf-foot { padding: 12px 16px; flex-wrap: wrap; row-gap: 10px; }
+  .pf-foot { padding: 11px 16px 12px 16px; flex-wrap: wrap; row-gap: 10px; }
   .pf-note { width: 100%; height: auto; }
 }

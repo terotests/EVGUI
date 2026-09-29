@@ -158,17 +158,27 @@
 /* An event box. Absolutely placed, and every one of its four numbers is
  * written inline from the measured fractions. The left border is what makes
  * the overlay readable: three boxes fanning right show three coloured spines
- * even where the fills are the same. */
+ * even where the fills are the same.
+ *
+ * EVG draws a border on all four sides only, so the 3px spine is its own
+ * element (`.ec-evspine`) and the title is set in by the spine and the 6px of
+ * padding: 9px. */
 .ec-ev {
   position: absolute;
   display: flex;
   align-items: flex-start;
-  padding-left: 6px;
-  padding-top: 2px;
   border-radius: 4px;
   background-color: #e0e7ff;
-  border-left-width: 3px;
-  border-left-color: #4f46e5;
+}
+
+.ec-evspine {
+  position: absolute;
+  left: 0px;
+  top: 0px;
+  width: 3px;
+  height: 100%;
+  border-radius: 4px 0 0 4px;
+  background-color: #4f46e5;
 }
 
 .ec-ev-focus {
@@ -176,6 +186,8 @@
 }
 
 .ec-evtxt {
+  margin-left: 9px;
+  margin-top: 2px;
   font-family: Arial;
   font-size: 11px;
   color: #312e81;
@@ -872,8 +884,9 @@
 .eb-line { position: absolute; background-color: #e4e4e7; }
 .eb-line-half { background-color: #f4f4f5; }
 
-.eb-now { position: absolute; background-color: #ef4444; z-index: 20; }
-.eb-nowdot { position: absolute; width: 8px; height: 8px; border-radius: 4px; background-color: #ef4444; z-index: 20; }
+/* Last in its column, so it paints over the events: EVG has no z-index. */
+.eb-now { position: absolute; background-color: #ef4444; }
+.eb-nowdot { position: absolute; width: 8px; height: 8px; border-radius: 4px; background-color: #ef4444; }
 
 .eb-ev {
   position: absolute;
@@ -931,5 +944,5 @@
   .eb-thday { font-size: 10px; height: 14px; line-height: 14px; }
   .eb-mheadcell { padding: 0 4px; font-size: 11px; }
   .eb-agtime { width: 110px; font-size: 12px; }
-  .eb-legend { gap: 6px 12px; height: auto; padding: 10px 12px; }
+  .eb-legend { row-gap: 6px; column-gap: 12px; height: auto; padding: 10px 12px; }
 }

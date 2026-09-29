@@ -53,6 +53,7 @@ treefactory Cb {
     tag Page     EVGElement (props (className "cb-page"))
     tag Card     EVGElement (props (className "cb-card"))
     tag Caption  EVGElement (props (className "cb-caption") (elementType 1) (role "heading") (a11yLevel 2))
+    tag CapRule  EVGElement (props (className "cb-caption-rule") (a11yHidden true))
     tag Stage    EVGElement (props (className "cb-stage"))
     tag Field    EVGElement (props (className "cb-field"))
     ; The input carries the label as its name; the drawn one is not read twice.
@@ -579,6 +580,7 @@ class ComboboxDemo {
         return (tree Cb
             (Card (props (id (c.tid + "-card")))
                 (Caption (props (id (c.tid + "-caption"))) title)
+                (CapRule)
                 (Stage (child field))))
     }
 
