@@ -47,6 +47,7 @@ DEMOS.push("ComboboxDemo");
 DEMOS.push("ColorPickerDemo");
 DEMOS.push("QuestionnaireDemo");
 DEMOS.push("SelectDemo");
+DEMOS.push("WindowDemo");
 for (const name of DEMOS) {
   if (!fs.existsSync(path.join(UI, "bin", name + ".cjs"))) {
     console.error(`compiled ${name} missing — run \`npm run ui:demo:build\` first`);
@@ -94,6 +95,7 @@ fs.writeFileSync(
     'export { ColorPickerDemo } from "../bin/ColorPickerDemo.cjs";\n' +
     'export { QuestionnaireDemo } from "../bin/QuestionnaireDemo.cjs";\n' +
     'export { SelectDemo } from "../bin/SelectDemo.cjs";\n' +
+    'export { WindowDemo } from "../bin/WindowDemo.cjs";\n' +
     // The whole modules too, as a list: the browser's text measurer is
     // installed into every one of them (`lib/evg/gl/evg-measure.js`),
     // because two copies of a class are two classes and each compiled demo
@@ -144,6 +146,7 @@ fs.writeFileSync(
     `export const COLORPICKER_CSS = ${css("colorpicker.css")};\n` +
     `export const QUESTIONNAIRE_CSS = ${css("questionnaire.css")};\n` +
     `export const SELECT_CSS = ${css("select.css")};\n` +
+    `export const WINDOW_CSS = ${css("window.css")};\n` +
     // NOT ONE OF THIS DIRECTORY'S STYLESHEETS: the presets live with the
     // effects they configure, in `lib/evg/gl`, and are read from there by the
     // contact sheet and by the pixel gate as well. The page carries the FILE,

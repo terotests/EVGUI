@@ -134,6 +134,7 @@ const INV = {
   accordion: { file: "accordion.css", must: [], states: [], foreign: /^(ui-combobox|cb-|cal-|ui-calendar|ui-rating|drw-)/ },
   rating: { file: "rating.css", must: [], states: [], foreign: /^(ui-combobox|cb-|cal-|ui-accordion|drw-)/ },
   drawer: { file: "drawer.css", must: [], states: [], foreign: /^(ui-combobox|cb-|cal-|ui-accordion|ui-rating)/ },
+  window: { file: "window.css", must: ["wd-win", "wd-handle", "wd-grip-se"], states: [], foreign: /^(ui-combobox|cb-|cal-|ui-accordion|ui-rating|drw-)/ },
 };
 {
   const { page, problems } = await openPage(context, "combobox");

@@ -857,6 +857,39 @@
               bottom drawer on a phone.
             </p>
           </section>
+          <section data-for="window">
+            <h2>what to try</h2>
+            <p class="hint">
+              <strong>Drag a window by its title bar</strong>; it keeps enough
+              of itself on the desktop to be grabbed again, however fast the
+              pointer goes. A click anywhere in a window brings it to the
+              front. <strong>Resize</strong> from any edge or corner &mdash;
+              the cursor changes over them &mdash; down to a minimum size and
+              no further out than the desktop. Drop a window on the left or
+              right edge to fill that half.
+            </p>
+            <p class="hint">
+              The title bar buttons <strong>minimize</strong> (to the dock),
+              <strong>maximize / restore</strong> and <strong>close</strong>;
+              a double-click on the title bar maximizes too. The dock brings a
+              window back, reopens a closed one, and minimizes the one on
+              top. <strong>Settings</strong> opens a modal dialog: Tab stays
+              inside it, Escape closes it and the focus goes back to the
+              button that opened it; it moves by its title bar as well.
+            </p>
+            <p class="hint">
+              Keys: <strong>Tab</strong> walks each window (title bar, its
+              buttons, its content) and then the dock, whose arrows move
+              along it. <strong>Alt+Space</strong> (or Tab to a title bar)
+              then the <strong>arrows</strong> move the window 10px,
+              <strong>Shift+arrows</strong> 1px, and
+              <strong>Ctrl+Shift+arrows</strong> resize it; Enter or Escape
+              finishes. <strong>Ctrl+F6</strong> (or F6) goes to the next
+              window, Shift the other way. Each move and size is announced in
+              the status line in the dock. On a phone the windows open as full
+              sheets; drag a title bar to bring one back to its own size.
+            </p>
+          </section>
           <section data-for="rating">
             <h2>what to try</h2>
             <p class="hint">
@@ -1805,6 +1838,12 @@
   "src": "SelectDemo",
   "caption": "SelectCtl in its Base UI mode · after Base UI's Select, ReUI's look",
   "desc": "ReUI's Select patterns, one card each: a basic field with a label, a placeholder and a description; the same field invalid after a submit or a blur with no value (red label, border, ring and message); users with initials avatars and a check on the chosen row; a multiple select with stacked status dots and a 5/6 count; time zones in groups with separators and muted offsets; and a disabled and a small select. The trigger is a combobox with aria-haspopup listbox, the list a listbox of options (aria-selected, grouped under named groups, multiselectable when multiple). Opening, the highlight on the chosen row, the arrows, Home, End, typeahead, Enter / Space, Escape and Tab are SelectCtl's opt-in baseUi mode, written from Base UI's documented Select and the WAI-ARIA listbox pattern, not measured; the list flips above its trigger when there is no room below and scrolls when neither side has room."
+ },
+ "window": {
+  "title": "Window",
+  "src": "WindowDemo",
+  "caption": "WindowCtl · movable windows and a movable modal, ReUI's look",
+  "desc": "A small desktop in a card: four movable windows at once (a New contact form, a Contacts table, Notes, About) over a dock. Drag them by the title bar, resize them from any edge or corner, minimize, maximize, snap to a half, close and reopen them from the dock. Every window is a WindowCtl, and Desktop settings is the same controller as a modal: a scrim, a focus trap, Escape and the focus back. Nothing in Radix moves a window, so the behaviour is specified, not measured."
  },
  "combobox": {
   "title": "Combobox",

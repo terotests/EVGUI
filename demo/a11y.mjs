@@ -746,6 +746,43 @@ STATES.push(...[
   })));
 }
 
+// The window desktop: at rest (four windows, New contact on top); one
+// maximized with two in the dock; Alt+Space move mode on a title bar; the
+// modal Desktop settings open over the scrim; and a phone, the windows as
+// full sheets.
+{
+  const { WindowDemo } = require(path.join(ROOT, "gallery/evgui/bin/WindowDemo.cjs"));
+  const wd = () => atRest(WindowDemo, "window.css");
+  const wdRest = wd();
+  const wdMax = wd();
+  wdMax.press("wd-notes-minimize");
+  wdMax.press("wd-about-minimize");
+  wdMax.press("wd-list-maximize");
+  wdMax.settle();
+  const wdMove = wd();
+  wdMove.press("wd-form-name");
+  wdMove.keyWith(" ", false, false, true);
+  wdMove.keyWith("ArrowRight", false, false, false);
+  const wdModal = wd();
+  wdModal.press("wd-prefs-trigger");
+  const wdPhone = new WindowDemo();
+  wdPhone.pageW = 358;
+  wdPhone.init(fs.readFileSync(path.join(HERE, "window.css"), "utf8"));
+  for (const d of [wdRest, wdMax, wdMove, wdModal, wdPhone]) d.displayListJson();
+  STATES.push(...[
+    ["window — four windows at rest", wdRest, 130],
+    ["window — one maximized, two in the dock", wdMax, 131],
+    ["window — Alt+Space move mode on a title bar", wdMove, 132],
+    ["window — the Desktop settings modal", wdModal, 133],
+    ["window — a phone, windows as full sheets", wdPhone, 134],
+  ].map(([name, d, gen]) => ({
+    name,
+    size: [d.widthPx(), d.heightPx()],
+    lint: () => d.a11yProblems(),
+    tree: () => d.a11yJson(gen, d.focused || ""),
+  })));
+}
+
 // The menubar page: three bars at rest, then each kind of menu open, reached
 // by pressing (and hovering) the ids the hit test reports, as the page does —
 // the icons-and-shortcuts File menu, Account with its group and destructive

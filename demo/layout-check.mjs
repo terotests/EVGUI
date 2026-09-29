@@ -101,6 +101,7 @@ const DEMOS = [
   ["ColorPickerDemo", "colorpicker.css"],
   ["QuestionnaireDemo", "questionnaire.css"],
   ["SelectDemo", "select.css"],
+  ["WindowDemo", "window.css"],
 ];
 
 const rect = (e) => ({

@@ -1,0 +1,2526 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; WindowDemo — a small desktop in a card, every window a WindowCtl
+; =============================================================================
+; Four movable windows at once, each holding real content — a New contact
+; form (two text fields, a switch, a button), a Contacts table whose stars
+; toggle, Notes with a field that adds to the list, and About — over a
+; desktop with a dock along its bottom. A fifth WindowCtl, `isModal` and
+; `movableModal`, is the Desktop settings dialog: a scrim, a focus trap,
+; Escape, the focus back on whatever opened it, and still movable by its
+; title bar.
+;
+; THE BEHAVIOUR IS THE CONTROLLER'S. Each window is a `WindowCtl`: where it is
+; (`x`, `y`, kept grabbable by `keepOnScreen`), its size (`w`, `h`, never under
+; `minW` / `minH`), the resize from any edge or corner (`beginResize` /
+; `resizeTo`, clamped to the desktop), minimized, maximized, snapped to a half
+; and the way back (`restore`), the keyboard's move and resize (`nudge`,
+; `resizeBy`) and the eased jump between geometries (its clock). This file
+; draws ReUI's tree from the controllers' ids, keeps the z-order and which
+; window is active, owns the Tab ring (the dialog's trap included) and the
+; content of each window, and says what happened in a status region.
+;
+; The semantics follow WindowCtl's contract: a window is `role=dialog` with
+; `aria-modal=false`, named by its title; its title bar is a button with the
+; role description "draggable" named "<title>, move window" (the visible title
+; is that name and is not announced twice); the bar's buttons are labelled
+; Minimize, Maximize / Restore and Close. The dock is a toolbar.
+; =============================================================================
+
+Import "../src/WindowCtl.rgr"
+Import "../src/InputCtl.rgr"
+Import "../src/UiCtl.rgr"
+Import "../src/UiTree.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGUnit.rgr"
+Import "pkg:evg/EVGLayout.rgr"
+Import "pkg:evg/EVGDisplayList.rgr"
+Import "pkg:evg/EVGStyleSheet.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+Import "pkg:evg/EVGA11yFromTree.rgr"
+Import "pkg:evg/EVGHitTest.rgr"
+Import "pkg:evg/EVGTextEngine.rgr"
+
+treefactory Wd {
+    child addChild
+    text  textContent
+
+    tag Page     EVGElement (props (className "wd-page"))
+    tag Card     EVGElement (props (className "wd-card"))
+    tag Desk     EVGElement (props (className "wd-desk") (role "region") (a11yLabel "Desktop"))
+    tag Snap     EVGElement (props (className "wd-snap") (a11yHidden true))
+
+    tag Win      EVGElement (props (className "wd-win") (role "dialog"))
+    tag Bar      EVGElement (props (className "wd-titlebar"))
+    tag Handle   EVGElement (props (className "wd-handle") (role "button") (a11yFocusable true) (a11yRoleDescription "draggable"))
+    tag Title    EVGElement (props (className "wd-title") (elementType 1) (a11yHidden true))
+    tag TBtn     EVGElement (props (className "wd-tbtn") (role "button") (a11yFocusable true))
+    tag Icon     EVGElement (props (className "wd-icon") (tagName "path") (elementType 3) (viewBox "0 0 24 24") (a11yHidden true))
+    tag Body     EVGElement (props (className "wd-body"))
+    tag Grip     EVGElement (props (className "wd-grip") (a11yHidden true))
+
+    tag Field    EVGElement (props (className "wd-field"))
+    tag Label    EVGElement (props (className "wd-label") (elementType 1) (a11yHidden true))
+    tag Box      EVGElement (props (className "wd-box") (role "textbox") (a11yFocusable true))
+    tag Text     EVGElement (props (className "wd-text") (elementType 1))
+    tag Ghost    EVGElement (props (className "wd-text wd-ghost") (elementType 1))
+    tag Caret    EVGElement (props (className "wd-caret") (a11yHidden true))
+    tag Band     EVGElement (props (className "wd-band") (a11yHidden true))
+
+    tag Row      EVGElement (props (className "wd-row"))
+    tag Col      EVGElement (props (className "wd-col"))
+    tag Strong   EVGElement (props (className "wd-strong") (elementType 1))
+    tag Muted    EVGElement (props (className "wd-muted") (elementType 1))
+    tag Para     EVGElement (props (className "wd-para") (elementType 1))
+    tag Desc     EVGElement (props (className "wd-desc") (elementType 1))
+    tag Ok       EVGElement (props (className "wd-ok") (elementType 1) (role "status"))
+    tag Btn      EVGElement (props (className "wd-btn") (role "button") (a11yFocusable true))
+    tag BtnTx    EVGElement (props (className "wd-btn-text") (elementType 1))
+    tag Switch   EVGElement (props (className "wd-switch") (role "switch") (a11yFocusable true))
+    tag Thumb    EVGElement (props (className "wd-thumb") (a11yHidden true))
+
+    tag Table    EVGElement (props (className "wd-table") (role "table"))
+    tag Scroll   EVGElement (props (className "wd-table"))
+    tag Tr       EVGElement (props (className "wd-tr") (role "row"))
+    tag Line     EVGElement (props (className "wd-tr-line") (a11yHidden true))
+    tag Th       EVGElement (props (className "wd-th") (elementType 1) (role "columnheader"))
+    tag Td       EVGElement (props (className "wd-td") (elementType 1) (role "cell"))
+    tag Cell     EVGElement (props (className "wd-c3") (role "cell"))
+    tag Star     EVGElement (props (className "wd-star") (role "button") (a11yFocusable true))
+
+    tag Notes    EVGElement (props (className "wd-notes") (role "list"))
+    tag Note     EVGElement (props (className "wd-note") (role "listitem"))
+    tag Dot      EVGElement (props (className "wd-dot") (a11yHidden true))
+    tag Logo     EVGElement (props (className "wd-logo") (a11yHidden true))
+
+    tag Rule     EVGElement (props (className "wd-rule") (a11yHidden true))
+    tag Dock     EVGElement (props (className "wd-dock"))
+    tag DockBar  EVGElement (props (className "wd-dockbar") (role "toolbar") (a11yLabel "Windows") (a11yOrientation "horizontal"))
+    tag DBtn     EVGElement (props (className "wd-dbtn") (role "button") (a11yFocusable true))
+    tag DText    EVGElement (props (className "wd-dbtn-text") (elementType 1) (a11yHidden true))
+    tag Pip      EVGElement (props (className "wd-pip") (a11yHidden true))
+    tag DSep     EVGElement (props (className "wd-dsep") (a11yHidden true))
+    tag Live     EVGElement (props (className "wd-live") (elementType 1) (role "status"))
+
+    tag Scrim    EVGElement (props (className "wd-scrim") (a11yHidden true))
+}
+
+class WindowDemo {
+
+    def listW:WindowCtl (new WindowCtl())
+    def formW:WindowCtl (new WindowCtl())
+    def notesW:WindowCtl (new WindowCtl())
+    def aboutW:WindowCtl (new WindowCtl())
+    def prefs:WindowCtl (new WindowCtl())
+
+    def nameIn:InputCtl (new InputCtl())
+    def emailIn:InputCtl (new InputCtl())
+    def noteIn:InputCtl (new InputCtl())
+
+    def root@(optional):EVGElement
+    def sheet@(optional):EVGStyleSheet
+    def layout@(optional):EVGLayout
+    def measurer:EVGLayout (new EVGLayout())
+
+    def hovered:string ""
+    def pressed:string ""
+    def focused:string ""
+    def dragField:string ""
+
+    ; Back to front: the last one is on top, and the active one.
+    def order:[string]
+    ; Where the focus was in each window when it last left, by key.
+    def lastInKeys:[string]
+    def lastInIds:[string]
+    ; Maximized because the desktop was narrow, and so put back when it is not.
+    def autoMaxed:[string]
+    def wasNarrow:boolean false
+
+    ; The contacts, newest first, and the notes, newest first.
+    def names:[string]
+    def emails:[string]
+    def favs:[boolean]
+    def notes:[string]
+    def favOn:boolean false
+    def formStatus:string ""
+    def formError:boolean false
+    def listScroll:double 0.0
+
+    ; The dialog: what it edits, the draft while it is open, and who opened it.
+    def snapOn:boolean true
+    def phoneMax:boolean true
+    def draftSnap:boolean true
+    def draftMax:boolean true
+    def prefsReturn:string ""
+    def prefsPlaced:boolean false
+
+    ; What the status region says.
+    def said:string ""
+
+    ; A gesture: "move" or "resize", on which window, from where.
+    def gKind:string ""
+    def gKey:string ""
+    def grabX:double 0.0
+    def grabY:double 0.0
+    def gStartX:double 0.0
+    def gStartY:double 0.0
+    def gFrac:double 0.0
+    def gMoved:boolean false
+    def snapHint:string ""
+    ; Alt+Space: the title bar holds the focus for the arrows, and this is
+    ; where the focus goes back to afterwards.
+    def moveReturn:string ""
+    ; The dock's roving stop.
+    def dockAt:int 0
+
+    def pageW:double 900.0
+    def pageH:double 620.0
+    def builtW:double 0.0
+    def builtH:double 0.0
+    ; The desktop's and the card's content boxes in page pixels, from the
+    ; last layout: where a pointer is, relative to where windows are placed.
+    def deskX:double 17.0
+    def deskY:double 17.0
+    def deskW:double 866.0
+    def deskH:double 533.0
+    def cardX:double 17.0
+    def cardY:double 17.0
+    def cardW:double 866.0
+    def cardH:double 586.0
+
+    Constructor () {
+    }
+
+    ; --- setting up -----------------------------------------------------------------
+
+    fn dressWin:void (c:WindowCtl key:string title:string) {
+        c.tid = ("wd-" + key)
+        c.name = title
+        c.title = title
+        c.hasMinMax = true
+        c.open = true
+        c.minW = 220.0
+        c.minH = 150.0
+        ; Enough to grab: the three buttons at the right of a title bar are
+        ; about 94px, and a window pushed off the left must still show some
+        ; of the handle beside them.
+        c.keepOnScreen = 140.0
+    }
+
+    fn dressInput:void (c:InputCtl tid:string label:string hint:string) {
+        c.tid = tid
+        c.name = label
+        c.placeholder = hint
+        c.fontFamily = "Arial"
+        c.fontSize = 14.0
+        c.boxWidth = 240.0
+    }
+
+    fn init:void (css:string) {
+        def s (new EVGStyleSheet())
+        s.parse(css)
+        sheet = s
+        this.dressWin(listW "list" "Contacts")
+        this.dressWin(formW "form" "New contact")
+        this.dressWin(notesW "notes" "Notes")
+        this.dressWin(aboutW "about" "About")
+        aboutW.minH = 140.0
+        prefs.tid = "wd-prefs"
+        prefs.name = "Desktop settings"
+        prefs.title = "Desktop settings"
+        prefs.isModal = true
+        prefs.movableModal = true
+        prefs.w = 400.0
+        prefs.h = 240.0
+        prefs.keepOnScreen = 48.0
+        this.dressInput(nameIn "wd-form-name" "Name" "Ada Lovelace")
+        this.dressInput(emailIn "wd-form-email" "Email" "ada@example.com")
+        this.dressInput(noteIn "wd-notes-input" "New note" "Write a note…")
+        this.seed()
+        this.resetLayout()
+        this.rebuild()
+    }
+
+    fn seed:void () {
+        this.addPerson("Margaret Hamilton" "margaret@mit.edu" false)
+        this.addPerson("Katherine Johnson" "kj@nasa.gov" false)
+        this.addPerson("Alan Turing" "alan@bletchley.uk" true)
+        this.addPerson("Grace Hopper" "grace@navy.mil" false)
+        this.addPerson("Ada Lovelace" "ada@analytical.io" true)
+        push notes "Ctrl+F6 goes to the next window."
+        push notes "Alt+Space, then the arrows, moves a window."
+        push notes "Double-click a title bar to maximize it."
+    }
+
+    ; Newest first.
+    fn addPerson:void (n:string e:string f:boolean) {
+        def nn:[string]
+        def ee:[string]
+        def ff:[boolean]
+        push nn n
+        push ee e
+        push ff f
+        def i:int 0
+        while (i < (array_length names)) {
+            push nn (itemAt names i)
+            push ee (itemAt emails i)
+            push ff (itemAt favs i)
+            i = (i + 1)
+        }
+        names = nn
+        emails = ee
+        favs = ff
+    }
+
+    fn place:void (c:WindowCtl px:double py:double pw:double ph:double) {
+        c.open = true
+        c.minimized = false
+        c.maximized = false
+        c.snapped = ""
+        c.dragging = false
+        c.resizeEdge = ""
+        c.animT = 1.0
+        c.x = px
+        c.y = py
+        c.w = pw
+        c.h = ph
+        c.restX = px
+        c.restY = py
+        c.restW = pw
+        c.restH = ph
+    }
+
+    ; Where every window starts: four of them overlapping, New contact on top.
+    fn resetLayout:void () {
+        this.place(listW 24.0 20.0 380.0 262.0)
+        this.place(notesW 96.0 226.0 320.0 280.0)
+        this.place(aboutW 492.0 300.0 300.0 214.0)
+        this.place(formW 450.0 34.0 330.0 316.0)
+        def o:[string]
+        push o "list"
+        push o "notes"
+        push o "about"
+        push o "form"
+        order = o
+        def e:[string]
+        autoMaxed = e
+        wasNarrow = false
+        this.fitAll()
+    }
+
+    ; --- lookups --------------------------------------------------------------------
+
+    sfn keys:[string] () {
+        return ([] _:string ("list" "form" "notes" "about"))
+    }
+
+    fn ctl:WindowCtl (key:string) {
+        if (key == "list") {
+            return listW
+        }
+        if (key == "form") {
+            return formW
+        }
+        if (key == "notes") {
+            return notesW
+        }
+        return aboutW
+    }
+
+    fn keyOf:string (c:WindowCtl) {
+        return (substring c.tid 3 (strlen c.tid))
+    }
+
+    fn isNarrow:boolean () {
+        return (pageW < 600.0)
+    }
+
+    fn visible:boolean (key:string) {
+        def c:WindowCtl (this.ctl(key))
+        return (c.open && (c.minimized == false))
+    }
+
+    sfn begins:boolean (s:string prefix:string) {
+        def n:int (strlen prefix)
+        if ((strlen s) < n) {
+            return false
+        }
+        return ((substring s 0 n) == prefix)
+    }
+
+    sfn has:boolean (a:[string] s:string) {
+        def i:int 0
+        while (i < (array_length a)) {
+            if ((itemAt a i) == s) {
+                return true
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    sfn without:[string] (a:[string] s:string) {
+        def out:[string]
+        def i:int 0
+        while (i < (array_length a)) {
+            if ((itemAt a i) != s) {
+                push out (itemAt a i)
+            }
+            i = (i + 1)
+        }
+        return out
+    }
+
+    ; The window a target is inside, or "". Its trigger (the dock button) is
+    ; not inside it.
+    fn windowOf:string (target:string) {
+        if ((strlen target) == 0) {
+            return ""
+        }
+        def k:[string] (WindowDemo.keys())
+        def i:int 0
+        while (i < (array_length k)) {
+            def key:string (itemAt k i)
+            def c:WindowCtl (this.ctl(key))
+            if ((WindowDemo.begins(target (c.tid + "-"))) && (target != (c.triggerTid()))) {
+                return key
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    fn inPrefs:boolean (target:string) {
+        if (target == (prefs.triggerTid())) {
+            return false
+        }
+        return (WindowDemo.begins(target "wd-prefs-"))
+    }
+
+    ; The one on top that is on the desktop.
+    fn frontKey:string () {
+        def i:int ((array_length order) - 1)
+        while (i >= 0) {
+            def key:string (itemAt order i)
+            if (this.visible(key)) {
+                return key
+            }
+            i = (i - 1)
+        }
+        return ""
+    }
+
+    fn raise:void (key:string) {
+        def o:[string] (WindowDemo.without(order key))
+        push o key
+        order = o
+    }
+
+    fn lower:void (key:string) {
+        def o:[string]
+        push o key
+        def i:int 0
+        while (i < (array_length order)) {
+            if ((itemAt order i) != key) {
+                push o (itemAt order i)
+            }
+            i = (i + 1)
+        }
+        order = o
+    }
+
+    fn rememberFocus:void () {
+        def key:string (this.windowOf(focused))
+        if ((strlen key) == 0) {
+            return
+        }
+        def ks:[string]
+        def ids:[string]
+        def i:int 0
+        while (i < (array_length lastInKeys)) {
+            if ((itemAt lastInKeys i) != key) {
+                push ks (itemAt lastInKeys i)
+                push ids (itemAt lastInIds i)
+            }
+            i = (i + 1)
+        }
+        push ks key
+        push ids focused
+        lastInKeys = ks
+        lastInIds = ids
+    }
+
+    fn lastFocusIn:string (key:string) {
+        def i:int 0
+        while (i < (array_length lastInKeys)) {
+            if ((itemAt lastInKeys i) == key) {
+                def id:string (itemAt lastInIds i)
+                if (WindowDemo.has((this.ring()) id)) {
+                    return id
+                }
+            }
+            i = (i + 1)
+        }
+        def c:WindowCtl (this.ctl(key))
+        return (c.barTid())
+    }
+
+    ; --- the geometry the desktop hands down --------------------------------------
+
+    fn fitAll:void () {
+        def k:[string] (WindowDemo.keys())
+        def narrow:boolean (this.isNarrow())
+        def i:int 0
+        while (i < (array_length k)) {
+            def key:string (itemAt k i)
+            def c:WindowCtl (this.ctl(key))
+            ; On a phone a window is a sheet: it fills the desktop, and a drag
+            ; on its title bar brings it back to its own size under the finger.
+            ; Maximized BEFORE it is fitted, so the size it goes back to is the
+            ; one it had on the desktop.
+            if (narrow && phoneMax) {
+                if ((c.open && (c.maximized == false)) && (wasNarrow == false)) {
+                    c.maximize()
+                    c.animT = 1.0
+                    push autoMaxed key
+                }
+            }
+            c.fitPage(deskW deskH)
+            if ((narrow == false) && wasNarrow) {
+                if ((WindowDemo.has(autoMaxed key)) && c.maximized) {
+                    c.restore()
+                    c.animT = 1.0
+                }
+            }
+            i = (i + 1)
+        }
+        if ((narrow == false) && wasNarrow) {
+            def e:[string]
+            autoMaxed = e
+        }
+        wasNarrow = narrow
+        prefs.fitPage(cardW cardH)
+        def pw:double 400.0
+        if (pw > (cardW - 16.0)) {
+            pw = (cardW - 16.0)
+        }
+        prefs.w = pw
+        prefs.minW = pw
+    }
+
+    ; --- icons (Lucide, as paths) ---------------------------------------------------
+
+    sfn iconPath:string (name:string) {
+        if (name == "minimize") {
+            return "M5 12 L19 12"
+        }
+        if (name == "maximize") {
+            return "M5 3 L19 3 C20.1 3 21 3.9 21 5 L21 19 C21 20.1 20.1 21 19 21 L5 21 C3.9 21 3 20.1 3 19 L3 5 C3 3.9 3.9 3 5 3 Z"
+        }
+        if (name == "restore") {
+            return "M10 8 L20 8 C21.1 8 22 8.9 22 10 L22 20 C22 21.1 21.1 22 20 22 L10 22 C8.9 22 8 21.1 8 20 L8 10 C8 8.9 8.9 8 10 8 Z M4 16 C2.9 16 2 15.1 2 14 L2 4 C2 2.9 2.9 2 4 2 L14 2 C15.1 2 16 2.9 16 4"
+        }
+        if (name == "close") {
+            return "M18 6 L6 18 M6 6 L18 18"
+        }
+        if (name == "form") {
+            return "M16 21 L16 19 C16 16.8 14.2 15 12 15 L6 15 C3.8 15 2 16.8 2 19 L2 21 M9 11 C11.2 11 13 9.2 13 7 C13 4.8 11.2 3 9 3 C6.8 3 5 4.8 5 7 C5 9.2 6.8 11 9 11 Z M19 8 L19 14 M22 11 L16 11"
+        }
+        if (name == "list") {
+            return "M16 21 L16 19 C16 16.8 14.2 15 12 15 L6 15 C3.8 15 2 16.8 2 19 L2 21 M9 11 C11.2 11 13 9.2 13 7 C13 4.8 11.2 3 9 3 C6.8 3 5 4.8 5 7 C5 9.2 6.8 11 9 11 Z M22 21 L22 19 C22 17.2 20.8 15.6 19 15.1 M16 3.1 C17.8 3.6 19 5.2 19 7 C19 8.8 17.8 10.4 16 10.9"
+        }
+        if (name == "notes") {
+            return "M16 3 L5 3 C3.9 3 3 3.9 3 5 L3 19 C3 20.1 3.9 21 5 21 L19 21 C20.1 21 21 20.1 21 19 L21 8 Z M15 3 L15 9 L21 9"
+        }
+        if (name == "about") {
+            return "M12 2 C17.5 2 22 6.5 22 12 C22 17.5 17.5 22 12 22 C6.5 22 2 17.5 2 12 C2 6.5 6.5 2 12 2 Z M12 16 L12 12 M12 8 L12.01 8"
+        }
+        if (name == "settings") {
+            return "M12 15 C13.7 15 15 13.7 15 12 C15 10.3 13.7 9 12 9 C10.3 9 9 10.3 9 12 C9 13.7 10.3 15 12 15 Z M12 2 L12 5 M12 19 L12 22 M2 12 L5 12 M19 12 L22 12 M4.9 4.9 L7 7 M17 17 L19.1 19.1 M4.9 19.1 L7 17 M17 7 L19.1 4.9"
+        }
+        if (name == "star") {
+            return "M12 2 L15.09 8.26 L22 9.27 L17 14.14 L18.18 21.02 L12 17.77 L5.82 21.02 L7 14.14 L2 9.27 L8.91 8.26 Z"
+        }
+        ; the app window: the About logo
+        return "M4 4 L20 4 C21.1 4 22 4.9 22 6 L22 18 C22 19.1 21.1 20 20 20 L4 20 C2.9 20 2 19.1 2 18 L2 6 C2 4.9 2.9 4 4 4 Z M2 9 L22 9 M6 6.5 L6.01 6.5 M9 6.5 L9.01 6.5"
+    }
+
+    fn icon:EVGElement (name:string cls:string) {
+        def el (tree Wd (Icon (props (svgPath (WindowDemo.iconPath(name))))))
+        el.className = cls
+        return el
+    }
+
+    ; --- the pieces ---------------------------------------------------------------------
+
+    sfn px:string (v:double) {
+        return ((to_string (to_int v)) + "px")
+    }
+
+    fn button:EVGElement (id:string label:string outline:boolean) {
+        def cls:string "wd-btn"
+        def tx:string "wd-btn-text"
+        if outline {
+            cls = "wd-btn wd-btn-outline"
+            tx = "wd-btn-text wd-btn-text-dark"
+        }
+        return (tree Wd
+            (Btn (props (id id) (className cls) (a11yLabel label))
+                (BtnTx (props (className tx)) label)))
+    }
+
+    fn switchEl:EVGElement (id:string label:string on:boolean) {
+        def sw (tree Wd (Switch (props (id id) (a11yLabel label))))
+        def th (tree Wd (Thumb))
+        if on {
+            sw.a11yChecked = (EVGA11yTri.yes())
+            sw.className = "wd-switch wd-switch-on"
+        } {
+            sw.a11yChecked = (EVGA11yTri.no())
+        }
+        sw.addChild(th)
+        return sw
+    }
+
+    fn engine:EVGTextEngine () {
+        return (measurer.getTextEngine())
+    }
+
+    ; One text box: the band under the glyphs, the caret only when focused.
+    fn boxFor:EVGElement (c:InputCtl) {
+        def box (tree Wd (Box (props (id c.tid) (a11yLabel c.name))))
+        box.a11yValue = c.value
+        def eng:EVGTextEngine (this.engine())
+        if ((focused == c.tid) && (c.hasSelection())) {
+            def s:double (c.caretXAt(eng (c.selStart())))
+            def e:double (c.caretXAt(eng (c.selEnd())))
+            def band (tree Wd (Band))
+            band.left = (EVGUnit.px((s - c.scrollX)))
+            band.width = (EVGUnit.px((e - s)))
+            box.addChild(band)
+        }
+        if ((strlen c.value) == 0) {
+            box.addChild((tree Wd (Ghost c.placeholder)))
+        } {
+            box.addChild((tree Wd (Text (props (id (c.tid + "-text"))) (c.glyphText()))))
+        }
+        if (focused == c.tid) {
+            def cx:double (c.caretXAt(eng c.caret))
+            def car (tree Wd (Caret))
+            car.left = (EVGUnit.px((cx - c.scrollX)))
+            box.addChild(car)
+        }
+        return box
+    }
+
+    fn fieldEl:EVGElement (c:InputCtl) {
+        def f (tree Wd (Field (Label c.name)))
+        f.addChild((this.boxFor(c)))
+        return f
+    }
+
+    ; --- each window's content ---------------------------------------------------------
+
+    fn formBody:EVGElement (b:EVGElement) {
+        b.addChild((this.fieldEl(nameIn)))
+        b.addChild((this.fieldEl(emailIn)))
+        def r (tree Wd
+            (Row (props (id "wd-form-favrow"))
+                (Col (props (className "wd-col wd-grow"))
+                    (Strong "Favorite")
+                    (Muted "Star them in Contacts."))))
+        r.addChild((this.switchEl("wd-form-fav" "Favorite" favOn)))
+        b.addChild(r)
+        def foot (tree Wd (Row (props (id "wd-form-foot"))))
+        foot.addChild((this.button("wd-form-add" "Add contact" false)))
+        def st (tree Wd (Ok (props (id "wd-form-status") (className "wd-ok wd-grow")) formStatus))
+        if formError {
+            st.className = "wd-ok wd-grow wd-err"
+        }
+        foot.addChild(st)
+        b.addChild(foot)
+        return b
+    }
+
+    fn listBody:EVGElement (b:EVGElement) {
+        b.className = "wd-body wd-body-flush"
+        def t (tree Wd (Table (props (id "wd-list-table") (a11yLabel "Contacts"))))
+        t.a11yRowCount = ((array_length names) + 1)
+        t.addChild((tree Wd
+            (Tr (props (id "wd-list-head") (className "wd-tr wd-tr-head"))
+                (Th (props (id "wd-list-h1") (className "wd-th wd-c1")) "Name")
+                (Th (props (id "wd-list-h2") (className "wd-th wd-c2")) "Email")
+                (Th (props (id "wd-list-h3") (className "wd-th wd-c3") (a11yLabel "Favorite")) "★"))))
+        def sc (tree Wd (Scroll (props (id "wd-list-rows"))))
+        sc.scrollTop = listScroll
+        def i:int 0
+        while (i < (array_length names)) {
+            def n:string (itemAt names i)
+            def on:boolean (itemAt favs i)
+            def si:string (to_string i)
+            def star (tree Wd (Star (props (id ("wd-list-star-" + si)) (a11yLabel ("Favorite " + n)))))
+            if on {
+                star.a11yPressed = (EVGA11yTri.yes())
+                star.addChild((this.icon("star" "wd-star-icon wd-star-icon-on")))
+            } {
+                star.a11yPressed = (EVGA11yTri.no())
+                star.addChild((this.icon("star" "wd-star-icon")))
+            }
+            def mail:string (itemAt emails i)
+            def row (tree Wd
+                (Tr (props (id ("wd-list-row-" + si)))
+                    (Td (props (id ("wd-list-name-" + si)) (className "wd-td wd-c1")) n)
+                    (Td (props (id ("wd-list-mail-" + si)) (className "wd-td wd-td-muted wd-c2")) mail)))
+            row.a11yRowIndex = (i + 2)
+            def cell (tree Wd (Cell (props (id ("wd-list-fav-" + si)))))
+            cell.addChild(star)
+            row.addChild(cell)
+            sc.addChild((tree Wd (Line)))
+            sc.addChild(row)
+            i = (i + 1)
+        }
+        t.addChild(sc)
+        b.addChild(t)
+        return b
+    }
+
+    ; The field first and the notes under it, newest first: however many
+    ; there are, the field stays in view and the oldest are the ones the
+    ; window clips.
+    fn notesBody:EVGElement (b:EVGElement) {
+        def r (tree Wd (Row (props (id "wd-notes-add-row"))))
+        def box:EVGElement (this.boxFor(noteIn))
+        box.className = "wd-box wd-grow"
+        r.addChild(box)
+        r.addChild((this.button("wd-notes-add" "Add" true)))
+        b.addChild(r)
+        def list (tree Wd (Notes (props (id "wd-notes-list") (a11yLabel "Notes"))))
+        def i:int ((array_length notes) - 1)
+        while (i >= 0) {
+            def text:string (itemAt notes i)
+            list.addChild((tree Wd
+                (Note (props (id ("wd-notes-item-" + (to_string i))))
+                    (Dot)
+                    (Para (props (className "wd-para wd-grow")) text))))
+            i = (i - 1)
+        }
+        b.addChild(list)
+        return b
+    }
+
+    fn aboutBody:EVGElement (b:EVGElement) {
+        def logo (tree Wd (Logo))
+        logo.addChild((this.icon("app" "wd-logo-icon")))
+        def top (tree Wd (Row (props (id "wd-about-top"))))
+        top.addChild(logo)
+        top.addChild((tree Wd
+            (Col (props (className "wd-col wd-grow"))
+                (Strong "EVGUI Desktop")
+                (Muted "WindowCtl · version 1.0"))))
+        b.addChild(top)
+        b.addChild((tree Wd (Para (props (id "wd-about-text")) "Every window here is one WindowCtl: drag, resize, minimize, maximize and snap, from the pointer or the keyboard.")))
+        def foot (tree Wd (Row (props (id "wd-about-foot") (className "wd-row wd-row-end"))))
+        def openBtn:EVGElement (this.button("wd-about-prefs" "Settings…" true))
+        openBtn.a11yHasPopup = "dialog"
+        foot.addChild(openBtn)
+        foot.addChild((this.button("wd-about-ok" "OK" false)))
+        b.addChild(foot)
+        return b
+    }
+
+    fn prefsBody:EVGElement (b:EVGElement) {
+        b.addChild((tree Wd (Desc (props (id (prefs.descTid()))) "How windows behave on this desktop.")))
+        def r1 (tree Wd
+            (Row (props (id "wd-prefs-row-snap"))
+                (Col (props (className "wd-col wd-grow"))
+                    (Strong "Snap to screen edges")
+                    (Muted "Drop on a side to fill half."))))
+        r1.addChild((this.switchEl("wd-prefs-snap" "Snap to screen edges" draftSnap)))
+        b.addChild(r1)
+        def r2 (tree Wd
+            (Row (props (id "wd-prefs-row-max"))
+                (Col (props (className "wd-col wd-grow"))
+                    (Strong "Maximize on small screens")
+                    (Muted "Windows open as full sheets."))))
+        r2.addChild((this.switchEl("wd-prefs-max" "Maximize on small screens" draftMax)))
+        b.addChild(r2)
+        def foot (tree Wd (Row (props (id "wd-prefs-foot") (className "wd-row"))))
+        def reset:EVGElement (this.button("wd-prefs-reset" "Reset layout" true))
+        foot.addChild(reset)
+        foot.addChild((tree Wd (Col (props (className "wd-col wd-grow")))))
+        foot.addChild((this.button("wd-prefs-cancel" "Cancel" true)))
+        foot.addChild((this.button("wd-prefs-save" "Save" false)))
+        b.addChild(foot)
+        return b
+    }
+
+    ; --- a window ------------------------------------------------------------------------
+
+    fn titleBar:EVGElement (c:WindowCtl iconName:string active:boolean) {
+        def bar (tree Wd (Bar (props (id (c.headTid())))))
+        if active {
+            bar.className = "wd-titlebar wd-titlebar-active"
+        }
+        def h (tree Wd (Handle (props (id (c.barTid())) (a11yLabel (c.title + ", move window")))))
+        if (c.dragging || (focused == (c.barTid())) && ((strlen moveReturn) > 0)) {
+            h.className = "wd-handle wd-handle-moving"
+        }
+        def ic:string "wd-appicon"
+        def tc:string "wd-title"
+        if active {
+            ic = "wd-appicon wd-appicon-active"
+            tc = "wd-title wd-title-active"
+        }
+        if ((strlen iconName) > 0) {
+            h.addChild((this.icon(iconName ic)))
+        }
+        h.addChild((tree Wd (Title (props (id (c.titleTid())) (className tc)) c.title)))
+        bar.addChild(h)
+        if c.hasMinMax {
+            def mn (tree Wd (TBtn (props (id (c.minTid())) (a11yLabel "Minimize"))))
+            mn.addChild((this.icon("minimize" "wd-icon")))
+            bar.addChild(mn)
+            def mx (tree Wd (TBtn (props (id (c.maxTid())) (a11yLabel (c.maxLabel())))))
+            if (c.maximized || ((strlen c.snapped) > 0)) {
+                mx.addChild((this.icon("restore" "wd-icon")))
+            } {
+                mx.addChild((this.icon("maximize" "wd-icon")))
+            }
+            bar.addChild(mx)
+        }
+        def cl (tree Wd (TBtn (props (id (c.closeTid())) (className "wd-tbtn wd-tbtn-close") (a11yLabel c.closeLabel))))
+        cl.addChild((this.icon("close" "wd-icon")))
+        bar.addChild(cl)
+        return bar
+    }
+
+    ; The edges and corners, over the frame's inside edge. The frame's content
+    ; box is its size less the 1px border all round.
+    fn grips:void (f:EVGElement c:WindowCtl) {
+        def iw:double ((c.shownW()) - 2.0)
+        def ih:double ((c.shownH()) - 2.0)
+        def t:double 5.0
+        def k:double 12.0
+        def e:[string] (WindowCtl.edges())
+        def i:int 0
+        while (i < (array_length e)) {
+            def edge:string (itemAt e i)
+            def gx:double 0.0
+            def gy:double 0.0
+            def gw:double t
+            def gh:double t
+            if ((edge == "n") || (edge == "s")) {
+                gx = k
+                gw = (iw - (2.0 * k))
+                if (edge == "s") {
+                    gy = (ih - t)
+                }
+            }
+            if ((edge == "e") || (edge == "w")) {
+                gy = k
+                gh = (ih - (2.0 * k))
+                if (edge == "e") {
+                    gx = (iw - t)
+                }
+            }
+            if ((strlen edge) == 2) {
+                gw = k
+                gh = k
+                if (WindowCtl.has(edge "e")) {
+                    gx = (iw - k)
+                }
+                if (WindowCtl.has(edge "s")) {
+                    gy = (ih - k)
+                }
+            }
+            def g (tree Wd (Grip (props (id (c.resizeTid(edge))) (className ("wd-grip wd-grip-" + edge)))))
+            UiTree.inline(g "left" (WindowDemo.px(gx)))
+            UiTree.inline(g "top" (WindowDemo.px(gy)))
+            UiTree.inline(g "width" (WindowDemo.px(gw)))
+            UiTree.inline(g "height" (WindowDemo.px(gh)))
+            f.addChild(g)
+            i = (i + 1)
+        }
+    }
+
+    fn frameFor:EVGElement (c:WindowCtl iconName:string active:boolean) {
+        def f (tree Wd (Win (props (id (c.frameTid())) (a11yLabel c.title))))
+        f.a11yModal = c.isModal
+        def cls:string "wd-win"
+        if active {
+            cls = (cls + " wd-win-active")
+        }
+        if c.maximized {
+            cls = (cls + " wd-win-max")
+        }
+        if c.isModal {
+            cls = (cls + " wd-modal")
+            f.a11yDescribedBy = (c.descTid())
+            f.a11yDescription = "How windows behave on this desktop."
+        }
+        f.className = cls
+        UiTree.inline(f "left" (WindowDemo.px((c.shownX()))))
+        UiTree.inline(f "top" (WindowDemo.px((c.shownY()))))
+        UiTree.inline(f "width" (WindowDemo.px((c.shownW()))))
+        UiTree.inline(f "height" (WindowDemo.px((c.shownH()))))
+        f.addChild((this.titleBar(c iconName active)))
+        return f
+    }
+
+    fn winEl:EVGElement (key:string) {
+        def c:WindowCtl (this.ctl(key))
+        def active:boolean ((key == (this.frontKey())) && (prefs.open == false))
+        def f:EVGElement (this.frameFor(c key active))
+        def b (tree Wd (Body (props (id (c.bodyTid())))))
+        if (key == "form") {
+            this.formBody(b)
+        }
+        if (key == "list") {
+            this.listBody(b)
+        }
+        if (key == "notes") {
+            this.notesBody(b)
+        }
+        if (key == "about") {
+            this.aboutBody(b)
+        }
+        f.addChild(b)
+        if (c.resizable()) {
+            this.grips(f c)
+        }
+        return f
+    }
+
+    fn prefsEl:EVGElement () {
+        def f:EVGElement (this.frameFor(prefs "settings" true))
+        def b (tree Wd (Body (props (id (prefs.bodyTid())))))
+        this.prefsBody(b)
+        f.addChild(b)
+        return f
+    }
+
+    ; --- the dock --------------------------------------------------------------------------
+
+    sfn dockKeys:[string] () {
+        return ([] _:string ("list" "form" "notes" "about" "prefs"))
+    }
+
+    fn dockTid:string (key:string) {
+        if (key == "prefs") {
+            return (prefs.triggerTid())
+        }
+        def c:WindowCtl (this.ctl(key))
+        return (c.triggerTid())
+    }
+
+    fn dockKeyOf:string (target:string) {
+        def k:[string] (WindowDemo.dockKeys())
+        def i:int 0
+        while (i < (array_length k)) {
+            if ((this.dockTid((itemAt k i))) == target) {
+                return (itemAt k i)
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    fn stateWord:string (key:string) {
+        def c:WindowCtl (this.ctl(key))
+        if (c.open == false) {
+            return "closed"
+        }
+        if c.minimized {
+            return "minimized"
+        }
+        return "open"
+    }
+
+    fn dockEl:EVGElement () {
+        def d (tree Wd (Dock (props (id "wd-dock"))))
+        def bar (tree Wd (DockBar (props (id "wd-dockbar"))))
+        def k:[string] (WindowDemo.dockKeys())
+        def front:string (this.frontKey())
+        def i:int 0
+        while (i < (array_length k)) {
+            def key:string (itemAt k i)
+            if (key == "prefs") {
+                bar.addChild((tree Wd (DSep)))
+                def pb (tree Wd (DBtn (props (id (prefs.triggerTid())) (a11yLabel "Desktop settings") (a11yHasPopup "dialog"))))
+                if prefs.open {
+                    pb.a11yExpanded = (EVGA11yTri.yes())
+                } {
+                    pb.a11yExpanded = (EVGA11yTri.no())
+                }
+                pb.addChild((this.icon("settings" "wd-dbtn-icon")))
+                if ((this.isNarrow()) == false) {
+                    pb.addChild((tree Wd (DText "Settings")))
+                }
+                bar.addChild(pb)
+            } {
+                def c:WindowCtl (this.ctl(key))
+                def st:string (this.stateWord(key))
+                def label:string c.title
+                if (st != "open") {
+                    label = (label + ", " + st)
+                }
+                def b (tree Wd (DBtn (props (id (c.triggerTid())) (a11yLabel label))))
+                if (st == "open") {
+                    b.a11yPressed = (EVGA11yTri.yes())
+                } {
+                    b.a11yPressed = (EVGA11yTri.no())
+                }
+                if ((key == front) && (st == "open")) {
+                    b.className = "wd-dbtn wd-dbtn-on"
+                }
+                def icCls:string "wd-dbtn-icon"
+                def txCls:string "wd-dbtn-text"
+                if (st == "closed") {
+                    icCls = "wd-dbtn-icon wd-dbtn-icon-off"
+                    txCls = "wd-dbtn-text wd-dbtn-text-off"
+                }
+                b.addChild((this.icon(key icCls)))
+                if ((this.isNarrow()) == false) {
+                    b.addChild((tree Wd (DText (props (className txCls)) c.title)))
+                }
+                if (st == "minimized") {
+                    b.addChild((tree Wd (Pip)))
+                }
+                bar.addChild(b)
+            }
+            i = (i + 1)
+        }
+        d.addChild(bar)
+        d.addChild((tree Wd (Live (props (id "wd-live")) said)))
+        return d
+    }
+
+    ; --- the page ------------------------------------------------------------------------
+
+    fn pageBody:EVGElement () {
+        def p (tree Wd (Page (props (id "wd-page"))))
+        def card (tree Wd (Card (props (id "wd-card"))))
+        def desk (tree Wd (Desk (props (id "wd-desk"))))
+        def front:string (this.frontKey())
+        def i:int 0
+        while (i < (array_length order)) {
+            def key:string (itemAt order i)
+            if (this.visible(key)) {
+                ; The drop target goes just under the window being dragged.
+                if (((strlen snapHint) > 0) && (key == front)) {
+                    def sn (tree Wd (Snap (props (id "wd-snap"))))
+                    def half:double ((to_double (to_int (deskW / 2.0))))
+                    def sx:double 0.0
+                    if (snapHint == "right") {
+                        sx = (deskW - half)
+                    }
+                    UiTree.inline(sn "left" (WindowDemo.px((sx + 6.0))))
+                    UiTree.inline(sn "top" "6px")
+                    UiTree.inline(sn "width" (WindowDemo.px((half - 12.0))))
+                    UiTree.inline(sn "height" (WindowDemo.px((deskH - 12.0))))
+                    desk.addChild(sn)
+                }
+                desk.addChild((this.winEl(key)))
+            }
+            i = (i + 1)
+        }
+        card.addChild(desk)
+        card.addChild((tree Wd (Rule)))
+        card.addChild((this.dockEl()))
+        if prefs.open {
+            def sc (tree Wd (Scrim (props (id (prefs.scrimTid())))))
+            UiTree.inline(sc "left" "0px")
+            UiTree.inline(sc "top" "0px")
+            UiTree.inline(sc "width" (WindowDemo.px(cardW)))
+            UiTree.inline(sc "height" (WindowDemo.px(cardH)))
+            card.addChild(sc)
+            card.addChild((this.prefsEl()))
+        }
+        p.addChild(card)
+        return p
+    }
+
+    fn rebuild:void () {
+        builtW = pageW
+        builtH = pageH
+        root = (this.pageBody())
+    }
+
+    ; --- layout ---------------------------------------------------------------------------
+
+    fn markStates:void (el:EVGElement) {
+        el.isHovered = ((strlen hovered) > 0) && (el.id == hovered)
+        el.isFocused = ((strlen focused) > 0) && (el.id == focused)
+        el.isPressed = ((strlen pressed) > 0) && (el.id == pressed)
+        def i:int 0
+        while (i < (array_length el.children)) {
+            this.markStates((itemAt el.children i))
+            i = (i + 1)
+        }
+    }
+
+    sfn byId:EVGElement (el:EVGElement tid:string) {
+        if (el.id == tid) {
+            return el
+        }
+        def i:int 0
+        while (i < (el.getChildCount())) {
+            def kid:EVGElement (WindowDemo.byId((el.getChild(i)) tid))
+            if (kid.id == tid) {
+                return kid
+            }
+            i = (i + 1)
+        }
+        return el
+    }
+
+    fn pass:EVGLayout () {
+        def r:EVGElement (unwrap root)
+        def s:EVGStyleSheet (unwrap sheet)
+        this.markStates(r)
+        s.setViewport(pageW pageH false)
+        s.applyTree(r "")
+        def lay (new EVGLayout())
+        lay.setPageSize(pageW pageH)
+        lay.layout(r)
+        layout = lay
+        return lay
+    }
+
+    sfn near:boolean (a:double b:double) {
+        def d:double (a - b)
+        return ((d < 0.5) && (d > -0.5))
+    }
+
+    ; Laid out afresh on every ask. What only a layout knows — how big the
+    ; desktop and the card came out, how wide each text box is, how far the
+    ; contacts can scroll — may take a second pass.
+    fn laidOut:EVGLayout () {
+        if ((builtW != pageW) || (builtH != pageH)) {
+            this.rebuild()
+        }
+        def lay:EVGLayout (this.pass())
+        def r:EVGElement (unwrap root)
+        def again:boolean false
+        def desk:EVGElement (WindowDemo.byId(r "wd-desk"))
+        def card:EVGElement (WindowDemo.byId(r "wd-card"))
+        if ((desk.id == "wd-desk") && (card.id == "wd-card")) {
+            def bw:double card.box.borderWidthPx
+            def nw:double desk.calculatedWidth
+            def nh:double desk.calculatedHeight
+            def cw:double ((card.calculatedWidth) - (2.0 * bw))
+            def ch:double ((card.calculatedHeight) - (2.0 * bw))
+            deskX = desk.calculatedX
+            deskY = desk.calculatedY
+            cardX = ((card.calculatedX) + bw)
+            cardY = ((card.calculatedY) + bw)
+            if (((((WindowDemo.near(nw deskW)) == false) || ((WindowDemo.near(nh deskH)) == false)) || ((WindowDemo.near(cw cardW)) == false)) || ((WindowDemo.near(ch cardH)) == false)) {
+                deskW = nw
+                deskH = nh
+                cardW = cw
+                cardH = ch
+                this.fitAll()
+                again = true
+            }
+            if ((listW.pageW != deskW) || (prefs.pageW != cardW)) {
+                this.fitAll()
+                again = true
+            }
+        }
+        if (prefs.open && (prefsPlaced == false)) {
+            prefs.x = ((to_double (to_int ((cardW - prefs.w) / 2.0))))
+            prefs.y = ((to_double (to_int ((cardH - prefs.h) / 2.0))))
+            if (prefs.y < 0.0) {
+                prefs.y = 0.0
+            }
+            prefs.animT = 1.0
+            prefsPlaced = true
+            again = true
+        }
+        ; The text boxes are as wide as their windows make them.
+        def ins:[InputCtl] (this.inputs())
+        def i:int 0
+        while (i < (array_length ins)) {
+            def c:InputCtl (itemAt ins i)
+            def box:EVGElement (WindowDemo.byId(r c.tid))
+            if (box.id == c.tid) {
+                def tw:double ((box.calculatedWidth) - 26.0)
+                if (tw < 20.0) {
+                    tw = 20.0
+                }
+                if (WindowDemo.near(tw c.boxWidth) == false) {
+                    c.boxWidth = tw
+                    c.ensureCaretVisible((this.engine()))
+                    again = true
+                }
+            }
+            i = (i + 1)
+        }
+        ; The contacts scroll: a focused star is brought into view, and the
+        ; offset is what the layout clamped it to.
+        def sc:EVGElement (WindowDemo.byId(r "wd-list-rows"))
+        if (sc.id == "wd-list-rows") {
+            def want:double listScroll
+            if (WindowDemo.begins(focused "wd-list-star-")) {
+                def rowId:string ("wd-list-row-" + (substring focused 13 (strlen focused)))
+                def row:EVGElement (WindowDemo.byId(r rowId))
+                if (row.id == rowId) {
+                    def top:double ((row.calculatedY) - (sc.calculatedY))
+                    def bottom:double (top + (row.calculatedHeight))
+                    if (top < 0.0) {
+                        want = (listScroll + top)
+                    }
+                    if (bottom > (sc.calculatedHeight)) {
+                        want = (listScroll + (bottom - (sc.calculatedHeight)))
+                    }
+                }
+            }
+            def mx:double ((sc.scrollHeight) - (sc.clientHeight()))
+            if (mx < 0.0) {
+                mx = 0.0
+            }
+            if (want > mx) {
+                want = mx
+            }
+            if (want < 0.0) {
+                want = 0.0
+            }
+            if (WindowDemo.near(want listScroll) == false) {
+                listScroll = want
+                again = true
+            }
+        }
+        if again {
+            this.rebuild()
+            return (this.pass())
+        }
+        return lay
+    }
+
+    ; --- the clock ---------------------------------------------------------------------------
+
+    fn busyNow:boolean () {
+        def k:[string] (WindowDemo.keys())
+        def i:int 0
+        while (i < (array_length k)) {
+            def c:WindowCtl (this.ctl((itemAt k i)))
+            if (c.animating()) {
+                return true
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    fn tick:boolean (dtMs:double) {
+        if ((this.busyNow()) == false) {
+            return false
+        }
+        def k:[string] (WindowDemo.keys())
+        def i:int 0
+        while (i < (array_length k)) {
+            def c:WindowCtl (this.ctl((itemAt k i)))
+            c.tickCtl(dtMs)
+            i = (i + 1)
+        }
+        this.rebuild()
+        return (this.busyNow())
+    }
+
+    fn settle:void () {
+        def n:int 0
+        while ((this.busyNow()) && (n < 100)) {
+            this.tick(16.0)
+            n = (n + 1)
+        }
+    }
+
+    ; --- what happens to a window -------------------------------------------------------------
+
+    fn announce:void (text:string) {
+        said = text
+    }
+
+    fn afterHide:void (key:string) {
+        ; The focus leaves a window that is no longer on the desktop, for its
+        ; button in the dock — the thing that brings it back.
+        if ((this.windowOf(focused)) == key) {
+            focused = (this.dockTid(key))
+            this.syncDockAt()
+        }
+        if (moveReturn != "") {
+            if ((this.windowOf(moveReturn)) == key) {
+                moveReturn = ""
+            }
+        }
+    }
+
+    fn minimizeWin:boolean (key:string) {
+        def c:WindowCtl (this.ctl(key))
+        if ((c.minimize()) == false) {
+            return false
+        }
+        this.afterHide(key)
+        this.announce((c.title + " minimized to the dock."))
+        this.rebuild()
+        return true
+    }
+
+    fn closeWin:boolean (key:string) {
+        def c:WindowCtl (this.ctl(key))
+        if (c.open == false) {
+            return false
+        }
+        c.open = false
+        c.dragging = false
+        c.resizeEdge = ""
+        c.animT = 1.0
+        this.afterHide(key)
+        this.announce((c.title + " closed. Reopen it from the dock."))
+        this.rebuild()
+        return true
+    }
+
+    fn toggleMax:boolean (key:string) {
+        def c:WindowCtl (this.ctl(key))
+        def was:boolean (c.maximized || ((strlen c.snapped) > 0))
+        if ((c.toggleMaximize()) == false) {
+            return false
+        }
+        if was {
+            this.announce((c.title + " restored, " + (c.sizeText()) + " at " + (c.placeText()) + "."))
+        } {
+            this.announce((c.title + " maximized."))
+        }
+        this.rebuild()
+        return true
+    }
+
+    ; Open a closed window where it was, or bring one back from the dock, and
+    ; put it on top with the focus in it.
+    fn showWin:boolean (key:string) {
+        def c:WindowCtl (this.ctl(key))
+        if (c.open == false) {
+            c.open = true
+            c.minimized = false
+            c.animT = 1.0
+            if ((this.isNarrow()) && phoneMax) {
+                if (c.maximized == false) {
+                    c.maximize()
+                    c.animT = 1.0
+                }
+            }
+            this.raise(key)
+            this.announce((c.title + " opened."))
+        } {
+            c.restore()
+            this.raise(key)
+            this.announce((c.title + " restored."))
+        }
+        focused = (c.barTid())
+        this.rebuild()
+        return true
+    }
+
+    ; A dock button: open or restore it; on top already, minimize it — the
+    ; taskbar's rule.
+    fn dockPress:boolean (key:string) {
+        if (key == "prefs") {
+            return (this.openPrefs((prefs.triggerTid())))
+        }
+        def c:WindowCtl (this.ctl(key))
+        this.syncDockAtKey(key)
+        if (c.open && (c.minimized == false)) {
+            if ((this.frontKey()) == key) {
+                focused = (this.dockTid(key))
+                return (this.minimizeWin(key))
+            }
+            this.raise(key)
+            focused = (this.lastFocusIn(key))
+            this.announce((c.title + " brought to the front."))
+            this.rebuild()
+            return true
+        }
+        return (this.showWin(key))
+    }
+
+    fn syncDockAtKey:void (key:string) {
+        def k:[string] (WindowDemo.dockKeys())
+        def i:int 0
+        while (i < (array_length k)) {
+            if ((itemAt k i) == key) {
+                dockAt = i
+            }
+            i = (i + 1)
+        }
+    }
+
+    fn syncDockAt:void () {
+        def key:string (this.dockKeyOf(focused))
+        if ((strlen key) > 0) {
+            this.syncDockAtKey(key)
+        }
+    }
+
+    ; --- the dialog ----------------------------------------------------------------------------
+
+    fn openPrefs:boolean (from:string) {
+        if prefs.open {
+            return false
+        }
+        this.rememberFocus()
+        prefsReturn = from
+        draftSnap = snapOn
+        draftMax = phoneMax
+        prefs.open = true
+        prefs.dragging = false
+        prefsPlaced = false
+        gKind = ""
+        snapHint = ""
+        moveReturn = ""
+        ; Radix puts the focus on the first control inside.
+        focused = "wd-prefs-snap"
+        this.announce("Desktop settings.")
+        this.rebuild()
+        return true
+    }
+
+    fn closePrefs:boolean (save:boolean) {
+        if (prefs.open == false) {
+            return false
+        }
+        prefs.open = false
+        prefs.dragging = false
+        gKind = ""
+        if save {
+            snapOn = draftSnap
+            phoneMax = draftMax
+            this.announce("Settings saved.")
+        } {
+            this.announce("Settings closed.")
+        }
+        focused = prefsReturn
+        this.syncDockAt()
+        this.rebuild()
+        return true
+    }
+
+    fn pressPrefs:boolean (target:string) {
+        if (target == "wd-prefs-snap") {
+            draftSnap = (draftSnap == false)
+            focused = target
+            this.rebuild()
+            return true
+        }
+        if (target == "wd-prefs-max") {
+            draftMax = (draftMax == false)
+            focused = target
+            this.rebuild()
+            return true
+        }
+        if (target == "wd-prefs-save") {
+            return (this.closePrefs(true))
+        }
+        if ((target == "wd-prefs-cancel") || (target == (prefs.closeTid()))) {
+            return (this.closePrefs(false))
+        }
+        if (target == "wd-prefs-reset") {
+            snapOn = draftSnap
+            phoneMax = draftMax
+            this.closePrefs(true)
+            this.resetLayout()
+            this.announce("Layout reset: four windows, New contact on top.")
+            this.rebuild()
+            return true
+        }
+        if (prefs.isHandle(target)) {
+            focused = (prefs.barTid())
+            this.rebuild()
+            return true
+        }
+        return false
+    }
+
+    ; --- each window's actions -------------------------------------------------------------------
+
+    fn addContact:boolean () {
+        def n:string (trim nameIn.value)
+        def e:string (trim emailIn.value)
+        if ((strlen n) == 0) {
+            formStatus = "Enter a name first."
+            formError = true
+            focused = nameIn.tid
+            this.announce(formStatus)
+            this.rebuild()
+            return true
+        }
+        this.addPerson(n e favOn)
+        nameIn.setValue("")
+        emailIn.setValue("")
+        favOn = false
+        formError = false
+        formStatus = ("Added " + n + ".")
+        listScroll = 0.0
+        this.announce(("Added " + n + " to Contacts."))
+        this.rebuild()
+        return true
+    }
+
+    fn addNote:boolean () {
+        def t:string (trim noteIn.value)
+        if ((strlen t) == 0) {
+            focused = noteIn.tid
+            this.rebuild()
+            return true
+        }
+        push notes t
+        noteIn.setValue("")
+        this.announce("Note added.")
+        this.rebuild()
+        return true
+    }
+
+    fn toggleStar:boolean (i:int) {
+        if ((i < 0) || (i >= (array_length favs))) {
+            return false
+        }
+        def ff:[boolean]
+        def j:int 0
+        while (j < (array_length favs)) {
+            if (j == i) {
+                push ff ((itemAt favs j) == false)
+            } {
+                push ff (itemAt favs j)
+            }
+            j = (j + 1)
+        }
+        favs = ff
+        if (itemAt favs i) {
+            this.announce(((itemAt names i) + " is a favorite."))
+        } {
+            this.announce(((itemAt names i) + " is not a favorite."))
+        }
+        return true
+    }
+
+    ; --- input: activation ---------------------------------------------------------------------
+
+    ; A press, from the pointer or from Enter / Space. True when something
+    ; changed.
+    fn press:boolean (target:string) {
+        if prefs.open {
+            ; Outside the dialog is inert; the scrim closes it, as Radix's does.
+            if (target == (prefs.scrimTid())) {
+                return (this.closePrefs(false))
+            }
+            if (this.inPrefs(target)) {
+                return (this.pressPrefs(target))
+            }
+            return false
+        }
+        def dk:string (this.dockKeyOf(target))
+        if ((strlen dk) > 0) {
+            focused = target
+            return (this.dockPress(dk))
+        }
+        if (target == "wd-about-prefs") {
+            focused = target
+            return (this.openPrefs(target))
+        }
+        def key:string (this.windowOf(target))
+        if ((strlen key) == 0) {
+            if ((strlen focused) > 0) {
+                this.rememberFocus()
+                focused = ""
+                this.rebuild()
+                return true
+            }
+            return false
+        }
+        def c:WindowCtl (this.ctl(key))
+        this.raise(key)
+        if (target == (c.minTid())) {
+            focused = target
+            return (this.minimizeWin(key))
+        }
+        if (target == (c.maxTid())) {
+            focused = target
+            return (this.toggleMax(key))
+        }
+        if (target == (c.closeTid())) {
+            focused = target
+            return (this.closeWin(key))
+        }
+        if (c.isHandle(target)) {
+            focused = (c.barTid())
+            this.rebuild()
+            return true
+        }
+        if (this.hasInput(target)) {
+            focused = target
+            this.rebuild()
+            return true
+        }
+        if (target == "wd-form-fav") {
+            favOn = (favOn == false)
+            focused = target
+            this.rebuild()
+            return true
+        }
+        if (target == "wd-form-add") {
+            focused = target
+            return (this.addContact())
+        }
+        if (WindowDemo.begins(target "wd-list-star-")) {
+            focused = target
+            this.toggleStar((?? (to_int (substring target 13 (strlen target))) -1))
+            this.rebuild()
+            return true
+        }
+        if (target == "wd-notes-add") {
+            focused = target
+            return (this.addNote())
+        }
+        if (target == "wd-about-ok") {
+            focused = target
+            return (this.closeWin(key))
+        }
+        ; Anywhere else in a window: it comes to the front, and the focus goes
+        ; to where it last was in it.
+        if ((this.windowOf(focused)) != key) {
+            this.rememberFocus()
+            focused = (this.lastFocusIn(key))
+        }
+        this.rebuild()
+        return true
+    }
+
+    ; --- input: the pointer --------------------------------------------------------------------
+
+    fn localX:double (px:double) {
+        if (gKey == "prefs") {
+            return (px - cardX)
+        }
+        return (px - deskX)
+    }
+
+    fn localY:double (py:double) {
+        if (gKey == "prefs") {
+            return (py - cardY)
+        }
+        return (py - deskY)
+    }
+
+    fn gCtl:WindowCtl () {
+        if (gKey == "prefs") {
+            return prefs
+        }
+        return (this.ctl(gKey))
+    }
+
+    ; Down: a resize grip or a title bar starts a gesture; a text box starts a
+    ; selection; anything else is a press. A press anywhere in a window raises
+    ; it first.
+    fn pointerDown:boolean (target:string px:double py:double tMs:double) {
+        gKind = ""
+        gMoved = false
+        dragField = ""
+        snapHint = ""
+        this.laidOut()
+        if prefs.open {
+            if (prefs.isHandle(target)) {
+                gKey = "prefs"
+                gKind = "move"
+                grabX = (this.localX(px))
+                grabY = (this.localY(py))
+                gStartX = prefs.x
+                gStartY = prefs.y
+                focused = (prefs.barTid())
+                this.rebuild()
+                return true
+            }
+            this.press(target)
+            return true
+        }
+        def key:string (this.windowOf(target))
+        if ((strlen key) > 0) {
+            def c:WindowCtl (this.ctl(key))
+            gKey = key
+            def edge:string (c.edgeOf(target))
+            if ((strlen edge) > 0) {
+                this.raise(key)
+                if (c.beginResize(edge)) {
+                    gKind = "resize"
+                    grabX = (this.localX(px))
+                    grabY = (this.localY(py))
+                    c.animT = 1.0
+                }
+                this.rebuild()
+                return true
+            }
+            if (c.isHandle(target)) {
+                this.raise(key)
+                if ((this.windowOf(focused)) != key) {
+                    this.rememberFocus()
+                }
+                focused = (c.barTid())
+                gKind = "move"
+                grabX = (this.localX(px))
+                grabY = (this.localY(py))
+                gStartX = c.x
+                gStartY = c.y
+                def fw:double (c.frameW())
+                gFrac = 0.5
+                if (fw > 0.0) {
+                    gFrac = ((grabX - c.x) / fw)
+                }
+                this.rebuild()
+                return true
+            }
+            def field:string (this.fieldOwning(target))
+            if (this.hasInput(field)) {
+                this.raise(key)
+                return (this.beginSelection(field px false))
+            }
+        }
+        this.press(target)
+        return true
+    }
+
+    fn pointerMove:boolean (px:double py:double tMs:double) {
+        if (gKind == "") {
+            if ((strlen dragField) > 0) {
+                return (this.extendSelection(px))
+            }
+            return false
+        }
+        def c:WindowCtl (this.gCtl())
+        def lx:double (this.localX(px))
+        def ly:double (this.localY(py))
+        if (gKind == "resize") {
+            if (c.resizeTo((lx - grabX) (ly - grabY))) {
+                this.rebuild()
+                return true
+            }
+            return false
+        }
+        if (gMoved == false) {
+            def dx:double (lx - grabX)
+            def dy:double (ly - grabY)
+            if (((dx * dx) + (dy * dy)) < 9.0) {
+                return false
+            }
+            gMoved = true
+            c.dragging = true
+            ; A maximized or snapped window comes back to its own size under
+            ; the pointer, and the drag carries on from there.
+            if (c.maximized || ((strlen c.snapped) > 0)) {
+                c.unsnapUnder(lx gFrac)
+                gStartX = (c.x - (lx - grabX))
+            }
+        }
+        c.moveTo((gStartX + (lx - grabX)) (gStartY + (ly - grabY)))
+        snapHint = ""
+        if ((snapOn && (gKey != "prefs")) && ((this.isNarrow()) == false)) {
+            if (lx <= 2.0) {
+                snapHint = "left"
+            }
+            if (lx >= (deskW - 2.0)) {
+                snapHint = "right"
+            }
+        }
+        this.rebuild()
+        return true
+    }
+
+    fn pointerUp:boolean () {
+        if (gKind == "") {
+            dragField = ""
+            return false
+        }
+        def c:WindowCtl (this.gCtl())
+        def kind:string gKind
+        gKind = ""
+        if (kind == "resize") {
+            c.endResize()
+            this.announce((c.title + " resized to " + (c.sizeText()) + "."))
+            this.rebuild()
+            return true
+        }
+        c.dragging = false
+        if gMoved {
+            if ((strlen snapHint) > 0) {
+                c.snapTo(snapHint)
+                this.announce((c.title + " snapped to the " + snapHint + " half."))
+            } {
+                this.announce((c.title + " moved to " + (c.placeText()) + "."))
+            }
+        }
+        snapHint = ""
+        gMoved = false
+        this.rebuild()
+        return true
+    }
+
+    fn dblclick:boolean (target:string px:double) {
+        if prefs.open {
+            return false
+        }
+        def key:string (this.windowOf(target))
+        if ((strlen key) == 0) {
+            return false
+        }
+        def c:WindowCtl (this.ctl(key))
+        if (c.isHandle(target)) {
+            gKind = ""
+            c.dragging = false
+            return (this.toggleMax(key))
+        }
+        return (this.selectWordAt(target px))
+    }
+
+    ; The wheel scrolls the contacts under the pointer.
+    fn scrollBy:boolean (dy:double) {
+        if prefs.open {
+            return true
+        }
+        if ((this.windowOf(hovered)) != "list") {
+            return false
+        }
+        def before:double listScroll
+        listScroll = (listScroll + dy)
+        if (listScroll < 0.0) {
+            listScroll = 0.0
+        }
+        this.rebuild()
+        this.laidOut()
+        return (before != listScroll)
+    }
+
+    fn cursorAt:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        if (gKind == "resize") {
+            def c:WindowCtl (this.gCtl())
+            def g:EVGElement (WindowDemo.byId(r (c.resizeTid(c.resizeEdge))))
+            if (g.id == (c.resizeTid(c.resizeEdge))) {
+                return g.cursor
+            }
+        }
+        def ins:[InputCtl] (this.inputs())
+        def hit (new EVGHitTest())
+        def id:string (hit.idAt(r px py))
+        def i:int 0
+        while (i < (array_length ins)) {
+            def c2:InputCtl (itemAt ins i)
+            if ((id == c2.tid) || (id == (c2.tid + "-text"))) {
+                return "text"
+            }
+            i = (i + 1)
+        }
+        return (hit.cursorAt(r px py))
+    }
+
+    ; --- input: the keyboard ---------------------------------------------------------------------
+
+    ; The Tab ring. With the dialog open, only the dialog's controls, and Tab
+    ; wraps inside it. Otherwise each window on the desktop in a fixed order —
+    ; its title bar, its three buttons, its content — and then the dock, one
+    ; stop that the arrows rove.
+    fn ring:[string] () {
+        def r:[string]
+        if prefs.open {
+            push r (prefs.barTid())
+            push r (prefs.closeTid())
+            push r "wd-prefs-snap"
+            push r "wd-prefs-max"
+            push r "wd-prefs-reset"
+            push r "wd-prefs-cancel"
+            push r "wd-prefs-save"
+            return r
+        }
+        def k:[string] (WindowDemo.keys())
+        def i:int 0
+        while (i < (array_length k)) {
+            def key:string (itemAt k i)
+            if (this.visible(key)) {
+                def c:WindowCtl (this.ctl(key))
+                push r (c.barTid())
+                push r (c.minTid())
+                push r (c.maxTid())
+                push r (c.closeTid())
+                if (key == "form") {
+                    push r nameIn.tid
+                    push r emailIn.tid
+                    push r "wd-form-fav"
+                    push r "wd-form-add"
+                }
+                if (key == "list") {
+                    def j:int 0
+                    while (j < (array_length names)) {
+                        push r ("wd-list-star-" + (to_string j))
+                        j = (j + 1)
+                    }
+                }
+                if (key == "notes") {
+                    push r noteIn.tid
+                    push r "wd-notes-add"
+                }
+                if (key == "about") {
+                    push r "wd-about-prefs"
+                    push r "wd-about-ok"
+                }
+            }
+            i = (i + 1)
+        }
+        def dk:[string] (WindowDemo.dockKeys())
+        if ((dockAt < 0) || (dockAt >= (array_length dk))) {
+            dockAt = 0
+        }
+        push r (this.dockTid((itemAt dk dockAt)))
+        return r
+    }
+
+    fn tab:boolean (back:boolean) {
+        def r:[string] (this.ring())
+        def n:int (array_length r)
+        def trapped:boolean prefs.open
+        def at:int -1
+        def i:int 0
+        while (i < n) {
+            if ((itemAt r i) == focused) {
+                at = i
+            }
+            i = (i + 1)
+        }
+        ; Focus on a dock button that is not the roving one still counts as
+        ; being in the dock.
+        if ((at < 0) && ((strlen (this.dockKeyOf(focused))) > 0)) {
+            at = (n - 1)
+        }
+        def next:int (at + 1)
+        if back {
+            next = (at - 1)
+        }
+        if (at < 0) {
+            next = 0
+            if back {
+                next = (n - 1)
+            }
+        }
+        if trapped {
+            if (next < 0) {
+                next = (n - 1)
+            }
+            if (next >= n) {
+                next = 0
+            }
+        }
+        this.rememberFocus()
+        moveReturn = ""
+        if ((next < 0) || (next >= n)) {
+            focused = ""
+            this.rebuild()
+            return false
+        }
+        focused = (itemAt r next)
+        def key:string (this.windowOf(focused))
+        if (((strlen key) > 0) && (trapped == false)) {
+            this.raise(key)
+        }
+        this.rebuild()
+        return true
+    }
+
+    ; Ctrl+F6 (or F6): the next window comes to the front, with the focus
+    ; where it last was in it; Shift goes the other way.
+    fn cycle:boolean (back:boolean) {
+        def vis:[string]
+        def i:int 0
+        while (i < (array_length order)) {
+            if (this.visible((itemAt order i))) {
+                push vis (itemAt order i)
+            }
+            i = (i + 1)
+        }
+        def n:int (array_length vis)
+        if (n == 0) {
+            return false
+        }
+        this.rememberFocus()
+        moveReturn = ""
+        def key:string (itemAt vis 0)
+        if back {
+            ; The front one goes to the back; the one under it is the front.
+            this.lower((itemAt vis (n - 1)))
+            key = (itemAt vis (n - 2))
+            if (n == 1) {
+                key = (itemAt vis 0)
+            }
+        } {
+            this.raise(key)
+        }
+        def c:WindowCtl (this.ctl(key))
+        focused = (this.lastFocusIn(key))
+        this.announce((c.title + " window."))
+        this.rebuild()
+        return true
+    }
+
+    ; Alt+Space: the title bar takes the focus, and the arrows move the
+    ; window until Enter or Escape gives it back.
+    fn enterMoveMode:boolean () {
+        def key:string (this.windowOf(focused))
+        if ((strlen key) == 0) {
+            key = (this.frontKey())
+        }
+        if ((strlen key) == 0) {
+            return false
+        }
+        def c:WindowCtl (this.ctl(key))
+        if (focused != (c.barTid())) {
+            moveReturn = focused
+            if ((this.windowOf(focused)) != key) {
+                moveReturn = (c.barTid())
+            }
+        } {
+            moveReturn = (c.barTid())
+        }
+        this.raise(key)
+        focused = (c.barTid())
+        this.announce(("Move " + c.title + ": arrows move it, Shift for 1 pixel, Ctrl+Shift+arrows resize, Enter or Escape to finish."))
+        this.rebuild()
+        return true
+    }
+
+    fn leaveMoveMode:boolean () {
+        if ((strlen moveReturn) == 0) {
+            return false
+        }
+        def key:string (this.windowOf(focused))
+        focused = moveReturn
+        moveReturn = ""
+        if ((strlen key) > 0) {
+            def c:WindowCtl (this.ctl(key))
+            this.announce((c.title + " at " + (c.placeText()) + ", " + (c.sizeText()) + "."))
+        }
+        this.rebuild()
+        return true
+    }
+
+    ; The arrows on a focused title bar: move by 10 (Shift: 1), and with Ctrl
+    ; and Shift together, resize by 10 from the right and bottom edges.
+    fn barKey:boolean (c:WindowCtl k:string shift:boolean ctrl:boolean) {
+        def dx:double 0.0
+        def dy:double 0.0
+        if (k == "ArrowLeft") {
+            dx = -1.0
+        }
+        if (k == "ArrowRight") {
+            dx = 1.0
+        }
+        if (k == "ArrowUp") {
+            dy = -1.0
+        }
+        if (k == "ArrowDown") {
+            dy = 1.0
+        }
+        if ((dx == 0.0) && (dy == 0.0)) {
+            return false
+        }
+        if (ctrl && shift) {
+            if (c.resizeBy((dx * 10.0) (dy * 10.0))) {
+                this.announce((c.title + " is " + (c.sizeText()) + "."))
+            } {
+                this.announce((c.title + " cannot be resized that way; it is " + (c.sizeText()) + "."))
+            }
+            this.rebuild()
+            return true
+        }
+        def step:double 10.0
+        if shift {
+            step = 1.0
+        }
+        if (c.maximized && (c.isModal == false)) {
+            this.announce((c.title + " is maximized; restore it to move it."))
+            this.rebuild()
+            return true
+        }
+        if (c.nudge((dx * step) (dy * step))) {
+            this.announce((c.title + " at " + (c.placeText()) + "."))
+        } {
+            this.announce((c.title + " is at the edge, " + (c.placeText()) + "."))
+        }
+        this.rebuild()
+        return true
+    }
+
+    fn key:boolean (k:string) {
+        return (this.keyWith(k false false false))
+    }
+
+    fn keyWith:boolean (k:string shift:boolean ctrl:boolean alt:boolean) {
+        if (k == "Tab") {
+            return (this.tab(shift))
+        }
+        if prefs.open {
+            if (k == "Escape") {
+                return (this.closePrefs(false))
+            }
+            if (focused == (prefs.barTid())) {
+                if (this.barKey(prefs k shift ctrl)) {
+                    return true
+                }
+            }
+            if ((UiCtl.activatesOn(k)) && ((strlen focused) > 0)) {
+                return (this.press(focused))
+            }
+            return false
+        }
+        if (k == "F6") {
+            return (this.cycle(shift))
+        }
+        if ((k == " ") && alt) {
+            return (this.enterMoveMode())
+        }
+        def key:string (this.windowOf(focused))
+        if ((strlen key) > 0) {
+            def c:WindowCtl (this.ctl(key))
+            if (focused == (c.barTid())) {
+                if ((k == "Escape") || (k == "Enter")) {
+                    this.leaveMoveMode()
+                    return true
+                }
+                if (this.barKey(c k shift ctrl)) {
+                    return true
+                }
+                if (k == " ") {
+                    return true
+                }
+            }
+        }
+        ; The dock: one stop, the arrows rove.
+        def dk:string (this.dockKeyOf(focused))
+        if ((strlen dk) > 0) {
+            def all:[string] (WindowDemo.dockKeys())
+            def n:int (array_length all)
+            this.syncDockAtKey(dk)
+            def to:int -1
+            if (k == "ArrowRight") {
+                to = ((dockAt + 1) % n)
+            }
+            if (k == "ArrowLeft") {
+                to = (((dockAt - 1) + n) % n)
+            }
+            if (k == "Home") {
+                to = 0
+            }
+            if (k == "End") {
+                to = (n - 1)
+            }
+            if (to >= 0) {
+                dockAt = to
+                focused = (this.dockTid((itemAt all to)))
+                this.rebuild()
+                return true
+            }
+        }
+        if (this.hasInput(focused)) {
+            if (k == "Enter") {
+                if (focused == noteIn.tid) {
+                    return (this.addNote())
+                }
+                return (this.addContact())
+            }
+            if (k == "Escape") {
+                return false
+            }
+            def ci:InputCtl (this.inputFor(focused))
+            ci.keyDownWith(focused k shift ctrl)
+            ci.ensureCaretVisible((this.engine()))
+            this.edited(ci)
+            this.rebuild()
+            return true
+        }
+        if ((UiCtl.activatesOn(k)) && ((strlen focused) > 0)) {
+            return (this.press(focused))
+        }
+        return false
+    }
+
+    ; Keys the text session must hand over instead of keeping: F6, and
+    ; Alt+Space.
+    fn ownsKey:boolean (k:string) {
+        return (k == "F6")
+    }
+
+    fn ownsKeyAlt:boolean (k:string alt:boolean) {
+        if (k == "F6") {
+            return true
+        }
+        return ((k == " ") && alt)
+    }
+
+    ; --- text fields ---------------------------------------------------------------------------
+
+    ; The fields on the desktop now: a window that is not there has no box.
+    fn inputs:[InputCtl] () {
+        def a:[InputCtl]
+        if (prefs.open) {
+            return a
+        }
+        if (this.visible("form")) {
+            push a nameIn
+            push a emailIn
+        }
+        if (this.visible("notes")) {
+            push a noteIn
+        }
+        return a
+    }
+
+    fn inputFor:InputCtl (tid:string) {
+        def all:[InputCtl] (this.inputs())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:InputCtl (itemAt all i)
+            if (c.tid == tid) {
+                return c
+            }
+            i = (i + 1)
+        }
+        return (new InputCtl())
+    }
+
+    fn hasInput:boolean (tid:string) {
+        if ((strlen tid) == 0) {
+            return false
+        }
+        def c:InputCtl (this.inputFor(tid))
+        return (c.tid == tid)
+    }
+
+    fn edited:void (c:InputCtl) {
+        if (c.tid != noteIn.tid) {
+            if ((strlen formStatus) > 0) {
+                formStatus = ""
+                formError = false
+            }
+        }
+    }
+
+    fn fieldOwning:string (target:string) {
+        def n:int (strlen target)
+        if (n > 5) {
+            if ((substring target (n - 5) n) == "-text") {
+                def base:string (substring target 0 (n - 5))
+                if (this.hasInput(base)) {
+                    return base
+                }
+            }
+        }
+        return target
+    }
+
+    fn fieldBoxOf:EVGElement (target:string) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        return (WindowDemo.byId(r target))
+    }
+
+    fn indexAt:int (target:string px:double) {
+        def c:InputCtl (this.inputFor(target))
+        def box:EVGElement (this.fieldBoxOf(target))
+        if (box.id != target) {
+            return -1
+        }
+        return (InputCtl.indexAtPageX((this.engine()) c box px))
+    }
+
+    fn beginSelection:boolean (rawTarget:string px:double extend:boolean) {
+        def target:string (this.fieldOwning(rawTarget))
+        def took:boolean (this.press(target))
+        def c:InputCtl (this.inputFor(target))
+        if (c.tid != target) {
+            dragField = ""
+            return took
+        }
+        def idx:int (this.indexAt(target px))
+        if (idx < 0) {
+            dragField = ""
+            return true
+        }
+        c.placeCaret(idx extend)
+        dragField = target
+        this.rebuild()
+        return true
+    }
+
+    fn extendSelection:boolean (px:double) {
+        if (dragField == "") {
+            return false
+        }
+        def c:InputCtl (this.inputFor(dragField))
+        if (c.tid != dragField) {
+            return false
+        }
+        def idx:int (this.indexAt(dragField px))
+        if ((idx < 0) || (idx == c.caret)) {
+            return false
+        }
+        c.placeCaret(idx true)
+        this.rebuild()
+        return true
+    }
+
+    fn endSelection:boolean () {
+        dragField = ""
+        return false
+    }
+
+    fn selectWordAt:boolean (rawTarget:string px:double) {
+        def target:string (this.fieldOwning(rawTarget))
+        def c:InputCtl (this.inputFor(target))
+        if (c.tid != target) {
+            return false
+        }
+        def idx:int (this.indexAt(target px))
+        if (idx < 0) {
+            return false
+        }
+        def at:int idx
+        if (at >= (strlen c.value)) {
+            at = ((strlen c.value) - 1)
+        }
+        c.selectWordAt(at)
+        this.rebuild()
+        return true
+    }
+
+    fn focusedField:string () {
+        if (this.hasInput(focused)) {
+            return focused
+        }
+        return ""
+    }
+
+    fn fieldStateJson:string (tid:string) {
+        def c:InputCtl (this.inputFor(tid))
+        if (c.tid != tid) {
+            return "null"
+        }
+        def box:EVGElement (this.fieldBoxOf(tid))
+        def out:string "{"
+        out = (out + "\"tid\":" + (EVGA11yTree.jsonString(c.tid)))
+        out = (out + ",\"value\":" + (EVGA11yTree.jsonString(c.value)))
+        out = (out + ",\"selStart\":" + (to_string (c.selStart())))
+        out = (out + ",\"selEnd\":" + (to_string (c.selEnd())))
+        out = (out + ",\"kind\":" + (EVGA11yTree.jsonString(c.kind)))
+        out = (out + ",\"maxLength\":" + (to_string c.maxLength))
+        out = (out + ",\"placeholder\":" + (EVGA11yTree.jsonString(c.placeholder)))
+        if (box.id == tid) {
+            out = (out + ",\"box\":{\"x\":" + (to_string (to_int (box.calculatedX))))
+            out = (out + ",\"y\":" + (to_string (to_int (box.calculatedY))))
+            out = (out + ",\"w\":" + (to_string (to_int (box.calculatedWidth))))
+            out = (out + ",\"h\":" + (to_string (to_int (box.calculatedHeight))) + "}")
+        }
+        return (out + "}")
+    }
+
+    fn applyEdit:boolean (tid:string v:string selStart:int selEnd:int) {
+        def c:InputCtl (this.inputFor(tid))
+        if (c.tid != tid) {
+            return false
+        }
+        c.applyEdit(v selStart selEnd)
+        c.ensureCaretVisible((this.engine()))
+        this.edited(c)
+        this.rebuild()
+        return true
+    }
+
+    ; --- the host ------------------------------------------------------------------------------
+
+    fn setHover:void (id:string) {
+        hovered = id
+        this.rebuild()
+    }
+
+    fn setPressed:void (id:string) {
+        pressed = id
+    }
+
+    ; Focus arriving from the page (a reader, a Tab into the mirror). With the
+    ; dialog open only its controls may take it; a control in a window brings
+    ; the window to the front.
+    fn setFocus:void (id:string) {
+        if ((strlen id) == 0) {
+            this.rememberFocus()
+            focused = ""
+            moveReturn = ""
+            return
+        }
+        def r:[string] (this.ring())
+        def ok:boolean (WindowDemo.has(r id))
+        if ((ok == false) && (prefs.open == false)) {
+            ok = ((strlen (this.dockKeyOf(id))) > 0)
+        }
+        if ok {
+            focused = id
+            def key:string (this.windowOf(id))
+            if (((strlen key) > 0) && (prefs.open == false)) {
+                this.raise(key)
+            }
+            this.syncDockAt()
+        }
+    }
+
+    ; The keyboard ring round a title bar: the bar itself, inset so it sits
+    ; inside the window's rounded corner. Everything else: the page's rule.
+    fn ringBoxJson:string (id:string) {
+        def key:string (this.windowOf(id))
+        def c:WindowCtl prefs
+        if ((strlen key) > 0) {
+            c = (this.ctl(key))
+        }
+        if (id != (c.barTid())) {
+            return ""
+        }
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def el:EVGElement (WindowDemo.byId(r id))
+        if (el.id != id) {
+            return ""
+        }
+        return ((to_string (to_int ((el.calculatedX) + 3.0))) + "," + (to_string (to_int ((el.calculatedY) + 4.0))) + "," + (to_string (to_int ((el.calculatedWidth) - 6.0))) + "," + (to_string (to_int ((el.calculatedHeight) - 8.0))))
+    }
+
+    ; An element's box in page pixels, "x,y,w,h", for a check that clicks.
+    fn boxOf:string (id:string) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def el:EVGElement (WindowDemo.byId(r id))
+        if (el.id != id) {
+            return ""
+        }
+        return ((to_string (el.calculatedX)) + "," + (to_string (el.calculatedY)) + "," + (to_string (el.calculatedWidth)) + "," + (to_string (el.calculatedHeight)))
+    }
+
+    ; --- what the page asks for ------------------------------------------------------------------
+
+    fn displayListJson:string () {
+        def lay:EVGLayout (this.laidOut())
+        def r:EVGElement (unwrap root)
+        def dl (new EVGDisplayList())
+        dl.setTextEngine((lay.getTextEngine()))
+        dl.build(r)
+        return (dl.toJson())
+    }
+
+    fn hitId:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def hit (new EVGHitTest())
+        return (hit.idAt(r px py))
+    }
+
+    fn a11yJson:string (generation:int focusId:string) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Window demo" generation focusId))
+        return (t.toJson())
+    }
+
+    fn a11yProblems:[string] () {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Window demo" 1 ""))
+        return (t.lint())
+    }
+
+    fn styleErrorCount:int () {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (s.getErrorCount())
+    }
+
+    fn styleErrorAt:string (i:int) {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (s.getError(i))
+    }
+
+    fn widthPx:double () {
+        return pageW
+    }
+
+    fn heightPx:double () {
+        return pageH
+    }
+
+    sfn jb:string (b:boolean) {
+        if b {
+            return "true"
+        }
+        return "false"
+    }
+
+    fn winJson:string (c:WindowCtl) {
+        def o:string ("{\"tid\":\"" + c.tid + "\"")
+        o = (o + ",\"open\":" + (WindowDemo.jb(c.open)))
+        o = (o + ",\"min\":" + (WindowDemo.jb(c.minimized)))
+        o = (o + ",\"max\":" + (WindowDemo.jb(c.maximized)))
+        o = (o + ",\"snapped\":\"" + c.snapped + "\"")
+        o = (o + ",\"dragging\":" + (WindowDemo.jb(c.dragging)))
+        o = (o + ",\"x\":" + (to_string c.x))
+        o = (o + ",\"y\":" + (to_string c.y))
+        o = (o + ",\"w\":" + (to_string (c.frameW())))
+        o = (o + ",\"h\":" + (to_string (c.frameH())))
+        o = (o + ",\"minW\":" + (to_string c.minW))
+        o = (o + ",\"minH\":" + (to_string c.minH))
+        o = (o + ",\"keep\":" + (to_string c.keepOnScreen))
+        o = (o + ",\"pageW\":" + (to_string c.pageW))
+        o = (o + ",\"pageH\":" + (to_string c.pageH))
+        return (o + "}")
+    }
+
+    ; Everything a check wants to know, as JSON.
+    fn stateJson:string () {
+        def o:string "{\"windows\":{"
+        def k:[string] (WindowDemo.keys())
+        def i:int 0
+        while (i < (array_length k)) {
+            if (i > 0) {
+                o = (o + ",")
+            }
+            o = (o + "\"" + (itemAt k i) + "\":" + (this.winJson((this.ctl((itemAt k i))))))
+            i = (i + 1)
+        }
+        o = (o + "},\"prefs\":" + (this.winJson(prefs)))
+        o = (o + ",\"order\":[")
+        def j:int 0
+        while (j < (array_length order)) {
+            if (j > 0) {
+                o = (o + ",")
+            }
+            o = (o + "\"" + (itemAt order j) + "\"")
+            j = (j + 1)
+        }
+        o = (o + "],\"front\":" + (EVGA11yTree.jsonString((this.frontKey()))))
+        o = (o + ",\"focused\":" + (EVGA11yTree.jsonString(focused)))
+        o = (o + ",\"said\":" + (EVGA11yTree.jsonString(said)))
+        o = (o + ",\"snapHint\":" + (EVGA11yTree.jsonString(snapHint)))
+        o = (o + ",\"moveMode\":" + (WindowDemo.jb(((strlen moveReturn) > 0))))
+        o = (o + ",\"contacts\":" + (to_string (array_length names)))
+        o = (o + ",\"notes\":" + (to_string (array_length notes)))
+        o = (o + ",\"snapOn\":" + (WindowDemo.jb(snapOn)))
+        o = (o + ",\"desk\":[" + (to_string deskX) + "," + (to_string deskY) + "," + (to_string deskW) + "," + (to_string deskH) + "]")
+        o = (o + ",\"card\":[" + (to_string cardX) + "," + (to_string cardY) + "," + (to_string cardW) + "," + (to_string cardH) + "]")
+        return (o + "}")
+    }
+
+    fn summary:string () {
+        return ((this.frontKey()) + "|" + focused + "|" + said)
+    }
+}

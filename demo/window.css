@@ -1,0 +1,458 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * Window, as an EVG stylesheet: a small desktop in a card, in ReUI / shadcn's
+ * look — zinc greys, white windows with a 10px radius, a hairline border and a
+ * soft shadow, Lucide glyphs in the title bars and a dock along the bottom.
+ *
+ * Every class here is one WindowDemo.rgr writes (`wd-*`). WindowCtl owns the
+ * behaviour — where each window is, its size, minimized / maximized / snapped,
+ * the drag, the resize and the keys — and none of the look. Where a window is
+ * and how big is written inline by the demo (`left`, `top`, `width`,
+ * `height`), because it changes under the pointer every frame.
+ *
+ * EVG's rules that shape this sheet: borders are four-sided, so the dock's
+ * top line is its own element (`.wd-rule`); a property is not reset when a
+ * rule stops matching, but the demo builds a fresh tree for every change, so
+ * the state classes (`-active`, `-on`, `-min`) start clean each time.
+ */
+
+/* --- the page and the card ------------------------------------------------------ */
+
+.wd-page {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  width: 900px;
+  height: 620px;
+  padding: 16px;
+  background-color: #ffffff;
+}
+
+.wd-card {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  flex-grow: 1;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  overflow: hidden;
+  background-color: #fafafa;
+}
+
+/* The desktop: where the windows live. They are absolute children, placed
+ * from its content box, and it clips them. */
+.wd-desk {
+  flex-grow: 1;
+  overflow: hidden;
+  background: linear-gradient(160deg, #f4f4f5, #e4e4e7);
+}
+
+/* Where a window dropped on this edge would go. */
+.wd-snap {
+  position: absolute;
+  border: 1px solid #a1a1aa;
+  border-radius: 10px;
+  background-color: rgba(24, 24, 27, 0.08);
+}
+
+/* --- a window -------------------------------------------------------------------- */
+
+.wd-win {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  overflow: hidden;
+  background-color: #ffffff;
+  shadow-color: rgba(0, 0, 0, 0.10);
+  shadow-radius: 16px;
+  shadow-offset-y: 6px;
+}
+.wd-win-active {
+  border-color: #d4d4d8;
+  shadow-color: rgba(0, 0, 0, 0.18);
+  shadow-radius: 28px;
+  shadow-offset-y: 10px;
+}
+.wd-win-max { border-radius: 0px; }
+
+.wd-titlebar {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 2px;
+  height: 40px;
+  padding: 0 6px 0 0;
+  background-color: #fafafa;
+}
+.wd-titlebar-active { background-color: #f4f4f5; }
+
+/* The handle fills the bar left of the buttons: the whole strip is grabbable. */
+.wd-handle {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  flex-grow: 1;
+  flex-basis: 0px;
+  min-width: 0px;
+  height: 40px;
+  padding: 0 0 0 12px;
+  overflow: hidden;
+  cursor: move;
+}
+/* Held: by the pointer, or by Alt+Space for the arrows. */
+.wd-handle-moving { cursor: move; }
+
+.wd-title {
+  color: #71717a;
+  font-size: 13px;
+  font-weight: 500;
+  height: 20px;
+  line-height: 20px;
+  white-space: pre;
+}
+.wd-title-active { color: #09090b; font-weight: 600; }
+
+.wd-appicon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: #a1a1aa;
+  stroke-width: 2;
+}
+.wd-appicon-active { stroke: #18181b; }
+
+.wd-tbtn {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.wd-tbtn:hover { background-color: #e4e4e7; }
+.wd-tbtn:focus { background-color: #e4e4e7; }
+.wd-tbtn-close:hover { background-color: #fee2e2; }
+
+.wd-icon {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: #52525b;
+  stroke-width: 2;
+}
+
+.wd-body {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  flex-grow: 1;
+  gap: 12px;
+  padding: 14px 16px 16px 16px;
+  overflow: hidden;
+}
+.wd-body-flush { padding: 0px; gap: 0px; }
+
+/* The edges and corners a resize starts from: invisible, over the frame's
+ * edge, each with the cursor that says which way it goes. */
+.wd-grip { position: absolute; }
+.wd-grip-n { cursor: ns-resize; }
+.wd-grip-s { cursor: ns-resize; }
+.wd-grip-e { cursor: ew-resize; }
+.wd-grip-w { cursor: ew-resize; }
+.wd-grip-ne { cursor: nesw-resize; }
+.wd-grip-sw { cursor: nesw-resize; }
+.wd-grip-nw { cursor: nwse-resize; }
+.wd-grip-se { cursor: nwse-resize; }
+
+/* --- the pieces inside --------------------------------------------------------- */
+
+.wd-field {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.wd-label { color: #09090b; font-size: 13px; font-weight: 500; height: 16px; line-height: 16px; }
+
+.wd-box {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  position: relative;
+  border-radius: 8px;
+  border: 1px solid #e4e4e7;
+  background-color: #ffffff;
+  padding: 0 12px 0 12px;
+  height: 36px;
+  cursor: text;
+  overflow: hidden;
+}
+.wd-box:hover { border-color: #d4d4d8; }
+.wd-box:focus {
+  border-color: #a1a1aa;
+  shadow-color: rgba(161, 161, 170, 0.45);
+  shadow-radius: 3px;
+}
+
+.wd-text { color: #09090b; font-family: Arial; font-size: 14px; height: 20px; line-height: 20px; white-space: pre; }
+.wd-ghost { color: #a1a1aa; }
+
+.wd-caret {
+  position: absolute;
+  top: 7px;
+  width: 1px;
+  height: 20px;
+  background-color: #09090b;
+}
+
+.wd-band {
+  position: absolute;
+  top: 7px;
+  height: 20px;
+  background-color: #bfdbfe;
+}
+
+.wd-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 12px;
+}
+.wd-row-end { justify-content: flex-end; gap: 8px; }
+.wd-grow { flex-grow: 1; flex-basis: 0px; min-width: 0px; }
+
+.wd-col {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 2px;
+}
+
+.wd-strong { color: #09090b; font-size: 14px; font-weight: 500; height: 20px; line-height: 20px; }
+.wd-muted { color: #71717a; font-size: 13px; height: 18px; line-height: 18px; }
+.wd-para { color: #3f3f46; font-size: 13px; height: auto; line-height: 19px; }
+.wd-ok { color: #15803d; font-size: 12px; font-weight: 500; height: 16px; line-height: 16px; }
+.wd-err { color: #dc2626; }
+
+.wd-btn {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #18181b;
+  border-radius: 8px;
+  background-color: #18181b;
+  cursor: pointer;
+}
+.wd-btn:hover { background-color: #27272a; border-color: #27272a; }
+.wd-btn:focus { border-color: #a1a1aa; shadow-color: rgba(161, 161, 170, 0.6); shadow-radius: 3px; }
+.wd-btn-outline {
+  border-color: #e4e4e7;
+  background-color: #ffffff;
+  shadow-color: rgba(0, 0, 0, 0.05);
+  shadow-radius: 2px;
+  shadow-offset-y: 1px;
+}
+.wd-btn-outline:hover { background-color: #f4f4f5; border-color: #e4e4e7; }
+.wd-btn-text { color: #fafafa; font-size: 13px; font-weight: 500; height: 20px; line-height: 20px; white-space: pre; }
+.wd-btn-text-dark { color: #09090b; }
+
+.wd-switch {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  width: 36px;
+  height: 20px;
+  padding: 0 2px;
+  border-radius: 10px;
+  background-color: #e4e4e7;
+  cursor: pointer;
+}
+.wd-switch-on { background-color: #18181b; justify-content: flex-end; }
+.wd-switch:focus { shadow-color: rgba(161, 161, 170, 0.8); shadow-radius: 3px; }
+
+.wd-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background-color: #ffffff;
+}
+
+/* --- the contacts table ---------------------------------------------------------- */
+
+.wd-table {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  flex-grow: 1;
+  overflow: hidden;
+}
+
+.wd-tr {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 8px 0 16px;
+}
+.wd-tr-head { height: 32px; background-color: #fafafa; }
+.wd-tr-line { height: 1px; background-color: #f4f4f5; }
+
+.wd-th { color: #71717a; font-size: 12px; font-weight: 500; height: 16px; line-height: 16px; white-space: pre; }
+.wd-td { color: #09090b; font-size: 13px; height: 18px; line-height: 18px; white-space: pre; overflow: hidden; }
+.wd-td-muted { color: #71717a; }
+.wd-c1 { flex-grow: 1; flex-basis: 0px; min-width: 0px; }
+.wd-c2 { flex-grow: 1.4; flex-basis: 0px; min-width: 0px; }
+.wd-c3 { width: 28px; }
+
+.wd-star {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.wd-star:hover { background-color: #f4f4f5; }
+.wd-star:focus { background-color: #e4e4e7; }
+.wd-star-icon { width: 15px; height: 15px; fill: none; stroke: #a1a1aa; stroke-width: 2; }
+.wd-star-icon-on { fill: #facc15; stroke: #ca8a04; }
+
+/* --- notes ------------------------------------------------------------------------ */
+
+.wd-notes {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.wd-note {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.wd-dot {
+  width: 6px;
+  height: 6px;
+  margin: 7px 0 0 0;
+  border-radius: 3px;
+  background-color: #a1a1aa;
+}
+
+/* --- about ------------------------------------------------------------------------ */
+
+.wd-logo {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background-color: #18181b;
+}
+.wd-logo-icon { width: 20px; height: 20px; fill: none; stroke: #fafafa; stroke-width: 2; }
+
+/* --- the dock -------------------------------------------------------------------- */
+
+.wd-rule { height: 1px; background-color: #e4e4e7; }
+
+.wd-dock {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 12px;
+  height: 52px;
+  padding: 0 10px;
+  background-color: #ffffff;
+}
+
+.wd-dockbar {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.wd-dbtn {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #ffffff;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.wd-dbtn:hover { background-color: #f4f4f5; border-color: #f4f4f5; }
+.wd-dbtn:focus { border-color: #a1a1aa; }
+.wd-dbtn-on { background-color: #f4f4f5; border-color: #e4e4e7; }
+.wd-dbtn-icon { width: 16px; height: 16px; fill: none; stroke: #3f3f46; stroke-width: 2; }
+.wd-dbtn-icon-off { stroke: #a1a1aa; }
+.wd-dbtn-text { color: #09090b; font-size: 13px; font-weight: 500; height: 18px; line-height: 18px; white-space: pre; }
+.wd-dbtn-text-off { color: #a1a1aa; font-weight: 400; }
+
+/* After a button's name: a short bar while its window is in the dock. */
+.wd-pip { width: 10px; height: 3px; border-radius: 2px; background-color: #a1a1aa; }
+
+.wd-dsep { width: 1px; height: 24px; background-color: #e4e4e7; }
+
+.wd-live {
+  flex-grow: 1;
+  flex-basis: 0px;
+  min-width: 0px;
+  color: #71717a;
+  font-size: 12px;
+  height: 16px;
+  line-height: 16px;
+  text-align: right;
+  white-space: pre;
+  overflow: hidden;
+}
+
+/* --- the modal ------------------------------------------------------------------ */
+
+.wd-scrim {
+  position: absolute;
+  background-color: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(3px);
+}
+
+.wd-modal { shadow-color: rgba(0, 0, 0, 0.25); shadow-radius: 36px; shadow-offset-y: 12px; }
+
+.wd-desc { color: #71717a; font-size: 13px; height: auto; line-height: 18px; }
+
+/* --- narrow -------------------------------------------------------------------- */
+
+@media (max-width: 600px) {
+  .wd-page { width: 100%; height: 100%; padding: 8px; }
+  .wd-dock { gap: 6px; padding: 0 6px; }
+  .wd-dbtn { padding: 0 8px; }
+  .wd-body { padding: 12px; }
+}

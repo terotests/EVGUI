@@ -59,6 +59,7 @@ SUITES=(
   ui:colorpicker:check
   ui:questionnaire:check
   ui:select:check
+  ui:window:check
   ui:dialog:check
   ui:popover:check
   ui:menubar:check
