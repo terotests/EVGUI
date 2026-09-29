@@ -52,6 +52,7 @@ treefactory Sp {
     tag SpPage    EVGElement (props (className "sp-page"))
     tag SpCard    EVGElement (props (className "sp-card"))
     tag SpCaption EVGElement (props (className "sp-caption") (elementType 1) (role "heading") (a11yLevel 2))
+    tag SpCapRule EVGElement (props (className "sp-caption-rule") (a11yHidden true))
     tag SpStage   EVGElement (props (className "sp-stage"))
     tag SpBox     EVGElement (props (className "sp-box"))
     tag SpCol     EVGElement (props (className "sp-col"))
@@ -104,7 +105,8 @@ class SeparatorDemo {
 
     sfn card:EVGElement (id:string caption:string example:EVGElement) {
         def c (tree Sp (SpCard (props (id id))
-            (SpCaption (props (id (id + "-caption"))) caption)))
+            (SpCaption (props (id (id + "-caption"))) caption)
+            (SpCapRule)))
         def stage (tree Sp (SpStage (props (id (id + "-stage")))))
         stage.addChild(example)
         c.addChild(stage)

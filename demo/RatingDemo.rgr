@@ -47,6 +47,7 @@ treefactory Rt {
     tag Page     EVGElement (props (className "rt-page"))
     tag Card     EVGElement (props (className "rt-card"))
     tag Caption  EVGElement (props (className "rt-caption") (elementType 1) (role "heading") (a11yLevel 2))
+    tag CapRule  EVGElement (props (className "rt-caption-rule") (a11yHidden true))
     tag Stage    EVGElement (props (className "rt-stage"))
     tag Col      EVGElement (props (className "rt-col"))
     tag Row      EVGElement (props (className "rt-row"))
@@ -215,7 +216,8 @@ class RatingDemo {
             cls = "rt-card rt-card-tall"
         }
         def c (tree Rt (Card (props (id id) (className cls))
-            (Caption (props (id (id + "-caption"))) caption)))
+            (Caption (props (id (id + "-caption"))) caption)
+            (CapRule)))
         def stage (tree Rt (Stage (props (id (id + "-stage")))))
         stage.addChild(example)
         c.addChild(stage)

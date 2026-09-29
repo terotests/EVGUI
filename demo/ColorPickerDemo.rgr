@@ -68,6 +68,7 @@ treefactory Cp {
     tag Page     EVGElement (props (className "cp-page"))
     tag Card     EVGElement (props (className "cp-card"))
     tag Caption  EVGElement (props (className "cp-caption") (elementType 1) (role "heading") (a11yLevel 2))
+    tag CapRule  EVGElement (props (className "cp-caption-rule") (a11yHidden true))
     tag Stage    EVGElement (props (className "cp-stage"))
     tag Row      EVGElement (props (className "cp-row"))
     tag Col      EVGElement (props (className "cp-col"))
@@ -554,7 +555,8 @@ class ColorPickerDemo {
     fn card:EVGElement (key:string caption:string) {
         return (tree Cp
             (Card (props (id ("cp-card-" + key)) (className ("cp-card cp-card-" + key)))
-                (Caption (props (id ("cp-card-" + key + "-caption"))) caption)))
+                (Caption (props (id ("cp-card-" + key + "-caption"))) caption)
+                (CapRule)))
     }
 
     fn vrow:EVGElement (id:string k:string v:string) {

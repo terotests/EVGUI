@@ -83,6 +83,9 @@ treefactory Ec {
     tag Col      EVGElement (props (className "ec-col"))
     tag Ev       EVGElement (props (className "ec-ev") (role "listitem") (a11yFocusable true))
     tag EvTxt    EVGElement (props (className "ec-evtxt") (elementType 1) (a11yHidden true))
+    ; The coloured spine down the event's left edge (a `border-left` in the
+    ; reference). After the title, so the title stays the first child.
+    tag EvSpine  EVGElement (props (className "ec-evspine") (a11yHidden true))
     tag Note     EVGElement (props (className "ec-note") (elementType 1))
 }
 
@@ -605,7 +608,8 @@ class EventCalDemo {
                                (className (this.evClass(e.id)))
                                (a11yLabel (e.title + ", " + (EventCalCtl.clock(e.startMin))
                                    + " to " + (EventCalCtl.clock(e.endMin)))))
-                        (EvTxt evTitle)))
+                        (EvTxt evTitle)
+                        (EvSpine)))
                 ; THE MEASURED NUMBERS, become pixels. `left` and `width` are
                 ; fractions of the column: column 0 of 3 is the full width,
                 ; column 2 of 3 is a third of it, offset two thirds — the

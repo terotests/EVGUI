@@ -765,10 +765,15 @@
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
-  border-bottom: 1px solid var(--row-line);
-  padding: 0 12px;
-  height: 46px;
+  /* The row's content stays centred where it was in the 46px row. */
+  padding: 1px 12px 0 12px;
+  height: 45px;
 }
+
+/* The 1px line under every row: the reference's `border-b` in its 46px row,
+ * which EVG cannot draw on one side. 45px + the line keeps the 46px pitch the
+ * virtualiser counts in. */
+.db-tr-line { height: 1px; width: 100%; flex-shrink: 0; background-color: var(--row-line); }
 
 .db-tr-on { background-color: var(--row-alt); }
 

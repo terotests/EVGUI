@@ -63,6 +63,9 @@ treefactory Table {
     tag Mark     EVGElement (props (className "tb-mark") (elementType 1) (a11yHidden true))
     tag Badge    EVGElement (props (className "tb-badge") (elementType 1))
     tag Foot     EVGElement (props (className "tb-foot"))
+    ; The 1px line above a row and above the footer: a top border, which EVG
+    ; draws on all four sides or none.
+    tag Line     EVGElement (props (className "tb-line") (a11yHidden true))
     tag Note     EVGElement (props (className "tb-note") (elementType 1))
     tag Spacer   EVGElement (props (className "tb-spacer"))
     tag Button   EVGElement (props (className "tb-button") (role "button"))
@@ -275,11 +278,13 @@ class TableDemo {
         def i:int 0
         while (i < (array_length rows)) {
             def r:UiRecord (itemAt rows i)
+            grid.addChild((tree Table (Line)))
             grid.addChild((this.bodyRow(r)))
             i = (i + 1)
         }
         def card (tree Table (Card (props (id "tbl-card"))))
         card.addChild(grid)
+        card.addChild((tree Table (Line)))
         card.addChild((this.foot()))
         return (tree Table
             (Page (props (id "page"))

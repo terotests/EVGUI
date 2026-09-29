@@ -34,15 +34,19 @@
   background-color: #ffffff;
 }
 
+/* 39px and a 1px rule under it (`.drw-caption-rule`): the reference's
+ * `border-b` inside a 40px band. EVG draws a border on all four sides only.
+ * The line box stays 40px, so the text sits where it did. */
 .drw-caption {
-  height: 40px;
+  height: 39px;
   line-height: 40px;
   padding: 0 16px;
   color: #71717a;
   font-size: 12px;
   font-weight: 500;
-  border-bottom: 1px solid #f4f4f5;
 }
+
+.drw-caption-rule { height: 1px; width: 100%; flex-shrink: 0; background-color: #f4f4f5; }
 
 .drw-stage {
   display: flex;
@@ -122,29 +126,30 @@
 }
 
 /* ReUI's side drawer: full height, `max-w-sm`, rounded on the inner side. */
-.drw-panel-right {
-  border-radius: 16px 0 0 16px;
-  border-left: 1px solid #e4e4e7;
-}
-.drw-panel-left {
-  border-radius: 0 16px 16px 0;
-  border-right: 1px solid #e4e4e7;
-}
+.drw-panel-right { border-radius: 16px 0 0 16px; }
+.drw-panel-left { border-radius: 0 16px 16px 0; }
 
 /* vaul's bottom sheet: full width, rounded on top, content centred at
  * `max-w-sm`. */
 .drw-panel-bottom {
   align-items: center;
   border-radius: 16px 16px 0 0;
-  border-top: 1px solid #e4e4e7;
   padding: 0 0 8px 0;
 }
 .drw-panel-top {
   align-items: center;
   border-radius: 0 0 16px 16px;
-  border-bottom: 1px solid #e4e4e7;
   padding: 8px 0 0 0;
 }
+
+/* The inner edge's 1px line — the reference's `border-l` / `border-r` /
+ * `border-t` / `border-b`. EVG draws a border on all four sides only, so it
+ * is an element (`.drw-edge`), straight between the rounded corners: out of
+ * flow beside a side panel (its height written by the demo), the first or
+ * last row of a sheet (its width written by the demo, centred). */
+.drw-edge { height: 1px; flex-shrink: 0; background-color: #e4e4e7; }
+.drw-edge-right { position: absolute; left: 0px; top: 16px; width: 1px; }
+.drw-edge-left { position: absolute; right: 0px; top: 16px; width: 1px; }
 
 /* The grab bar: `mx-auto mt-4 h-2 w-[100px] rounded-full bg-muted`. */
 .drw-handle {
@@ -353,7 +358,8 @@
 .drw-nav-item:focus { background-color: #f4f4f5; shadow-color: rgba(161, 161, 170, 0.6); shadow-radius: 2px; }
 .drw-nav-item-on { background-color: #f4f4f5; }
 
-.drw-footer-user { border-top: 1px solid #f4f4f5; }
+/* The line over the user row: the reference's `border-t` on the footer. */
+.drw-line { height: 1px; width: 100%; flex-shrink: 0; background-color: #f4f4f5; }
 
 .drw-avatar {
   display: flex;
@@ -427,8 +433,12 @@
 @media (max-width: 600px) {
   .drw-page { width: 100%; height: 100%; padding: 16px; gap: 12px; }
   .drw-card { height: 130px; }
-  .drw-caption { height: auto; line-height: 16px; padding: 10px 12px; }
-  .drw-stage { padding: 8px; gap: 6px; }
+  .drw-caption { height: auto; line-height: 16px; padding: 10px 12px 9px 12px; }
+  /* 7px at the bottom: the layout sizes the stage as the card less its
+   * fixed-height rows and does not count the wrapped caption, so the 1px
+   * caption rule took a pixel off the stage and moved the button half of
+   * one. This keeps it where it was. */
+  .drw-stage { padding: 8px 8px 7px 8px; gap: 6px; }
   .drw-btn { padding: 0 12px; }
   .drw-footer-row { flex-direction: column; justify-content: flex-start; }
   .drw-chart { height: 90px; }
