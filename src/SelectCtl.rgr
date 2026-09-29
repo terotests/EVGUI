@@ -21,6 +21,26 @@
 ; The options are unnamed in the trace because `option` is not one of the roles
 ; whose text becomes its name in the DOM snapshot — so the label is compared
 ; where it is announced, on the trigger, and nowhere else.
+;
+; BASE UI'S SELECT, opt-in (`baseUi = true`; everything above is untouched
+; while it is false). Written from Base UI's documented Select and the
+; WAI-ARIA listbox pattern, not measured:
+;
+;   open      Enter, Space, ArrowDown or ArrowUp on the trigger, or a click.
+;             The highlight starts on the chosen item; with nothing chosen
+;             the keys start at the first row (ArrowUp: the last) and a click
+;             highlights nothing.
+;   move      the arrows (no wrap), Home and End, skipping disabled rows; the
+;             pointer highlights the row it is over.
+;   typeahead letters jump to the next row that starts with them; the same
+;             letter again cycles; the buffer empties after `typeaheadMs`.
+;             On the closed trigger of a single select it CHOOSES, as a
+;             native <select> does.
+;   choose    Enter, Space or a click. Single: the value, closed, focus back
+;             on the trigger. `multiple`: the row toggles in `values` and the
+;             list stays open.
+;   selected  `aria-selected` follows what is CHOSEN (not the highlight), and
+;             the list is `aria-multiselectable` when `multiple`.
 ; =============================================================================
 
 Import "UiCtl.rgr"
@@ -39,6 +59,16 @@ class SelectCtl extends UiCtl {
     def valueEl:EVGElement
     def contentEl:EVGElement
 
+    ; --- Base UI's Select (opt-in; see the header) ---
+    def baseUi:boolean false
+    def multiple:boolean false
+    ; The chosen values of a `multiple` select, in the items' order.
+    def values:[string]
+    ; What has been typed for the typeahead, and how long ago.
+    def typed:string ""
+    def typedAge:double 0.0
+    def typeaheadMs:double 750.0
+
     Constructor () {
         rootEl = (EVGElement.createDiv())
         triggerEl = (EVGElement.createDiv())
@@ -46,6 +76,16 @@ class SelectCtl extends UiCtl {
         contentEl = (EVGElement.createDiv())
         def empty:[UiItem]
         items = empty
+        def noValues:[string]
+        values = noValues
+    }
+
+    ; An item under a group heading (`UiItem.group`). Items of one group are
+    ; added together, in the order the groups are shown.
+    fn addGroupedItem:void (itemValue:string itemName:string groupName:string) {
+        this.addItem(itemValue itemName false)
+        def it:UiItem (itemAt items ((array_length items) - 1))
+        it.group = groupName
     }
 
     fn addItem:void (itemValue:string itemName:string itemDisabled:boolean) {
@@ -133,6 +173,9 @@ class SelectCtl extends UiCtl {
     }
 
     fn activate:string (target:string) {
+        if baseUi {
+            return (this.baseActivate(target))
+        }
         if disabled {
             return ""
         }
@@ -156,6 +199,9 @@ class SelectCtl extends UiCtl {
     }
 
     fn keyDown:string (target:string key:string) {
+        if baseUi {
+            return (this.baseKeyDown(target key))
+        }
         if disabled {
             return ""
         }
@@ -205,6 +251,309 @@ class SelectCtl extends UiCtl {
             at = (at + step)
         }
         return ""
+    }
+
+    ; --- Base UI's Select ---------------------------------------------------------
+
+    fn isChosen:boolean (v:string) {
+        if multiple {
+            return ((indexOf values v) >= 0)
+        }
+        return (v == value)
+    }
+
+    fn enabledAt:boolean (i:int) {
+        if ((i < 0) || (i >= (array_length items))) {
+            return false
+        }
+        def it:UiItem (itemAt items i)
+        return (it.disabled == false)
+    }
+
+    ; The first enabled row from `from` going `step`, or -1.
+    fn stepFrom:int (from:int step:int) {
+        def at:int from
+        while ((at >= 0) && (at < (array_length items))) {
+            if (this.enabledAt(at)) {
+                return at
+            }
+            at = (at + step)
+        }
+        return -1
+    }
+
+    ; The first chosen row, in the items' order, or -1.
+    fn firstChosen:int () {
+        def i:int 0
+        while (i < (array_length items)) {
+            def it:UiItem (itemAt items i)
+            if (this.isChosen(it.value)) {
+                return i
+            }
+            i = (i + 1)
+        }
+        return -1
+    }
+
+    fn highlightAt:string (i:int) {
+        if (i < 0) {
+            return ""
+        }
+        def it:UiItem (itemAt items i)
+        activeValue = it.value
+        return (this.itemTid(it.value))
+    }
+
+    ; Open, the highlight on the chosen row. `key` is the key that opened it
+    ; ("" for the pointer): with nothing chosen a key starts at the first row
+    ; (ArrowUp at the last) and the pointer highlights nothing.
+    fn openWith:string (key:string) {
+        open = true
+        activeValue = ""
+        typed = ""
+        def at:int (this.firstChosen())
+        if ((this.enabledAt(at)) == false) {
+            at = -1
+            if (key == "ArrowUp") {
+                at = (this.stepFrom(((array_length items) - 1) -1))
+            } {
+                if ((strlen key) > 0) {
+                    at = (this.stepFrom(0 1))
+                }
+            }
+        }
+        if (at >= 0) {
+            return (this.highlightAt(at))
+        }
+        return (this.contentTid())
+    }
+
+    ; Choose a row: single closes (focus to the trigger), multiple toggles and
+    ; stays open on the row.
+    fn chooseValue:string (v:string) {
+        def i:int (this.indexOfValue(v))
+        if ((this.enabledAt(i)) == false) {
+            return ""
+        }
+        if multiple {
+            def next:[string]
+            def had:boolean (this.isChosen(v))
+            def k:int 0
+            while (k < (array_length items)) {
+                def it:UiItem (itemAt items k)
+                if (it.value == v) {
+                    if (had == false) {
+                        push next it.value
+                    }
+                } {
+                    if (this.isChosen(it.value)) {
+                        push next it.value
+                    }
+                }
+                k = (k + 1)
+            }
+            values = next
+            activeValue = v
+            return (this.itemTid(v))
+        }
+        value = v
+        return (this.closeList())
+    }
+
+    fn baseActivate:string (target:string) {
+        if disabled {
+            return ""
+        }
+        if (target == (this.triggerTid())) {
+            if open {
+                return (this.closeList())
+            }
+            return (this.openWith(""))
+        }
+        if (open == false) {
+            return ""
+        }
+        def v:string (this.valueOf(target))
+        if ((strlen v) == 0) {
+            return ""
+        }
+        return (this.chooseValue(v))
+    }
+
+    fn baseKeyDown:string (target:string key:string) {
+        if disabled {
+            return ""
+        }
+        if (open == false) {
+            if (target != (this.triggerTid())) {
+                return ""
+            }
+            if ((key == "Enter") || (key == " ") || (key == "ArrowDown") || (key == "ArrowUp")) {
+                return (this.openWith(key))
+            }
+            return ""
+        }
+        if ((key == "Escape") || (key == "Tab")) {
+            return (this.closeList())
+        }
+        if (key == " ") {
+            ; A space inside a word being typed is part of the word.
+            if ((strlen typed) > 0) {
+                return (this.typeAhead(" "))
+            }
+        }
+        if ((key == "Enter") || (key == " ")) {
+            if ((strlen activeValue) == 0) {
+                return ""
+            }
+            return (this.chooseValue(activeValue))
+        }
+        def from:int (this.indexOfValue(activeValue))
+        def at:int -1
+        if (key == "Home") {
+            at = (this.stepFrom(0 1))
+        }
+        if (key == "End") {
+            at = (this.stepFrom(((array_length items) - 1) -1))
+        }
+        if (key == "ArrowDown") {
+            if (from < 0) {
+                at = (this.stepFrom(0 1))
+            } {
+                at = (this.stepFrom((from + 1) 1))
+                if (at < 0) {
+                    at = from
+                }
+            }
+        }
+        if (key == "ArrowUp") {
+            if (from < 0) {
+                at = (this.stepFrom(((array_length items) - 1) -1))
+            } {
+                at = (this.stepFrom((from - 1) -1))
+                if (at < 0) {
+                    at = from
+                }
+            }
+        }
+        if (at < 0) {
+            return ""
+        }
+        typed = ""
+        return (this.highlightAt(at))
+    }
+
+    ; Does the row's label start with `needle` (both lower case)?
+    fn startsWithAt:boolean (i:int needle:string) {
+        if ((this.enabledAt(i)) == false) {
+            return false
+        }
+        def it:UiItem (itemAt items i)
+        def low:string (to_lowercase it.name)
+        if ((strlen low) < (strlen needle)) {
+            return false
+        }
+        return ((substring low 0 (strlen needle)) == needle)
+    }
+
+    ; A printable key: the next row starting with what has been typed. The
+    ; same letter over and over cycles through the rows starting with it.
+    ; Returns where the focus lands ("" when nothing matched).
+    fn typeAhead:string (ch:string) {
+        if disabled {
+            return ""
+        }
+        if ((strlen ch) != 1) {
+            return ""
+        }
+        if ((open == false) && ((strlen typed) == 0) && (ch == " ")) {
+            return ""
+        }
+        typed = (typed + (to_lowercase ch))
+        typedAge = 0.0
+        def needle:string typed
+        def first:string (substring typed 0 1)
+        def same:boolean true
+        def k:int 1
+        while (k < (strlen typed)) {
+            if ((substring typed k (k + 1)) != first) {
+                same = false
+            }
+            k = (k + 1)
+        }
+        if same {
+            needle = first
+        }
+        def n:int (array_length items)
+        if (n == 0) {
+            return ""
+        }
+        def cur:int -1
+        if open {
+            cur = (this.indexOfValue(activeValue))
+        } {
+            cur = (this.firstChosen())
+        }
+        ; A new word starts after the current row; a longer one may stay on it.
+        def start:int (cur + 1)
+        if ((same == false) && (cur >= 0)) {
+            start = cur
+        }
+        def step:int 0
+        while (step < n) {
+            def i:int ((start + step) % n)
+            if (i < 0) {
+                i = (i + n)
+            }
+            if (this.startsWithAt(i needle)) {
+                def it:UiItem (itemAt items i)
+                if open {
+                    return (this.highlightAt(i))
+                }
+                if multiple {
+                    return ""
+                }
+                value = it.value
+                return (this.triggerTid())
+            }
+            step = (step + 1)
+        }
+        return ""
+    }
+
+    fn typeChar:boolean (target:string ch:string) {
+        if (baseUi == false) {
+            return false
+        }
+        return ((strlen (this.typeAhead(ch))) > 0)
+    }
+
+    fn typing:boolean () {
+        return ((strlen typed) > 0)
+    }
+
+    fn tickCtl:string (dtMs:double) {
+        if ((strlen typed) > 0) {
+            typedAge = (typedAge + dtMs)
+            if (typedAge >= typeaheadMs) {
+                typed = ""
+                typedAge = 0.0
+            }
+        }
+        return ""
+    }
+
+    ; The pointer over a row highlights it (Base UI's highlight follows it).
+    fn hover:string (target:string) {
+        if ((baseUi == false) || (open == false) || disabled) {
+            return ""
+        }
+        def v:string (this.valueOf(target))
+        def i:int (this.indexOfValue(v))
+        if ((this.enabledAt(i)) == false) {
+            return ""
+        }
+        return (this.highlightAt(i))
     }
 
     ; --- the tree -----------------------------------------------------------------
@@ -348,6 +697,9 @@ class SelectCtl extends UiCtl {
         ; while it is choosing, exactly as a dialog does — which is why this is
         ; one flag and not a second mechanism.
         contentRow.modal = true
+        if multiple {
+            contentRow.multiSelectable = "true"
+        }
         push out contentRow
 
         def i:int 0
@@ -377,6 +729,16 @@ class SelectCtl extends UiCtl {
                 row.selected = (EVGA11yTri.yes())
             } {
                 row.selected = (EVGA11yTri.no())
+            }
+            ; Base UI: selected is what is chosen, wherever the highlight is.
+            if baseUi {
+                if (this.isChosen(it.value)) {
+                    row.selected = (EVGA11yTri.yes())
+                    row.state = "checked"
+                } {
+                    row.selected = (EVGA11yTri.no())
+                    row.state = "unchecked"
+                }
             }
             push out row
             i = (i + 1)

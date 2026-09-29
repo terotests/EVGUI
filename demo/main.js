@@ -78,6 +78,8 @@ import { ColorPickerDemo } from "./generated-host.js";
 import { COLORPICKER_CSS } from "./generated.js";
 import { QuestionnaireDemo } from "./generated-host.js";
 import { QUESTIONNAIRE_CSS } from "./generated.js";
+import { SelectDemo } from "./generated-host.js";
+import { SELECT_CSS } from "./generated.js";
 import { EVG_CSS_FACTS } from "./generated.js";
 // The Styles panel: a guide to each demo's classes and a live editor for its
 // stylesheet. See styles-panel.js. The one compiled module it borrows is only
@@ -504,6 +506,12 @@ let questionnaire = new QuestionnaireDemo();
 questionnaire.setReducedMotion(questionnaireStill);
 questionnaire.init(cssFor("questionnaire", QUESTIONNAIRE_CSS));
 let lastQuestionnaireHover = "";
+// Select: ReUI's patterns, every select a SelectCtl in its Base UI mode (keys,
+// typeahead, hover highlight, multiple); the list flips above its trigger
+// when there is no room below.
+let select = new SelectDemo();
+select.init(cssFor("select", SELECT_CSS));
+let lastSelectHover = "";
 // ONE DRIVER FOR THE PAGE. It reads the effect instances off whatever display
 // list is being painted, so it works for any demo whose stylesheet declares an
 // effect and costs nothing on the nineteen that do not.
@@ -1785,6 +1793,37 @@ DEMOS.questionnaire = {
 };
 window.__qnState = () => JSON.parse(questionnaire.stateJson());
 window.__qnBox = (id) => questionnaire.boxOf(id);
+// Select. No `ownsTab`: each trigger is one stop of the page's Tab walk (a
+// Tab from an open list closes it first, back to its trigger). The keys and
+// the typeahead go to SelectCtl; `animated` for the typeahead's clock.
+DEMOS.select = {
+  height: () => select.heightPx(),
+  list: () => select.displayListJson(),
+  hit: (x, y) => select.hitId(x, y),
+  a11y: (gen, focus) => select.a11yJson(gen, focus),
+  cursorAt: (x, y) => select.cursorAt(x, y),
+  press: (id) => select.press(id),
+  hover: (id) => {
+    if (id === lastSelectHover) return false;
+    lastSelectHover = id;
+    return select.setHover(id);
+  },
+  keyWith: (k, shift, ctrl) => select.keyWith(k, shift, ctrl),
+  key: (k) => select.key(k),
+  scroll: (dy) => select.scrollBy(dy),
+  animated: true,
+  host: () => ({
+    tick: (dt) => select.tick(dt),
+    busy: () => select.busyNow(),
+    setHover: (id) => {
+      if (id === lastSelectHover) return false;
+      lastSelectHover = id;
+      return select.setHover(id);
+    },
+    setPressed: (id) => select.setPressed(id),
+    root: () => null,
+  }),
+};
 
 // =============================================================================
 // COLOR PICKER — the eyedropper's loupe, and the browser's own picker
@@ -2098,6 +2137,8 @@ window.__cpPick = () => {
   };
 };
 window.__cpBox = (id) => colorpicker.boxOf(id);
+window.__slState = () => select.summary();
+window.__slBox = (id) => select.boxJson(id);
 
 /**
  * Put the floating copy under the pointer, by mutating the element rather than
@@ -2391,6 +2432,7 @@ INSTANCE.drawer = () => drawer;
 INSTANCE.combobox = () => combobox;
 INSTANCE.colorpicker = () => colorpicker;
 INSTANCE.questionnaire = () => questionnaire;
+INSTANCE.select = () => select;
 INSTANCE.menubar = () => menubar;
 // A press on the page outside the canvas is outside the popover too, and
 // Radix dismisses on a pointer down outside wherever it lands.
@@ -2548,6 +2590,8 @@ NARROW.colorpicker = { min: 320, h: "own" };
 // Laid out at the room (up to its 1040), as tall as its two cards; the
 // frames stack under 860.
 NARROW.questionnaire = { min: 320, h: "own", grow: true };
+// The page is as tall as its cards lay out; a list opens on the page as it is.
+NARROW.select = { min: 320, h: "own" };
 // Laid out at the room (up to its 1000), and as tall as its three cards lay out.
 NARROW.eventcal = { min: 320, h: "own", grow: true };
 window.__ecBox = (id) => {
@@ -3050,6 +3094,7 @@ DEMO_NAMES.push("drawer");
 DEMO_NAMES.push("combobox");
 DEMO_NAMES.push("colorpicker");
 DEMO_NAMES.push("questionnaire");
+DEMO_NAMES.push("select");
 const wanted = new URLSearchParams(location.search).get("demo");
 if (wanted && DEMO_NAMES.includes(wanted)) state.which = wanted;
 
@@ -3713,6 +3758,7 @@ function recreateDemo(name, css) {
   else if (name === "combobox") { combobox = new ComboboxDemo(); combobox.init(css ?? cssFor("combobox", COMBOBOX_CSS)); lastComboboxHover = ""; }
   else if (name === "colorpicker") { cpStop(); colorpicker = new ColorPickerDemo(); colorpicker.init(css ?? cssFor("colorpicker", COLORPICKER_CSS)); colorpicker.setScreenPicker(typeof window.EyeDropper === "function"); lastColorpickerHover = ""; }
   else if (name === "questionnaire") { questionnaire = new QuestionnaireDemo(); questionnaire.setReducedMotion(questionnaireStill); questionnaire.init(css ?? cssFor("questionnaire", QUESTIONNAIRE_CSS)); lastQuestionnaireHover = ""; }
+  else if (name === "select") { select = new SelectDemo(); select.init(css ?? cssFor("select", SELECT_CSS)); lastSelectHover = ""; }
   else if (name === "dialog") { dialog = new DialogDemo(); dialog.init(css ?? cssFor("dialog", DIALOG_CSS)); lastDialogHover = ""; }
   else if (name === "popover") { popover = new PopoverDemo(); popover.init(css ?? cssFor("popover", POPOVER_CSS)); lastPopoverHover = ""; }
   else return false;
@@ -4168,6 +4214,14 @@ function kbAfterPaint(tree) {
       if (el.getAttribute(attr) !== want) el.setAttribute(attr, want);
     }
   }
+  // Plain attributes the tree has no field for (a multiple select's
+  // aria-multiselectable): [id, attribute, value].
+  if (rel && typeof rel.attrsJson === "function") {
+    for (const [on, attr, val] of JSON.parse(rel.attrsJson())) {
+      const el = mirror.elementOf(on);
+      if (el && el.getAttribute(attr) !== val) el.setAttribute(attr, val);
+    }
+  }
   for (const n of tree.nodes) {
     if (n.role !== "combobox") continue;
     const el = mirror.elementOf(n.id);
@@ -4609,6 +4663,7 @@ const DEFAULT_CSS = {
   combobox: COMBOBOX_CSS, colorpicker: COLORPICKER_CSS,
 };
 DEFAULT_CSS.questionnaire = QUESTIONNAIRE_CSS;
+DEFAULT_CSS.select = SELECT_CSS;
 // The file each one ships as, for the download's name.
 const CSS_FILE = { tree: "tree.css", resizable: "resize.css" };
 // The text each demo is running now, so the panel can tell an edit that only

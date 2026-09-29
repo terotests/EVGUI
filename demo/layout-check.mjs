@@ -100,6 +100,7 @@ const DEMOS = [
   ["ComboboxDemo", "combobox.css"],
   ["ColorPickerDemo", "colorpicker.css"],
   ["QuestionnaireDemo", "questionnaire.css"],
+  ["SelectDemo", "select.css"],
 ];
 
 const rect = (e) => ({
