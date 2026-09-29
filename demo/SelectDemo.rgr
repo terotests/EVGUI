@@ -1,0 +1,1155 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; SelectDemo — ReUI's Select, one card per pattern
+; =============================================================================
+; ReUI's Select is Base UI's Select in shadcn's clothes: a button that says
+; what is chosen, and a list under it (not aligned item-with-trigger). Six
+; cards:
+;
+;   Basic with field   "Favorite Fruit", "Select a fruit", a description; the
+;                      placeholder is an item too, with a null value
+;   Invalid state      the same field in a form: a submit (or leaving it) with
+;                      no fruit turns the label, border and ring red and puts
+;                      "Please select a valid fruit." where the description was
+;   With avatars       people, initials on coloured circles, a group label, a
+;                      ✓ on the chosen row; the list scrolls when it is taller
+;                      than the room
+;   Multiple           status dots stacked in the trigger with "Status" and a
+;                      count "5/6"; the list stays open while toggling
+;   Groups             time zones under muted headings, separators between,
+;                      the offset muted beside each abbreviation
+;   Disabled / small   a disabled select, and a small one
+;
+; THE BEHAVIOUR IS SelectCtl's, in its opt-in `baseUi` mode (Base UI's keys,
+; typeahead, hover highlight, `multiple`). This file draws the tree from the
+; controllers' state, routes the pointer and keys to them, places the list
+; (the layout's overlay pass flips it above the trigger when there is no
+; room below; the list gets a height and scrolls when neither side has room),
+; and keeps the invalid card's validation.
+; =============================================================================
+
+Import "../src/SelectCtl.rgr"
+Import "../src/UiCtl.rgr"
+Import "../src/UiTree.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGUnit.rgr"
+Import "pkg:evg/EVGLayout.rgr"
+Import "pkg:evg/EVGDisplayList.rgr"
+Import "pkg:evg/EVGStyleSheet.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+Import "pkg:evg/EVGA11yFromTree.rgr"
+Import "pkg:evg/EVGHitTest.rgr"
+
+treefactory Sl {
+    child addChild
+    text  textContent
+
+    tag Page     EVGElement (props (className "sl-page"))
+    tag Card     EVGElement (props (className "sl-card"))
+    tag Caption  EVGElement (props (className "sl-caption") (elementType 1) (role "heading") (a11yLevel 2))
+    tag Stage    EVGElement (props (className "sl-stage"))
+    tag Pair     EVGElement (props (className "sl-pair"))
+    tag Field    EVGElement (props (className "sl-field"))
+    ; The trigger carries the label as its name; the drawn one is not read twice.
+    tag Label    EVGElement (props (className "sl-label") (elementType 1) (a11yHidden true))
+    tag Desc     EVGElement (props (className "sl-desc") (elementType 1) (a11yHidden true))
+    tag Wrap     EVGElement (props (className "sl-wrap"))
+    tag Trigger  EVGElement (props (className "sl-trigger") (role "combobox") (a11yFocusable true) (a11yHasPopup "listbox") (cursor "pointer"))
+    tag Value    EVGElement (props (className "sl-value") (elementType 1) (a11yHidden true))
+    tag Muted    EVGElement (props (className "sl-offset") (elementType 1) (a11yHidden true))
+    tag Spacer   EVGElement (props (className "sl-spacer") (a11yHidden true))
+    tag Popup    EVGElement (props (className "sl-popup") (role "listbox"))
+    tag Group    EVGElement (props (className "sl-group") (role "group"))
+    ; The heading names its group through the group's aria-label: a role=text
+    ; node inside a listbox is a child axe does not allow (aria-required-children),
+    ; and the mirror has no element for a node without a role to point
+    ; aria-labelledby at.
+    tag GLabel   EVGElement (props (className "sl-glabel") (elementType 1) (a11yHidden true))
+    tag Sep      EVGElement (props (className "sl-sep") (a11yHidden true))
+    tag SepLine  EVGElement (props (className "sl-sep-line") (a11yHidden true))
+    tag Item     EVGElement (props (className "sl-item") (role "option") (cursor "pointer"))
+    tag Text     EVGElement (props (className "sl-item-text") (elementType 1) (a11yHidden true))
+    tag Slot     EVGElement (props (className "sl-check-slot") (a11yHidden true))
+    tag Avatar   EVGElement (props (className "sl-avatar") (elementType 1) (a11yHidden true))
+    tag Dot      EVGElement (props (className "sl-dot") (a11yHidden true))
+    tag Dots     EVGElement (props (className "sl-dots") (a11yHidden true))
+    tag Badge    EVGElement (props (className "sl-badge") (elementType 1) (a11yHidden true))
+    tag Button   EVGElement (props (className "sl-button") (role "button") (a11yFocusable true) (cursor "pointer"))
+    tag Icon     EVGElement (props (className "sl-icon") (tagName "path") (elementType 3) (viewBox "0 0 24 24") (a11yHidden true))
+}
+
+class SelectDemo {
+
+    def fruit:SelectCtl (new SelectCtl())
+    def form:SelectCtl (new SelectCtl())
+    def users:SelectCtl (new SelectCtl())
+    def status:SelectCtl (new SelectCtl())
+    def zones:SelectCtl (new SelectCtl())
+    def off:SelectCtl (new SelectCtl())
+    def small:SelectCtl (new SelectCtl())
+
+    def root@(optional):EVGElement
+    def sheet@(optional):EVGStyleSheet
+    def layout@(optional):EVGLayout
+
+    def hovered:string ""
+    def pressed:string ""
+    def focused:string ""
+
+    ; The invalid card: has the error been shown (a submit or a blur with no
+    ; value), and has the form been submitted.
+    def invalid:boolean false
+    def submitted:int 0
+
+    ; The open list's scroll, its height when it has to be given one (0: its
+    ; own), and whether the highlight must be scrolled into view.
+    def popScroll:double 0.0
+    def popH:double 0.0
+    def reveal:boolean false
+
+    ; Parallel to the status items: the dot colours; to the users: avatar hues.
+    def dotColors:[string]
+    def hues:[string]
+
+    def pageW:double 900.0
+    def pageH:double 640.0
+    def builtW:double 0.0
+
+    Constructor () {
+        def d:[string]
+        dotColors = d
+        def h:[string]
+        hues = h
+    }
+
+    sfn nullValue:string () {
+        return "none"
+    }
+
+    fn ctls:[SelectCtl] () {
+        def a:[SelectCtl]
+        push a fruit
+        push a form
+        push a users
+        push a status
+        push a zones
+        push a off
+        push a small
+        return a
+    }
+
+    fn dress:void (c:SelectCtl tid:string label:string) {
+        c.tid = tid
+        c.name = label
+        c.baseUi = true
+    }
+
+    fn addFruits:void (c:SelectCtl) {
+        c.addItem((SelectDemo.nullValue()) "Select a fruit" false)
+        c.addItem("apple" "Apple" false)
+        c.addItem("banana" "Banana" false)
+        c.addItem("blueberry" "Blueberry" false)
+        c.addItem("grapes" "Grapes" false)
+        c.addItem("pineapple" "Pineapple" false)
+        c.value = (SelectDemo.nullValue())
+    }
+
+    ; An id-safe value from a label: lower case, letters and digits, dashes.
+    sfn slug:string (s:string) {
+        def low:string (to_lowercase s)
+        def out:string ""
+        def i:int 0
+        def n:int (strlen low)
+        while (i < n) {
+            def ch:string (substring low i (i + 1))
+            if ((indexOf "abcdefghijklmnopqrstuvwxyz0123456789" ch) >= 0) {
+                out = (out + ch)
+            } {
+                if (((strlen out) > 0) && ((substring out ((strlen out) - 1) (strlen out)) != "-")) {
+                    out = (out + "-")
+                }
+            }
+            i = (i + 1)
+        }
+        return out
+    }
+
+    fn init:void (css:string) {
+        def s (new EVGStyleSheet())
+        s.parse(css)
+        sheet = s
+
+        this.dress(fruit "sl-fruit" "Favorite Fruit")
+        this.addFruits(fruit)
+
+        this.dress(form "sl-form" "Favorite Fruit")
+        this.addFruits(form)
+
+        this.dress(users "sl-users" "User")
+        def people:[string] ([] _:string ("Alex Johnson" "Sarah Chen" "Michael Rodriguez" "Emma Wilson" "David Kim" "Aron Thompson" "James Brown" "Maria Garcia" "Nick Johnson" "Liam Thompson"))
+        hues = ([] _:string ("#dbeafe" "#fce7f3" "#fef3c7" "#dcfce7" "#e0e7ff" "#ccfbf1" "#fee2e2" "#f3e8ff" "#ffedd5" "#e0f2fe"))
+        def i:int 0
+        while (i < (array_length people)) {
+            def n:string (itemAt people i)
+            users.addGroupedItem((SelectDemo.slug(n)) n "Select a user")
+            i = (i + 1)
+        }
+        users.value = "michael-rodriguez"
+
+        this.dress(status "sl-status" "Status")
+        status.multiple = true
+        status.addItem("ready" "Ready" false)
+        status.addItem("error" "Error" false)
+        status.addItem("building" "Building" false)
+        status.addItem("queued" "Queued" false)
+        status.addItem("initializing" "Initializing" false)
+        status.addItem("canceled" "Canceled" false)
+        dotColors = ([] _:string ("#34d399" "#ef4444" "#f59e0b" "#3b82f6" "#18181b" "#d946ef"))
+        status.values = ([] _:string ("ready" "error" "building" "queued" "initializing"))
+
+        this.dress(zones "sl-tz" "Timezone")
+        zones.addGroupedItem("est" "EST" "Americas")
+        zones.addGroupedItem("cst" "CST" "Americas")
+        zones.addGroupedItem("pst" "PST" "Americas")
+        zones.addGroupedItem("gmt" "GMT" "Europe")
+        zones.addGroupedItem("cet" "CET" "Europe")
+        zones.addGroupedItem("ist" "IST" "Asia")
+        zones.addGroupedItem("jst" "JST" "Asia")
+
+        this.dress(off "sl-disabled" "Disabled")
+        this.addFruits(off)
+        off.value = "banana"
+        off.disabled = true
+
+        this.dress(small "sl-small" "Small")
+        this.addFruits(small)
+
+        this.rebuild()
+    }
+
+    sfn offsetOf:string (v:string) {
+        if (v == "est") { return "UTC-5" }
+        if (v == "cst") { return "UTC-6" }
+        if (v == "pst") { return "UTC-8" }
+        if (v == "gmt") { return "UTC+0" }
+        if (v == "cet") { return "UTC+1" }
+        if (v == "ist") { return "UTC+5:30" }
+        if (v == "jst") { return "UTC+9" }
+        return ""
+    }
+
+    ; --- lookups ----------------------------------------------------------------
+
+    ; The select owning an id, or a blank one (tid "") when none does.
+    fn ctlFor:SelectCtl (target:string) {
+        if ((strlen target) == 0) {
+            return (new SelectCtl())
+        }
+        def all:[SelectCtl] (this.ctls())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:SelectCtl (itemAt all i)
+            if (target == (c.triggerTid())) {
+                return c
+            }
+            if (target == (c.contentTid())) {
+                return c
+            }
+            if (target == (c.tid + "-wrap")) {
+                return c
+            }
+            if (UiTree.beginsWith(target (c.tid + "-group-"))) {
+                return c
+            }
+            if ((strlen (c.valueOf(target))) > 0) {
+                return c
+            }
+            i = (i + 1)
+        }
+        return (new SelectCtl())
+    }
+
+    fn openCtl:SelectCtl () {
+        def all:[SelectCtl] (this.ctls())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:SelectCtl (itemAt all i)
+            if c.open {
+                return c
+            }
+            i = (i + 1)
+        }
+        return (new SelectCtl())
+    }
+
+    fn anyOpen:boolean () {
+        def c:SelectCtl (this.openCtl())
+        return ((strlen c.tid) > 0)
+    }
+
+    fn isNull:boolean (c:SelectCtl) {
+        return ((c.value == (SelectDemo.nullValue())) || ((strlen c.value) == 0))
+    }
+
+    sfn byId:EVGElement (el:EVGElement tid:string) {
+        if (el.id == tid) {
+            return el
+        }
+        def i:int 0
+        while (i < (array_length el.children)) {
+            def kid:EVGElement (SelectDemo.byId((itemAt el.children i) tid))
+            if (kid.id == tid) {
+                return kid
+            }
+            i = (i + 1)
+        }
+        return el
+    }
+
+    ; The box the page's keyboard ring goes round: a trigger's own border.
+    fn ringBoxJson:string (id:string) {
+        if (null? root) {
+            return ""
+        }
+        def c:SelectCtl (this.ctlFor(id))
+        if (((strlen c.tid) == 0) || (id != (c.triggerTid()))) {
+            return ""
+        }
+        def r:EVGElement (unwrap root)
+        def t:EVGElement (SelectDemo.byId(r id))
+        if (t.id != id) {
+            return ""
+        }
+        return ((to_string t.calculatedX) + "," + (to_string t.calculatedY) + "," + (to_string t.calculatedWidth) + "," + (to_string t.calculatedHeight))
+    }
+
+    ; --- the look ---------------------------------------------------------------
+
+    ; Lucide, 24 × 24, stroked.
+    sfn iconPath:string (name:string) {
+        if (name == "down")  { return "M6 9 L12 15 L18 9" }
+        if (name == "check") { return "M20 6 L9 17 L4 12" }
+        return ""
+    }
+
+    sfn icon:EVGElement (name:string cls:string) {
+        return (tree Sl (Icon (props (className ("sl-icon " + cls)) (svgPath (SelectDemo.iconPath(name))))))
+    }
+
+    sfn initials:string (name:string) {
+        def out:string ""
+        def take:boolean true
+        def i:int 0
+        def n:int (strlen name)
+        while (i < n) {
+            def ch:string (substring name i (i + 1))
+            if (ch == " ") {
+                take = true
+            } {
+                if (take && ((strlen out) < 2)) {
+                    out = (out + ch)
+                }
+                take = false
+            }
+            i = (i + 1)
+        }
+        return out
+    }
+
+    fn avatar:EVGElement (c:SelectCtl v:string cls:string) {
+        def i:int (c.indexOfValue(v))
+        def a (tree Sl (Avatar (props (className ("sl-avatar " + cls))) (SelectDemo.initials((c.labelOf(v))))))
+        if ((i >= 0) && (i < (array_length hues))) {
+            UiTree.inline(a "background-color" (itemAt hues i))
+        }
+        return a
+    }
+
+    fn dot:EVGElement (v:string cls:string) {
+        def i:int (status.indexOfValue(v))
+        def d (tree Sl (Dot (props (className ("sl-dot " + cls)))))
+        if ((i >= 0) && (i < (array_length dotColors))) {
+            UiTree.inline(d "background-color" (itemAt dotColors i))
+        }
+        return d
+    }
+
+    ; What the trigger shows for the value.
+    fn triggerBody:void (c:SelectCtl t:EVGElement) {
+        if (c.tid == status.tid) {
+            def dots (tree Sl (Dots))
+            def k:int 0
+            def i:int 0
+            while (i < (array_length status.items)) {
+                def it:UiItem (itemAt status.items i)
+                if (status.isChosen(it.value)) {
+                    def d:EVGElement (this.dot(it.value "sl-dot-stack"))
+                    UiTree.inline(d "left" ((to_string (k * 8)) + "px"))
+                    dots.addChild(d)
+                    k = (k + 1)
+                }
+                i = (i + 1)
+            }
+            if (k > 0) {
+                UiTree.inline(dots "width" ((to_string (((k - 1) * 8) + 13)) + "px"))
+                t.addChild(dots)
+            }
+            t.addChild((tree Sl (Value "Status")))
+            def count:string ((to_string (array_length status.values)) + "/" + (to_string (array_length status.items)))
+            t.addChild((tree Sl (Badge count)))
+            return
+        }
+        if (this.isNull(c)) {
+            t.addChild((tree Sl (Value (props (className "sl-value sl-placeholder")) (this.placeholderOf(c)))))
+            return
+        }
+        if (c.tid == users.tid) {
+            t.addChild((this.avatar(c c.value "sl-avatar-sm")))
+        }
+        t.addChild((tree Sl (Value (c.labelOf(c.value)))))
+        if (c.tid == zones.tid) {
+            t.addChild((tree Sl (Muted (SelectDemo.offsetOf(c.value)))))
+        }
+    }
+
+    fn placeholderOf:string (c:SelectCtl) {
+        if (c.tid == zones.tid) {
+            return "Select a timezone"
+        }
+        if (c.tid == users.tid) {
+            return "Select a user"
+        }
+        return "Select a fruit"
+    }
+
+    ; What a reader hears as the trigger's value.
+    fn valueText:string (c:SelectCtl) {
+        if c.multiple {
+            def out:string ""
+            def i:int 0
+            while (i < (array_length c.items)) {
+                def it:UiItem (itemAt c.items i)
+                if (c.isChosen(it.value)) {
+                    if ((strlen out) > 0) {
+                        out = (out + ", ")
+                    }
+                    out = (out + it.name)
+                }
+                i = (i + 1)
+            }
+            return out
+        }
+        if (this.isNull(c)) {
+            return (this.placeholderOf(c))
+        }
+        if (c.tid == zones.tid) {
+            return ((c.labelOf(c.value)) + " " + (SelectDemo.offsetOf(c.value)))
+        }
+        return (c.labelOf(c.value))
+    }
+
+    fn row:EVGElement (c:SelectCtl it:UiItem) {
+        def cls:string "sl-item"
+        if (it.value == c.activeValue) {
+            cls = (cls + " sl-item-active")
+        }
+        if it.disabled {
+            cls = (cls + " sl-item-disabled")
+        }
+        def name:string it.name
+        if (c.tid == zones.tid) {
+            name = (it.name + " " + (SelectDemo.offsetOf(it.value)))
+        }
+        def el (tree Sl (Item (props (id (c.itemTid(it.value))) (className cls) (a11yLabel name))))
+        el.a11yFocusable = (it.disabled == false)
+        el.a11yDisabled = it.disabled
+        if (c.isChosen(it.value)) {
+            el.a11ySelected = (EVGA11yTri.yes())
+        } {
+            el.a11ySelected = (EVGA11yTri.no())
+        }
+        if (c.tid == users.tid) {
+            el.addChild((this.avatar(c it.value "sl-avatar-md")))
+        }
+        if (c.tid == status.tid) {
+            el.addChild((this.dot(it.value "sl-dot-item")))
+        }
+        el.addChild((tree Sl (Text it.name)))
+        if (c.tid == zones.tid) {
+            el.addChild((tree Sl (Muted (SelectDemo.offsetOf(it.value)))))
+        }
+        el.addChild((tree Sl (Spacer)))
+        def slot (tree Sl (Slot))
+        if (c.isChosen(it.value)) {
+            slot.addChild((SelectDemo.icon("check" "sl-icon-check")))
+        }
+        el.addChild(slot)
+        return el
+    }
+
+    fn popup:EVGElement (c:SelectCtl) {
+        def pop (tree Sl (Popup (props (id (c.contentTid())) (a11yLabel c.name))))
+        pop.a11yFocusable = true
+        UiTree.surface(pop "bottom" "start")
+        pop.scrollTop = popScroll
+        if (popH > 0.0) {
+            pop.height = (EVGUnit.px(popH))
+        }
+        def group@(optional):EVGElement
+        def groupName:string ""
+        def groups:int 0
+        def i:int 0
+        while (i < (array_length c.items)) {
+            def it:UiItem (itemAt c.items i)
+            if ((strlen it.group) == 0) {
+                pop.addChild((this.row(c it)))
+            } {
+                if ((it.group != groupName) || (null? group)) {
+                    if (groups > 0) {
+                        pop.addChild((tree Sl (Sep (SepLine))))
+                    }
+                    def gid:string (c.tid + "-group-" + (to_string groups))
+                    def g (tree Sl (Group (props (id gid) (a11yLabel it.group))))
+                    g.addChild((tree Sl (GLabel (props (id (gid + "-label"))) it.group)))
+                    pop.addChild(g)
+                    group = g
+                    groupName = it.group
+                    groups = (groups + 1)
+                }
+                def gg:EVGElement (unwrap group)
+                gg.addChild((this.row(c it)))
+            }
+            i = (i + 1)
+        }
+        return pop
+    }
+
+    fn selectEl:EVGElement (c:SelectCtl sizeCls:string) {
+        def wrap (tree Sl (Wrap (props (id (c.tid + "-wrap")))))
+        def cls:string ("sl-trigger " + sizeCls)
+        if c.disabled {
+            cls = (cls + " sl-trigger-disabled")
+        }
+        if ((c.tid == form.tid) && invalid) {
+            cls = (cls + " sl-trigger-invalid")
+        }
+        if (focused == (c.triggerTid())) {
+            cls = (cls + " sl-trigger-focus")
+        }
+        def t (tree Sl (Trigger (props (id (c.triggerTid())) (className cls) (a11yLabel c.name))))
+        UiTree.anchor(t)
+        t.a11yValue = (this.valueText(c))
+        t.a11yFocusable = (c.disabled == false)
+        t.a11yDisabled = c.disabled
+        if c.disabled {
+            t.cursor = "default"
+        }
+        this.triggerBody(c t)
+        t.addChild((tree Sl (Spacer)))
+        t.addChild((SelectDemo.icon("down" "sl-icon-muted")))
+        wrap.addChild(t)
+        if c.open {
+            t.a11yExpanded = (EVGA11yTri.yes())
+            t.a11yControls = (c.contentTid())
+            wrap.addChild((this.popup(c)))
+        } {
+            t.a11yExpanded = (EVGA11yTri.no())
+        }
+        return wrap
+    }
+
+    ; A labelled field: the label, the select, the description or the error.
+    fn field:EVGElement (c:SelectCtl desc:string sizeCls:string) {
+        def f (tree Sl (Field (props (id (c.tid + "-field")))))
+        def bad:boolean ((c.tid == form.tid) && invalid)
+        def lcls:string "sl-label"
+        if bad {
+            lcls = "sl-label sl-label-invalid"
+        }
+        if (sizeCls == "sl-trigger-sm") {
+            lcls = (lcls + " sl-label-sm")
+        }
+        f.addChild((tree Sl (Label (props (id (c.tid + "-label")) (className lcls)) c.name)))
+        def sel:EVGElement (this.selectEl(c sizeCls))
+        f.addChild(sel)
+        def t:EVGElement (itemAt sel.children 0)
+        if bad {
+            f.addChild((tree Sl (Desc (props (id (c.tid + "-error")) (className "sl-desc sl-error")) "Please select a valid fruit.")))
+            t.a11yInvalid = "true"
+            t.a11yDescription = "Please select a valid fruit."
+        } {
+            if ((strlen desc) > 0) {
+                f.addChild((tree Sl (Desc (props (id (c.tid + "-desc"))) desc)))
+                t.a11yDescription = desc
+            }
+        }
+        return f
+    }
+
+    fn card:EVGElement (key:string title:string body:EVGElement) {
+        def st (tree Sl (Stage (props (id ("sl-" + key + "-stage")))))
+        st.addChild(body)
+        return (tree Sl
+            (Card (props (id ("sl-" + key + "-card")))
+                (Caption (props (id ("sl-" + key + "-caption"))) title)
+                (child st)))
+    }
+
+    ; A select with no label of its own (the avatars, the status, the zones).
+    fn bare:EVGElement (c:SelectCtl) {
+        def f (tree Sl (Field (props (id (c.tid + "-field")))))
+        f.addChild((this.selectEl(c "")))
+        return f
+    }
+
+    fn formBody:EVGElement () {
+        def f:EVGElement (this.field(form "Choose your favorite fruit from the list." ""))
+        def b (tree Sl (Button (props (id "sl-submit") (a11yLabel "Submit")) (Value (props (className "sl-button-text")) "Submit")))
+        if (focused == "sl-submit") {
+            UiTree.addClass(b "sl-button-focus")
+        }
+        f.addChild(b)
+        return f
+    }
+
+    fn pairBody:EVGElement () {
+        def p (tree Sl (Pair (props (id "sl-pair"))))
+        def a:EVGElement (this.field(off "" ""))
+        UiTree.addClass(a "sl-field-half")
+        p.addChild(a)
+        def b:EVGElement (this.field(small "" "sl-trigger-sm"))
+        UiTree.addClass(b "sl-field-half")
+        p.addChild(b)
+        return p
+    }
+
+    fn pageBody:EVGElement () {
+        def page (tree Sl (Page (props (id "sl-page"))))
+        page.addChild((this.card("basic" "Basic with field" (this.field(fruit "Choose your favorite fruit from the list." "")))))
+        page.addChild((this.card("invalid" "Invalid state" (this.formBody()))))
+        page.addChild((this.card("avatars" "With avatars" (this.bare(users)))))
+        page.addChild((this.card("multiple" "Multiple with status dots" (this.bare(status)))))
+        page.addChild((this.card("groups" "Groups with separators" (this.bare(zones)))))
+        page.addChild((this.card("more" "Disabled and small" (this.pairBody()))))
+        return page
+    }
+
+    fn rebuild:void () {
+        root = (this.pageBody())
+        builtW = pageW
+    }
+
+    ; --- layout -----------------------------------------------------------------
+
+    fn markStates:void (el:EVGElement) {
+        el.isHovered = ((strlen hovered) > 0) && (el.id == hovered)
+        el.isFocused = ((strlen focused) > 0) && (el.id == focused)
+        el.isPressed = ((strlen pressed) > 0) && (el.id == pressed)
+        def i:int 0
+        while (i < (array_length el.children)) {
+            this.markStates((itemAt el.children i))
+            i = (i + 1)
+        }
+    }
+
+    sfn forgetFlex:void (el:EVGElement) {
+        el.calculatedFlexHeight = 0.0
+        el.calculatedHeight = 0.0
+        el.calculatedWidth = 0.0
+        el.calculatedInnerHeight = 0.0
+        el.calculatedInnerWidth = 0.0
+        el.hasDefiniteHeight = false
+        el.layoutClean = false
+        def i:int 0
+        while (i < (array_length el.children)) {
+            SelectDemo.forgetFlex((itemAt el.children i))
+            i = (i + 1)
+        }
+    }
+
+    ; The bottom of the page's content, the open list left out: the list is
+    ; placed on the page as it is, and flips when there is no room below.
+    sfn deepBottom:double (el:EVGElement top:boolean) {
+        if el.isOverlay {
+            return 0.0
+        }
+        def b:double 0.0
+        if (top == false) {
+            b = ((el.calculatedY) + (el.calculatedHeight))
+        }
+        def i:int 0
+        while (i < (array_length el.children)) {
+            def k:double (SelectDemo.deepBottom((itemAt el.children i) false))
+            if (k > b) {
+                b = k
+            }
+            i = (i + 1)
+        }
+        return b
+    }
+
+    fn layOnce:EVGLayout () {
+        def r:EVGElement (unwrap root)
+        def s:EVGStyleSheet (unwrap sheet)
+        SelectDemo.forgetFlex(r)
+        r.height = (EVGUnit.px(pageH))
+        s.setViewport(pageW pageH false)
+        s.applyTree(r "")
+        def lay (new EVGLayout())
+        lay.setPageSize(pageW pageH)
+        lay.layout(r)
+        layout = lay
+        return lay
+    }
+
+    ; The open list and its trigger in the laid-out tree, or the root when
+    ; nothing is open.
+    fn popEl:EVGElement () {
+        def r:EVGElement (unwrap root)
+        def c:SelectCtl (this.openCtl())
+        if ((strlen c.tid) == 0) {
+            return r
+        }
+        return (SelectDemo.byId(r (c.contentTid())))
+    }
+
+    ; How tall the open list is with no height given: its rows and its chrome.
+    sfn naturalHeight:double (pop:EVGElement) {
+        def h:double (pop.calculatedHeight - pop.calculatedInnerHeight)
+        def i:int 0
+        while (i < (array_length pop.children)) {
+            def k:EVGElement (itemAt pop.children i)
+            h = (h + k.calculatedHeight)
+            i = (i + 1)
+        }
+        return h
+    }
+
+    fn laidOut:EVGLayout () {
+        if (builtW != pageW) {
+            this.rebuild()
+        }
+        def r:EVGElement (unwrap root)
+        this.markStates(r)
+        def lay:EVGLayout (this.layOnce())
+        def need:double (to_double (to_int (((SelectDemo.deepBottom(r true)) + 24.0) + 0.999)))
+        if (need < 320.0) {
+            need = 320.0
+        }
+        if ((need > (pageH + 0.5)) || (need < (pageH - 0.5))) {
+            pageH = need
+            lay = (this.layOnce())
+        }
+        def c:SelectCtl (this.openCtl())
+        if ((strlen c.tid) == 0) {
+            return lay
+        }
+        ; The room on either side of the trigger, 8px off the page's edges. A
+        ; list taller than both gets the roomier side's height and scrolls.
+        def pop:EVGElement (this.popEl())
+        def t:EVGElement (SelectDemo.byId(r (c.triggerTid())))
+        def natural:double (SelectDemo.naturalHeight(pop))
+        def below:double (((pageH - (t.calculatedY + t.calculatedHeight)) - 4.0) - 8.0)
+        def above:double ((t.calculatedY - 4.0) - 8.0)
+        def want:double 0.0
+        if ((natural > below) && (natural > above)) {
+            want = below
+            if (above > below) {
+                want = above
+            }
+            if (want < 120.0) {
+                want = 120.0
+            }
+        }
+        if ((want > (popH + 0.5)) || (want < (popH - 0.5))) {
+            popH = want
+            if (want > 0.0) {
+                pop.height = (EVGUnit.px(want))
+            } {
+                pop.height = (EVGUnit.px(natural))
+            }
+            lay = (this.layOnce())
+            pop = (this.popEl())
+        }
+        ; The highlighted row in view.
+        if reveal {
+            reveal = false
+            if (popH > 0.0) {
+                def row:EVGElement (SelectDemo.byId(r (c.itemTid(c.activeValue))))
+                if (row.id == (c.itemTid(c.activeValue))) {
+                    def top:double (pop.calculatedY + 5.0)
+                    def bottom:double ((pop.calculatedY + pop.calculatedHeight) - 5.0)
+                    def next:double popScroll
+                    if (row.calculatedY < top) {
+                        next = (popScroll - (top - row.calculatedY))
+                    }
+                    if ((row.calculatedY + row.calculatedHeight) > bottom) {
+                        next = (popScroll + ((row.calculatedY + row.calculatedHeight) - bottom))
+                    }
+                    next = (this.clampScroll(pop next))
+                    if ((next > (popScroll + 0.5)) || (next < (popScroll - 0.5))) {
+                        popScroll = next
+                        pop.scrollTop = next
+                        lay = (this.layOnce())
+                    }
+                }
+            }
+        }
+        return lay
+    }
+
+    fn clampScroll:double (pop:EVGElement v:double) {
+        def most:double (pop.scrollHeight - pop.calculatedHeight)
+        if (most < 0.0) {
+            most = 0.0
+        }
+        if (v > most) {
+            return most
+        }
+        if (v < 0.0) {
+            return 0.0
+        }
+        return v
+    }
+
+    fn tick:boolean (dtMs:double) {
+        def all:[SelectCtl] (this.ctls())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:SelectCtl (itemAt all i)
+            c.tickCtl(dtMs)
+            i = (i + 1)
+        }
+        return false
+    }
+
+    fn busyNow:boolean () {
+        def all:[SelectCtl] (this.ctls())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:SelectCtl (itemAt all i)
+            if (c.typing()) {
+                return true
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    ; --- validation (the invalid card) -------------------------------------------
+
+    fn validate:void () {
+        invalid = (this.isNull(form))
+    }
+
+    ; After the form's select may have changed: a valid choice clears the
+    ; error; once shown, the error follows the value.
+    fn revalidate:void () {
+        if (invalid || (submitted > 0)) {
+            this.validate()
+        }
+    }
+
+    ; --- focus ------------------------------------------------------------------
+
+    ; The focus leaving a select (for anything but its own list) closes it,
+    ; and a blur of the form's select with no value shows the error.
+    fn moveFocus:void (id:string) {
+        if ((strlen focused) > 0) {
+            def was:SelectCtl (this.ctlFor(focused))
+            def now:SelectCtl (this.ctlFor(id))
+            if (((strlen was.tid) > 0) && (was.tid != now.tid)) {
+                if was.open {
+                    was.closeList()
+                }
+                if (was.tid == form.tid) {
+                    if (this.isNull(form)) {
+                        invalid = true
+                    }
+                }
+            }
+        }
+        focused = id
+    }
+
+    fn setFocus:void (id:string) {
+        this.moveFocus(id)
+        this.rebuild()
+    }
+
+    fn opened:void () {
+        popScroll = 0.0
+        popH = 0.0
+        reveal = true
+    }
+
+    ; --- input ------------------------------------------------------------------
+
+    fn submit:void () {
+        submitted = (submitted + 1)
+        this.validate()
+    }
+
+    fn press:boolean (target:string) {
+        ; An open list: a row chooses, the trigger closes, and a press anywhere
+        ; else only closes it (Base UI's select is modal) — the focus goes
+        ; back to its trigger.
+        if (this.anyOpen()) {
+            def o:SelectCtl (this.openCtl())
+            def owner:SelectCtl (this.ctlFor(target))
+            if (owner.tid != o.tid) {
+                o.closeList()
+                focused = (o.triggerTid())
+                this.rebuild()
+                return true
+            }
+            if ((strlen (o.valueOf(target))) > 0) {
+                def landed:string (o.activate(target))
+                if ((strlen landed) > 0) {
+                    focused = landed
+                }
+                if (o.tid == form.tid) {
+                    this.revalidate()
+                }
+                this.rebuild()
+                return true
+            }
+            if (target == (o.triggerTid())) {
+                o.closeList()
+                focused = (o.triggerTid())
+                this.rebuild()
+                return true
+            }
+            ; The list's padding or a heading: nothing.
+            return true
+        }
+        def c:SelectCtl (this.ctlFor(target))
+        if ((strlen c.tid) > 0) {
+            if c.disabled {
+                this.moveFocus("")
+                this.rebuild()
+                return true
+            }
+            this.moveFocus((c.triggerTid()))
+            def land:string (c.activate((c.triggerTid())))
+            if c.open {
+                this.opened()
+            }
+            if ((strlen land) > 0) {
+                focused = land
+            }
+            this.rebuild()
+            return true
+        }
+        if (target == "sl-submit") {
+            this.moveFocus(target)
+            this.submit()
+            this.rebuild()
+            return true
+        }
+        this.moveFocus("")
+        this.rebuild()
+        return true
+    }
+
+    fn key:boolean (k:string) {
+        return (this.keyWith(k false false))
+    }
+
+    fn keyWith:boolean (k:string shift:boolean ctrl:boolean) {
+        if ((focused == "sl-submit") && ((k == "Enter") || (k == " "))) {
+            this.submit()
+            this.rebuild()
+            return true
+        }
+        def c:SelectCtl (this.ctlFor(focused))
+        if (((strlen c.tid) == 0) || c.disabled) {
+            return false
+        }
+        def wasOpen:boolean c.open
+        if (k == "Tab") {
+            if wasOpen {
+                c.closeList()
+                focused = (c.triggerTid())
+                this.rebuild()
+            }
+            return false
+        }
+        def printable:boolean (((strlen k) == 1) && (ctrl == false))
+        if (printable && (k == " ") && ((c.typing()) == false)) {
+            printable = false
+        }
+        def land:string ""
+        if printable {
+            land = (c.typeAhead(k))
+        } {
+            land = (c.keyDown(focused k))
+        }
+        if ((strlen land) > 0) {
+            focused = land
+        }
+        if ((wasOpen == false) && c.open) {
+            this.opened()
+        }
+        if c.open {
+            reveal = true
+        }
+        if (c.tid == form.tid) {
+            this.revalidate()
+        }
+        this.rebuild()
+        if wasOpen {
+            ; An open list takes every key but Tab.
+            return true
+        }
+        return ((strlen land) > 0) || printable
+    }
+
+    fn setHover:boolean (id:string) {
+        hovered = id
+        def o:SelectCtl (this.openCtl())
+        if ((strlen o.tid) > 0) {
+            def land:string (o.hover(id))
+            if ((strlen land) > 0) {
+                focused = land
+            }
+        }
+        this.rebuild()
+        return true
+    }
+
+    fn setPressed:void (id:string) {
+        pressed = id
+    }
+
+    ; The wheel over the open list. `false` leaves the page to scroll.
+    fn scrollBy:boolean (dy:double) {
+        if ((this.anyOpen()) == false) {
+            return false
+        }
+        if (popH <= 0.0) {
+            return false
+        }
+        this.laidOut()
+        def pop:EVGElement (this.popEl())
+        def next:double (this.clampScroll(pop (popScroll + dy)))
+        if ((next < (popScroll + 0.5)) && (next > (popScroll - 0.5))) {
+            return false
+        }
+        popScroll = next
+        this.rebuild()
+        return true
+    }
+
+    ; Ids the tree has no field for: [id, attribute, value].
+    fn attrsJson:string () {
+        def o:SelectCtl (this.openCtl())
+        if (((strlen o.tid) > 0) && o.multiple) {
+            return ("[[" + (EVGA11yTree.jsonString((o.contentTid()))) + ",\"aria-multiselectable\",\"true\"]]")
+        }
+        return "[]"
+    }
+
+    ; --- what the page asks for -------------------------------------------------
+
+    fn displayListJson:string () {
+        def lay:EVGLayout (this.laidOut())
+        def r:EVGElement (unwrap root)
+        def dl (new EVGDisplayList())
+        dl.setTextEngine((lay.getTextEngine()))
+        dl.build(r)
+        return (dl.toJson())
+    }
+
+    fn hitId:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def hit (new EVGHitTest())
+        return (hit.idAt(r px py))
+    }
+
+    fn cursorAt:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def hit (new EVGHitTest())
+        return (hit.cursorAt(r px py))
+    }
+
+    fn a11yJson:string (generation:int focusId:string) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Select demo" generation focusId))
+        return (t.toJson())
+    }
+
+    fn a11yProblems:[string] () {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Select demo" 1 ""))
+        return (t.lint())
+    }
+
+    fn styleErrorCount:int () {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (array_length s.errors)
+    }
+
+    fn styleErrorAt:string (i:int) {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (itemAt s.errors i)
+    }
+
+    fn widthPx:double () { return pageW }
+
+    fn heightPx:double () {
+        this.laidOut()
+        return pageH
+    }
+
+    ; A box in the laid-out page as "x,y,w,h", or "" when it is not there.
+    fn boxJson:string (id:string) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def e:EVGElement (SelectDemo.byId(r id))
+        if (e.id != id) {
+            return ""
+        }
+        return ((to_string e.calculatedX) + "," + (to_string e.calculatedY) + "," + (to_string e.calculatedWidth) + "," + (to_string e.calculatedHeight))
+    }
+
+    ; Each select's value (a multiple one's values joined by ","), then which
+    ; is open, what is highlighted, the focus and whether the form is invalid.
+    fn summary:string () {
+        def out:string ""
+        def all:[SelectCtl] (this.ctls())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:SelectCtl (itemAt all i)
+            if (i > 0) {
+                out = (out + "|")
+            }
+            if c.multiple {
+                def k:int 0
+                while (k < (array_length c.values)) {
+                    if (k > 0) {
+                        out = (out + ",")
+                    }
+                    out = (out + (itemAt c.values k))
+                    k = (k + 1)
+                }
+            } {
+                out = (out + c.value)
+            }
+            i = (i + 1)
+        }
+        def o:SelectCtl (this.openCtl())
+        def inv:string "valid"
+        if invalid {
+            inv = "invalid"
+        }
+        return (out + "|" + o.tid + "|" + o.activeValue + "|" + focused + "|" + inv)
+    }
+}

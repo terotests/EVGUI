@@ -57,6 +57,7 @@ SUITES=(
   ui:drawer:check
   ui:combobox:demo
   ui:colorpicker:check
+  ui:select:check
   ui:dialog:check
   ui:popover:check
   ui:menubar:check

@@ -676,6 +676,41 @@ STATES.push(...[
   })));
 }
 
+// The select demo: six cards closed; the fruit list open with a row
+// highlighted; the avatars list in its group; the multiple list (checks on
+// five rows); the time zones in three labelled groups; and the form invalid.
+{
+  const { SelectDemo } = require(path.join(ROOT, "gallery/evgui/bin/SelectDemo.cjs"));
+  const sl = () => atRest(SelectDemo, "select.css");
+  const slRest = sl();
+  const slFruit = sl();
+  slFruit.press("sl-fruit-trigger");
+  slFruit.key("ArrowDown");
+  const slUsers = sl();
+  slUsers.press("sl-users-trigger");
+  const slStatus = sl();
+  slStatus.press("sl-status-trigger");
+  slStatus.key("End");
+  const slZones = sl();
+  slZones.press("sl-tz-trigger");
+  slZones.key("ArrowDown");
+  const slInvalid = sl();
+  slInvalid.press("sl-submit");
+  STATES.push(...[
+    ["select — six cards, closed", slRest, 120],
+    ["select — fruit list open, a row highlighted", slFruit, 121],
+    ["select — avatars list open in its group", slUsers, 122],
+    ["select — multiple list open, five checked", slStatus, 123],
+    ["select — time zones in three labelled groups", slZones, 124],
+    ["select — the form invalid after a submit", slInvalid, 125],
+  ].map(([name, d, gen]) => ({
+    name,
+    size: [d.widthPx(), d.heightPx()],
+    lint: () => d.a11yProblems(),
+    tree: () => d.a11yJson(gen, d.focused || ""),
+  })));
+}
+
 // The menubar page: three bars at rest, then each kind of menu open, reached
 // by pressing (and hovering) the ids the hit test reports, as the page does —
 // the icons-and-shortcuts File menu, Account with its group and destructive

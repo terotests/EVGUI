@@ -1,0 +1,249 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * ReUI / shadcn Select, as an EVG stylesheet: a 34px trigger with a 1px
+ * #e4e4e7 border, an 8px radius and a muted chevron at its right; under it
+ * (or above, when there is no room) a white popup as wide as the trigger
+ * with a hairline border, a soft shadow and 32px rows whose highlight is a
+ * rounded #f4f4f5, a check at the right of each chosen row. Zinc palette,
+ * as shadcn's default theme; red-600 for the invalid field.
+ *
+ * `sl-*` are this page's classes. Class-first, one token per selector, no
+ * descendant selectors. Every property a state class changes is also stated
+ * on the base class: a rule that stops matching does not take its value back.
+ */
+
+/* --- the page ---------------------------------------------------------------- */
+
+.sl-page {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  align-content: flex-start;
+  gap: 16px;
+  padding: 24px;
+  width: 900px;
+  background-color: #ffffff;
+}
+
+.sl-card {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  width: 418px;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  background-color: #ffffff;
+}
+
+.sl-caption {
+  height: 40px;
+  line-height: 40px;
+  padding: 0 16px;
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.sl-stage {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: center;
+  min-height: 152px;
+  padding: 24px;
+}
+
+.sl-field {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 8px;
+  width: 320px;
+}
+
+/* The disabled and the small select, side by side. */
+.sl-pair {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 16px;
+  width: 320px;
+}
+.sl-field-half { width: 152px; }
+
+.sl-label { color: #09090b; font-size: 14px; font-weight: 500; height: 20px; line-height: 20px; }
+.sl-label-sm { font-size: 12px; height: 16px; line-height: 16px; }
+.sl-label-invalid { color: #dc2626; }
+.sl-desc  { color: #71717a; font-size: 14px; height: 20px; line-height: 20px; }
+.sl-error { color: #dc2626; }
+
+/* --- the trigger ---------------------------------------------------------------- */
+
+.sl-wrap { display: flex; flex-direction: column; width: 100%; position: relative; }
+
+.sl-trigger {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px 0 12px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background-color: #ffffff;
+  opacity: 1;
+  shadow-color: rgba(0, 0, 0, 0.05);
+  shadow-radius: 2px;
+  shadow-offset-y: 1px;
+}
+.sl-trigger:hover { background-color: #fafafa; }
+/* shadcn's focus-visible: the border goes zinc-400 with a soft ring. */
+.sl-trigger-focus {
+  border-color: #a1a1aa;
+  shadow-color: rgba(161, 161, 170, 0.5);
+  shadow-radius: 3px;
+  shadow-offset-y: 0px;
+}
+/* aria-invalid: a red border and a soft red ring. */
+.sl-trigger-invalid {
+  border-color: #dc2626;
+  shadow-color: rgba(220, 38, 38, 0.45);
+  shadow-radius: 3px;
+  shadow-offset-y: 0px;
+}
+.sl-trigger-disabled { opacity: 0.5; }
+.sl-trigger-disabled:hover { background-color: #ffffff; }
+.sl-trigger-sm { height: 28px; padding: 0 8px 0 10px; gap: 6px; border-radius: 6px; }
+
+.sl-value { color: #09090b; font-size: 14px; height: 20px; line-height: 20px; white-space: pre; }
+.sl-placeholder { color: #71717a; }
+.sl-offset { color: #71717a; font-size: 12px; height: 20px; line-height: 20px; white-space: pre; }
+.sl-spacer { flex-grow: 1; min-width: 0; height: 1px; }
+
+.sl-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: #09090b;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.sl-icon-muted { stroke: #71717a; }
+.sl-icon-check { stroke: #09090b; }
+
+/* The overlapping stack of the chosen statuses, and the count. */
+.sl-dots { position: relative; height: 13px; width: 13px; }
+.sl-dot { width: 8px; height: 8px; border-radius: 4px; background-color: #71717a; }
+.sl-dot-stack {
+  position: absolute;
+  top: 0px;
+  width: 13px;
+  height: 13px;
+  border-radius: 7px;
+  border: 1.5px solid #ffffff;
+}
+.sl-dot-item { margin-right: 8px; }
+.sl-badge {
+  height: 20px;
+  line-height: 18px;
+  padding: 0 5px;
+  border: 1px solid #e4e4e7;
+  border-radius: 6px;
+  color: #09090b;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.sl-avatar {
+  border-radius: 12px;
+  background-color: #f4f4f5;
+  color: #3f3f46;
+  font-weight: 600;
+  text-align: center;
+}
+.sl-avatar-sm { width: 20px; height: 20px; line-height: 20px; border-radius: 10px; font-size: 8px; }
+.sl-avatar-md { width: 24px; height: 24px; line-height: 24px; border-radius: 12px; font-size: 9px; margin-right: 8px; }
+
+/* --- the popup ------------------------------------------------------------------ */
+
+.sl-popup {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  width: 100%;
+  padding: 4px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background-color: #ffffff;
+  overflow: hidden;
+  overlay-gap: 4px;
+  shadow-color: rgba(0, 0, 0, 0.10);
+  shadow-radius: 12px;
+  shadow-offset-y: 4px;
+}
+
+.sl-group { display: flex; flex-direction: column; align-items: stretch; width: 100%; }
+.sl-glabel {
+  height: 28px;
+  line-height: 28px;
+  padding: 0 8px;
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 500;
+}
+.sl-sep { display: flex; flex-direction: column; padding: 4px 0; width: 100%; }
+.sl-sep-line { height: 1px; width: 100%; background-color: #e4e4e7; }
+
+.sl-item {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  flex-shrink: 0;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background-color: transparent;
+  opacity: 1;
+}
+.sl-item-active { background-color: #f4f4f5; }
+.sl-item-disabled { opacity: 0.5; }
+
+.sl-item-text { color: #09090b; font-size: 14px; height: 20px; line-height: 20px; white-space: pre; margin-right: 12px; }
+.sl-check-slot { display: flex; flex-direction: row; align-items: center; justify-content: center; width: 16px; height: 16px; }
+
+/* --- the submit button ----------------------------------------------------------- */
+
+.sl-button {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 88px;
+  height: 32px;
+  margin-top: 4px;
+  border-radius: 8px;
+  background-color: #18181b;
+  shadow-color: rgba(0, 0, 0, 0.0);
+  shadow-radius: 0px;
+}
+.sl-button:hover { background-color: #27272a; }
+.sl-button-focus { shadow-color: rgba(161, 161, 170, 0.6); shadow-radius: 3px; }
+.sl-button-text { color: #fafafa; font-size: 14px; font-weight: 500; }
+
+/* --- a phone ------------------------------------------------------------------ */
+
+@media (max-width: 600px) {
+  .sl-page { width: 100%; padding: 12px; gap: 12px; }
+  .sl-card { width: 100%; }
+  .sl-stage { padding: 20px 16px; }
+  .sl-field { width: 100%; }
+  .sl-pair { width: 100%; flex-direction: column; }
+  .sl-field-half { width: 100%; }
+}

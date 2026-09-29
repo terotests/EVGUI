@@ -979,6 +979,29 @@
               a 2D slider, &ldquo;Saturation 76%, Brightness 96%&rdquo;.
             </p>
           </section>
+          <section data-for="select">
+            <h2>what to try</h2>
+            <p class="hint">
+              Click <strong>Favorite Fruit</strong>, or Tab to it and press
+              <strong>Enter</strong>, <strong>Space</strong> or
+              <strong>&darr;</strong>: the list opens under the trigger with the
+              highlight on the chosen row. <strong>&uarr;</strong> /
+              <strong>&darr;</strong>, <strong>Home</strong> / <strong>End</strong>
+              and the pointer move it; type <em>b</em>, then <em>b</em> again, to
+              jump between Banana and Blueberry. <strong>Enter</strong> or a click
+              chooses and closes; <strong>Escape</strong>, <strong>Tab</strong> or
+              a click outside closes and gives the focus back to the trigger.
+            </p>
+            <p class="hint">
+              In <strong>Invalid state</strong> press <strong>Submit</strong> (or
+              leave the select) with no fruit: the label, the border and the ring
+              go red and the error takes the description&rsquo;s line; pick a fruit
+              and it clears. <strong>Status</strong> toggles a row per click or
+              Enter and stays open, the dots and the count following. The avatar
+              list scrolls when there is not room for all ten, and a list near the
+              bottom of the page opens above its trigger.
+            </p>
+          </section>
           <section data-for="combobox">
             <h2>what to try</h2>
             <p class="hint">
@@ -1746,6 +1769,12 @@
   "src": "ColorPickerDemo",
   "caption": "ColorPickerCtl · after Chrome's <input type=color> dialog",
   "desc": "A colour picker modelled on Chrome's native colour dialog: a saturation / brightness area with a round handle, an eyedropper, the current colour, a hue slider (and here an alpha slider), the value as HEX, RGB or HSL fields with a button that cycles the format, and a row of recent or preset swatches. It opens in a popover from a swatch button (Chrome's own look, and a wider select-style trigger with alpha and presets) or sits inline, with the value in every format under it. The state (HSVA, so a grey keeps its hue), the conversions, what a typed value means, the keys and the popover's commit / restore are ColorPickerCtl's, on PopoverCtl and InputCtl. The eyedropper samples the demo's own WebGL canvas through a DOM loupe of 15 x 15 device pixels at 10x; the browser's EyeDropper API, where there is one, picks from the whole screen. Specified from Chrome's dialog and the WAI-ARIA slider pattern, not measured against a library."
+ },
+ "select": {
+  "title": "Select",
+  "src": "SelectDemo",
+  "caption": "SelectCtl in its Base UI mode · after Base UI's Select, ReUI's look",
+  "desc": "ReUI's Select patterns, one card each: a basic field with a label, a placeholder and a description; the same field invalid after a submit or a blur with no value (red label, border, ring and message); users with initials avatars and a check on the chosen row; a multiple select with stacked status dots and a 5/6 count; time zones in groups with separators and muted offsets; and a disabled and a small select. The trigger is a combobox with aria-haspopup listbox, the list a listbox of options (aria-selected, grouped under named groups, multiselectable when multiple). Opening, the highlight on the chosen row, the arrows, Home, End, typeahead, Enter / Space, Escape and Tab are SelectCtl's opt-in baseUi mode, written from Base UI's documented Select and the WAI-ARIA listbox pattern, not measured; the list flips above its trigger when there is no room below and scrolls when neither side has room."
  },
  "combobox": {
   "title": "Combobox",
