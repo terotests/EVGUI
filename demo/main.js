@@ -66,6 +66,8 @@ import { DrawerDemo } from "./generated-host.js";
 import { DRAWER_CSS } from "./generated.js";
 import { ComboboxDemo } from "./generated-host.js";
 import { COMBOBOX_CSS } from "./generated.js";
+import { ColorPickerDemo } from "./generated-host.js";
+import { COLORPICKER_CSS } from "./generated.js";
 import { MENUBAR_CSS, TOOLBAR_CSS, SORTABLE_CSS, MOTION_CSS, TABLE_CSS, DROPDOWN_CSS, DIALOG_CSS, TREE_CSS, TIMELINE_CSS, RESIZE_CSS, FORM_CSS, PROFILE_CSS, DASHBOARD_CSS, CALENDAR_CSS, FILTERS_CSS, EVENTCAL_CSS, MESSAGE_CSS, CONTROLS_CSS, OTP_CSS, METADATA_CSS, EFFECTS_CSS, SEPARATOR_CSS, TABS_CSS, EFFECT_PRESETS_CSS } from "./generated.js";
 
 // The default stage width. A demo wider than this says so — the dashboard
@@ -465,6 +467,13 @@ let lastDrawerHover = "";
 let combobox = new ComboboxDemo();
 combobox.init(COMBOBOX_CSS);
 let lastComboboxHover = "";
+// Color Picker: Chrome's <input type=color> dialog, three ColorPickerCtls
+// (HSVA, the conversions, the fields, the keys, the popover's restore). The
+// eyedropper's sampling is this page's: see "COLOR PICKER" below.
+let colorpicker = new ColorPickerDemo();
+colorpicker.init(COLORPICKER_CSS);
+colorpicker.setScreenPicker(typeof window.EyeDropper === "function");
+let lastColorpickerHover = "";
 // ONE DRIVER FOR THE PAGE. It reads the effect instances off whatever display
 // list is being painted, so it works for any demo whose stylesheet declares an
 // effect and costs nothing on the nineteen that do not.
@@ -1659,6 +1668,373 @@ DEMOS.combobox = {
   }),
 };
 
+// Color Picker. The generic Tab walk (each part of a picker one stop, the
+// swatches one radio group; a focus that leaves an open dialog closes it and
+// keeps the colour). Up / Down in a number field are the picker's
+// (`ownsKey`); Escape and Enter reach it from the editing session as they do
+// on every page. A press that starts the eyedropper or asks for the screen
+// picker is followed up by `cpSync` below, once the frame is painted.
+DEMOS.colorpicker = {
+  height: () => colorpicker.heightPx(),
+  list: () => colorpicker.displayListJson(),
+  hit: (x, y) => colorpicker.hitId(x, y),
+  a11y: (gen, focus) => colorpicker.a11yJson(gen, focus),
+  cursorAt: (x, y) => colorpicker.cursorAt(x, y),
+  textSession: {
+    focused: () => colorpicker.focusedField(),
+    state: (tid) => JSON.parse(colorpicker.fieldStateJson(tid)),
+    apply: (tid, v, a, b) => colorpicker.applyEdit(tid, v, a, b),
+  },
+  press: (id, x, y, ev) => {
+    const took = colorpicker.beginSelection(id, x, y, !!(ev && ev.shiftKey));
+    queueMicrotask(() => cpSync(ev || null));
+    return took;
+  },
+  drag: (id, ev) => colorpicker.extendSelection(ev.offsetX, ev.offsetY),
+  drop: () => colorpicker.endSelection(),
+  dblclick: (id, x) => colorpicker.selectWordAt(id, x),
+  hover: (id) => {
+    if (id === lastColorpickerHover) return false;
+    lastColorpickerHover = id;
+    colorpicker.setHover(id);
+    return true;
+  },
+  keyWith: (k, shift, ctrl) => {
+    const took = colorpicker.keyWith(k, shift, ctrl);
+    queueMicrotask(() => cpSync(null));
+    return took;
+  },
+  key: (k) => {
+    const took = colorpicker.key(k);
+    queueMicrotask(() => cpSync(null));
+    return took;
+  },
+  ownsKey: (k) => colorpicker.ownsKey(k),
+  host: () => ({
+    setHover: (id) => {
+      if (id === lastColorpickerHover) return false;
+      lastColorpickerHover = id;
+      colorpicker.setHover(id);
+      return true;
+    },
+    setPressed: (id) => colorpicker.setPressed(id),
+    root: () => null,
+  }),
+};
+
+// =============================================================================
+// COLOR PICKER — the eyedropper's loupe, and the browser's own picker
+// =============================================================================
+//
+// WHAT CAN BE SAMPLED. The demo is drawn by WebGL into one canvas whose context
+// is made with `preserveDrawingBuffer: true` (see `paint`), so its pixels can
+// be read back at any time with `gl.readPixels` — exactly what is on screen,
+// antialiasing, gradients and all. Nothing else on the page can be: a page may
+// not read the pixels of its own DOM (or of anything else on the screen)
+// without a screen capture. So the in-page eyedropper samples THE CANVAS, and
+// says so when the pointer is off it; `window.EyeDropper` (Chromium), where it
+// exists, is offered beside it and samples anywhere on the screen with the
+// browser's own loupe. A getDisplayMedia path is not built: it asks for a
+// screen-share permission and a stream to pick one pixel, and it would still
+// have to guess where the page sits on the captured screen.
+//
+// THE LOUPE is a DOM overlay, like the focus ring: a circle of 15 x 15
+// sampled device pixels, each drawn as a 10px square on a 2D canvas (so the
+// zoom is nearest-neighbour by construction, and `image-rendering: pixelated`
+// keeps it so when the browser scales that canvas), a grid between them and
+// the centre pixel outlined, with the centre's hex under it. It follows the
+// pointer; the arrow keys move the point one device pixel (Shift: ten); a
+// click or Enter picks; Escape, or a click off the canvas, cancels. While it
+// is up the pointer and the keys are the loupe's and the demo sees neither.
+const CP_GRID = 15;
+const CP_ZOOM = 10;
+const cpPick = { active: false, tid: "", dx: 0, dy: 0, hex: "", grid: [], inside: false };
+let cpLoupe = null;
+
+function cpLoupeEls() {
+  if (cpLoupe) return cpLoupe;
+  // The wrapper is a point — the pick point — and the ring and the label hang
+  // off it, so the ring's centre is the point whatever the label's width.
+  const wrap = document.createElement("div");
+  wrap.id = "cp-loupe";
+  wrap.setAttribute("aria-hidden", "true");
+  const size = CP_GRID * CP_ZOOM;
+  wrap.style.cssText = "position:fixed;left:0;top:0;width:0;height:0;z-index:2147483000;pointer-events:none;display:none;";
+  const ring = document.createElement("div");
+  ring.style.cssText = `position:absolute;box-sizing:content-box;left:${-size / 2 - 3}px;top:${-size / 2 - 3}px;` +
+    `width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;` +
+    "border:3px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.35),0 6px 18px rgba(0,0,0,.35);background:#fff;";
+  const cv = document.createElement("canvas");
+  cv.width = size;
+  cv.height = size;
+  cv.style.cssText = `display:block;width:${size}px;height:${size}px;image-rendering:pixelated;`;
+  ring.appendChild(cv);
+  const label = document.createElement("div");
+  label.style.cssText = `position:absolute;left:0;top:${size / 2 + 10}px;transform:translateX(-50%);` +
+    "display:flex;align-items:center;gap:6px;padding:3px 8px 3px 4px;border-radius:999px;" +
+    "background:#18181b;color:#fff;font:600 12px/16px ui-monospace,SFMono-Regular,Menlo,monospace;" +
+    "box-shadow:0 2px 8px rgba(0,0,0,.3);white-space:nowrap;";
+  const chip = document.createElement("span");
+  chip.style.cssText = "width:14px;height:14px;border-radius:50%;border:1px solid rgba(255,255,255,.6);";
+  const text = document.createElement("span");
+  label.append(chip, text);
+  wrap.append(ring, label);
+  document.body.appendChild(wrap);
+  cpLoupe = { wrap, ring, cv, label, chip, text, size };
+  return cpLoupe;
+}
+
+const cpHex2 = (n) => n.toString(16).padStart(2, "0");
+// A pixel over the page's white, as it is seen: the canvas is opaque where the
+// demo draws its page, and this only matters at a transparent edge.
+const cpSeen = (p) => {
+  const a = p[3] / 255;
+  return [0, 1, 2].map((i) => Math.round(p[i] * a + 255 * (1 - a)));
+};
+
+/** The CP_GRID x CP_GRID device pixels round (dx, dy); null off the canvas. */
+function cpSample(dx, dy) {
+  const r = (CP_GRID - 1) / 2;
+  const out = new Array(CP_GRID * CP_GRID).fill(null);
+  const W = canvas.width;
+  const H = canvas.height;
+  const x0 = Math.max(0, dx - r);
+  const x1 = Math.min(W - 1, dx + r);
+  const y0 = Math.max(0, dy - r);
+  const y1 = Math.min(H - 1, dy + r);
+  if (x1 < x0 || y1 < y0) return out;
+  const gl = canvas.getContext("webgl2");
+  if (!gl) return out;
+  const w = x1 - x0 + 1;
+  const h = y1 - y0 + 1;
+  const buf = new Uint8Array(w * h * 4);
+  // GL's rows run bottom-up: the first row read is the page's y1.
+  gl.readPixels(x0, H - 1 - y1, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+  for (let y = y0; y <= y1; y++) {
+    const row = y1 - y;
+    for (let x = x0; x <= x1; x++) {
+      const i = (row * w + (x - x0)) * 4;
+      out[(y - dy + r) * CP_GRID + (x - dx + r)] = [buf[i], buf[i + 1], buf[i + 2], buf[i + 3]];
+    }
+  }
+  return out;
+}
+
+/** Sample, and draw the loupe where the point is. */
+function cpDraw() {
+  if (!cpPick.active) return;
+  const L = cpLoupeEls();
+  const grid = cpSample(cpPick.dx, cpPick.dy);
+  cpPick.grid = grid;
+  const ctx = L.cv.getContext("2d");
+  const Z = CP_ZOOM;
+  ctx.imageSmoothingEnabled = false;
+  for (let j = 0; j < CP_GRID; j++) {
+    for (let i = 0; i < CP_GRID; i++) {
+      const p = grid[j * CP_GRID + i];
+      if (p) {
+        const c = cpSeen(p);
+        ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
+        ctx.fillRect(i * Z, j * Z, Z, Z);
+      } else {
+        // Off the canvas: nothing this page can read.
+        ctx.fillStyle = "#e4e4e7";
+        ctx.fillRect(i * Z, j * Z, Z, Z);
+        ctx.fillStyle = "#d4d4d8";
+        ctx.fillRect(i * Z, j * Z, Z / 2, Z / 2);
+        ctx.fillRect(i * Z + Z / 2, j * Z + Z / 2, Z / 2, Z / 2);
+      }
+    }
+  }
+  ctx.strokeStyle = "rgba(0,0,0,0.14)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let k = 1; k < CP_GRID; k++) {
+    ctx.moveTo(k * Z + 0.5, 0);
+    ctx.lineTo(k * Z + 0.5, CP_GRID * Z);
+    ctx.moveTo(0, k * Z + 0.5);
+    ctx.lineTo(CP_GRID * Z, k * Z + 0.5);
+  }
+  ctx.stroke();
+  const m = (CP_GRID - 1) / 2;
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(m * Z, m * Z, Z, Z);
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(m * Z + 1.5, m * Z + 1.5, Z - 3, Z - 3);
+
+  const centre = grid[m * CP_GRID + m];
+  cpPick.inside = !!centre;
+  if (centre) {
+    const c = cpSeen(centre);
+    cpPick.hex = "#" + cpHex2(c[0]) + cpHex2(c[1]) + cpHex2(c[2]);
+    L.text.textContent = cpPick.hex;
+    L.chip.style.background = cpPick.hex;
+    L.chip.style.display = "";
+  } else {
+    cpPick.hex = "";
+    L.text.textContent = typeof window.EyeDropper === "function"
+      ? "outside the canvas — use Pick from screen"
+      : "outside the canvas";
+    L.chip.style.display = "none";
+  }
+  // Centred on the point, as Chrome's own loupe is.
+  const rect = canvas.getBoundingClientRect();
+  const cx = rect.left + ((cpPick.dx + 0.5) * rect.width) / canvas.width;
+  const cy = rect.top + ((cpPick.dy + 0.5) * rect.height) / canvas.height;
+  L.wrap.style.display = "block";
+  L.wrap.style.left = cx + "px";
+  L.wrap.style.top = cy + "px";
+}
+
+/** Client coordinates to a device pixel of the canvas. */
+function cpPointAt(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  cpPick.dx = Math.floor(((clientX - rect.left) * canvas.width) / rect.width);
+  cpPick.dy = Math.floor(((clientY - rect.top) * canvas.height) / rect.height);
+}
+
+let cpFrame = 0;
+function cpLoop() {
+  cpFrame = 0;
+  if (!cpPick.active) return;
+  if (state.which !== "colorpicker") {
+    cpStop();
+    return;
+  }
+  cpDraw();
+  // The frame under the loupe can still be moving (a hover fading out), so it
+  // is read again every frame while it is up; 225 pixels a frame is nothing.
+  cpFrame = requestAnimationFrame(cpLoop);
+}
+
+function cpStart(tid, ev) {
+  cpPick.active = true;
+  cpPick.tid = tid;
+  if (ev && typeof ev.clientX === "number") {
+    cpPointAt(ev.clientX, ev.clientY);
+  } else {
+    // From the keyboard: the middle of the picture to sample.
+    const b = JSON.parse(colorpicker.sampleBoxJson());
+    const k = canvas.width / parseFloat(canvas.style.width || String(canvas.width));
+    cpPick.dx = Math.floor((b.x + b.w / 2) * k);
+    cpPick.dy = Math.floor((b.y + b.h / 2) * k);
+  }
+  document.documentElement.classList.add("cp-picking");
+  canvas.style.cursor = "crosshair";
+  cpDraw();
+  if (!cpFrame) cpFrame = requestAnimationFrame(cpLoop);
+}
+
+function cpStop() {
+  cpPick.active = false;
+  cpPick.tid = "";
+  if (cpFrame) cancelAnimationFrame(cpFrame);
+  cpFrame = 0;
+  document.documentElement.classList.remove("cp-picking");
+  if (cpLoupe) cpLoupe.wrap.style.display = "none";
+}
+
+function cpCommit() {
+  cpDraw();
+  const hex = cpPick.inside ? cpPick.hex : "";
+  cpStop();
+  if (hex) colorpicker.pickResult(hex);
+  else colorpicker.pickCancel();
+  paint();
+  kbRingUpdate();
+}
+
+function cpCancel() {
+  cpStop();
+  colorpicker.pickCancel();
+  paint();
+  kbRingUpdate();
+}
+
+/** After a press or a key on the colour picker: start or end pick mode. */
+function cpSync(ev) {
+  if (state.which !== "colorpicker") {
+    if (cpPick.active) cpStop();
+    return;
+  }
+  const t = colorpicker.pickingTid();
+  if (t && !cpPick.active) cpStart(t, ev);
+  else if (!t && cpPick.active) cpStop();
+  const screen = colorpicker.takeScreenPick();
+  if (screen) cpScreen(screen);
+}
+
+/** The browser's own eyedropper: anywhere on the screen, its own loupe. */
+async function cpScreen(tid) {
+  if (typeof window.EyeDropper !== "function") return;
+  let hex = "";
+  try {
+    const got = await new window.EyeDropper().open();
+    hex = got && got.sRGBHex ? got.sRGBHex : "";
+  } catch (e) {
+    // Dismissed with Escape, or refused: the colour stays.
+  }
+  window.__cpScreenLast = hex;
+  if (hex && colorpicker.screenResult(tid, hex)) paint();
+}
+
+// While picking, the pointer and the keys are the loupe's. Capture on the
+// window, so neither reaches the canvas (a hover would repaint what is being
+// sampled) nor the text session.
+window.addEventListener("pointermove", (ev) => {
+  if (!cpPick.active) return;
+  cpPointAt(ev.clientX, ev.clientY);
+  cpDraw();
+  ev.stopPropagation();
+}, true);
+window.addEventListener("pointerdown", (ev) => {
+  if (state.which !== "colorpicker") return;
+  if (cpPick.active) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.stopImmediatePropagation();
+    cpPointAt(ev.clientX, ev.clientY);
+    cpCommit();
+    return;
+  }
+  // A press on the page outside the canvas is outside an open dialog too.
+  if (!stage.contains(ev.target) && colorpicker.dismissOutside()) {
+    paint();
+    syncTextSession();
+  }
+}, true);
+window.addEventListener("keydown", (ev) => {
+  if (!cpPick.active) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  ev.stopImmediatePropagation();
+  const n = ev.shiftKey ? 10 : 1;
+  if (ev.key === "ArrowLeft") cpPick.dx -= n;
+  else if (ev.key === "ArrowRight") cpPick.dx += n;
+  else if (ev.key === "ArrowUp") cpPick.dy -= n;
+  else if (ev.key === "ArrowDown") cpPick.dy += n;
+  else if (ev.key === "Enter" || ev.key === " ") { cpCommit(); return; }
+  else if (ev.key === "Escape" || ev.key === "Tab") { cpCancel(); return; }
+  else return;
+  cpDraw();
+}, true);
+// For checks: the pickers' state, the loupe (sampled afresh), a laid-out box.
+window.__cpState = () => JSON.parse(colorpicker.stateJson());
+window.__cpPick = () => {
+  if (!cpPick.active) return { active: false };
+  cpDraw();
+  const r = cpLoupe.ring.getBoundingClientRect();
+  return {
+    active: true, tid: cpPick.tid, dx: cpPick.dx, dy: cpPick.dy, hex: cpPick.hex,
+    inside: cpPick.inside, w: canvas.width, h: canvas.height, grid: cpPick.grid,
+    n: CP_GRID, zoom: CP_ZOOM, label: cpLoupe.text.textContent,
+    loupe: { x: r.left, y: r.top, w: r.width, h: r.height },
+  };
+};
+window.__cpBox = (id) => colorpicker.boxOf(id);
+
 /**
  * Put the floating copy under the pointer, by mutating the element rather than
  * rebuilding the tree around it.
@@ -1949,6 +2325,7 @@ INSTANCE.rating = () => rating;
 INSTANCE.kanban = () => kanban;
 INSTANCE.drawer = () => drawer;
 INSTANCE.combobox = () => combobox;
+INSTANCE.colorpicker = () => colorpicker;
 INSTANCE.menubar = () => menubar;
 // A press on the page outside the canvas is outside the popover too, and
 // Radix dismisses on a pointer down outside wherever it lands.
@@ -2101,6 +2478,8 @@ NARROW.kanban = { min: 320, h: "own", grow: true };
 NARROW.drawer = { min: 320, h: "auto", keep: true };
 // The page grows under an open list, so its height is the demo's own.
 NARROW.combobox = { min: 320, h: "own" };
+// The page is as tall as its cards lay out; the cards stack on a phone.
+NARROW.colorpicker = { min: 320, h: "own" };
 // Laid out at the room (up to its 1000), and as tall as its three cards lay out.
 NARROW.eventcal = { min: 320, h: "own", grow: true };
 window.__ecBox = (id) => {
@@ -2385,12 +2764,29 @@ function paint() {
     tree.byId = new Map(tree.nodes.map((n) => [n.id, n]));
     lastTree = tree;
     mirror.update(tree);
+    mirrorValueText(tree);
     kbAfterPaint(tree);
     syncControls();
     inspectorTick();
     clearError("the paint");
   } catch (e) {
     reportError(e, "the paint");
+  }
+}
+
+/**
+ * A slider's words, onto the mirror. The tree carries a slider's valuetext as
+ * its `value` ("Saturation 76%, Brightness 96%", "4 out of 5 stars"), and the
+ * mirror in lib/evg writes aria-valuenow / min / max but not aria-valuetext,
+ * so a reader heard the bare number. Written here, after each update, for
+ * every slider that has words.
+ */
+function mirrorValueText(tree) {
+  if (!mirror || typeof mirror.elementOf !== "function") return;
+  for (const n of tree.nodes) {
+    if (n.role !== "slider" || !n.value) continue;
+    const el = mirror.elementOf(n.id);
+    if (el && el.getAttribute("aria-valuetext") !== n.value) el.setAttribute("aria-valuetext", n.value);
   }
 }
 
@@ -2584,6 +2980,7 @@ DEMO_NAMES.push("rating");
 DEMO_NAMES.push("kanban");
 DEMO_NAMES.push("drawer");
 DEMO_NAMES.push("combobox");
+DEMO_NAMES.push("colorpicker");
 const wanted = new URLSearchParams(location.search).get("demo");
 if (wanted && DEMO_NAMES.includes(wanted)) state.which = wanted;
 
@@ -3238,6 +3635,7 @@ window.__resetDemo = (name) => {
   else if (name === "kanban") { kanban = new KanbanDemo(); kanban.init(KANBAN_CSS); lastKanbanHover = ""; }
   else if (name === "drawer") { drawer = new DrawerDemo(); drawer.init(DRAWER_CSS); lastDrawerHover = ""; }
   else if (name === "combobox") { combobox = new ComboboxDemo(); combobox.init(COMBOBOX_CSS); lastComboboxHover = ""; }
+  else if (name === "colorpicker") { cpStop(); colorpicker = new ColorPickerDemo(); colorpicker.init(COLORPICKER_CSS); colorpicker.setScreenPicker(typeof window.EyeDropper === "function"); lastColorpickerHover = ""; }
   else if (name === "dialog") { dialog = new DialogDemo(); dialog.init(DIALOG_CSS); lastDialogHover = ""; }
   else if (name === "popover") { popover = new PopoverDemo(); popover.init(POPOVER_CSS); lastPopoverHover = ""; }
   else return false;

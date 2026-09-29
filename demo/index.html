@@ -346,6 +346,9 @@
         .panel label { padding: 7px 0; }
         #demos label { padding: 10px 12px; }
       }
+      /* The colour picker's eyedropper: the pointer is a crosshair everywhere
+         while the loupe is up (main.js, "COLOR PICKER"). */
+      html.cp-picking, html.cp-picking * { cursor: crosshair !important; }
     </style>
   </head>
   <body>
@@ -809,6 +812,40 @@
               field): &ldquo;Saved&rdquo; appears in a <code>role=status</code>
               region. The vertical card below moves with
               <strong>&uarr;</strong> / <strong>&darr;</strong> instead.
+            </p>
+          </section>
+          <section data-for="colorpicker">
+            <h2>what to try</h2>
+            <p class="hint">
+              Click the swatch in <strong>Native-style popover</strong>: Chrome&rsquo;s
+              colour dialog opens under it. Drag in the square (saturation across,
+              brightness down), drag the rainbow for the hue and, in the other two,
+              the checkered bar for alpha. The small &#x21c5; button beside the
+              fields switches <strong>HEX &rarr; RGB &rarr; HSL</strong>; type into a
+              field and the colour follows, a value that does not read goes back
+              when you leave the field. <strong>Enter</strong> keeps the colour and
+              closes, <strong>Escape</strong> closes and puts back the colour it
+              had when it opened.
+            </p>
+            <p class="hint">
+              Press the pipette, then move over <strong>Something to sample</strong>:
+              a loupe shows the pixels under the pointer ten times larger, with the
+              centre pixel outlined and its hex under it. Click (or
+              <strong>Enter</strong>) to pick it; the arrow keys move the point one
+              device pixel; <strong>Escape</strong> cancels. The loupe reads the
+              WebGL canvas the demo is drawn in, so it picks anything in the demo
+              and nothing outside it: a web page cannot read the rest of the
+              screen. Where the browser has the <code>EyeDropper</code> API
+              (Chromium), a second button, <strong>Pick from screen</strong>, opens
+              the browser&rsquo;s own picker, which can.
+            </p>
+            <p class="hint">
+              From the keyboard: Tab walks the square, the pipette, the hue and alpha
+              sliders, the fields, the format button and the swatches (one radio
+              group). In the square the arrows step saturation and brightness by 1%
+              (Shift: 10%); the sliders take the slider keys; <strong>&uarr;</strong> /
+              <strong>&darr;</strong> step a number field. A reader hears the square as
+              a 2D slider, &ldquo;Saturation 76%, Brightness 96%&rdquo;.
             </p>
           </section>
           <section data-for="combobox">
@@ -1523,6 +1560,12 @@
   "src": "DrawerDemo",
   "caption": "DrawerCtl · after Base UI's Drawer and vaul, ReUI's look",
   "desc": "ReUI's Drawer patterns, one card each: the Right Drawer (Move Goal, ten paragraphs scrolling inside, Submit and Cancel pinned), shadcn's bottom drawer with a handle, a goal stepper and a bar chart, a left navigation drawer, a top drawer, and a responsive one that is a dialog on a wide demo and a drawer on a narrow one. Each is a modal DrawerCtl: open and closed, the focus in and back to the trigger, Escape and the overlay press, the 300ms ease-out slide from its edge and the drag towards that edge that dismisses past a quarter of the panel or on a fling and snaps back otherwise. The page behind is dimmed and blurred (backdrop-filter) and inert, and the demo traps Tab. The behaviour follows Base UI's and vaul's documented Drawer; there is no recorded trace of either, so it is specified, not measured."
+ },
+ "colorpicker": {
+  "title": "Color Picker",
+  "src": "ColorPickerDemo",
+  "caption": "ColorPickerCtl · after Chrome's <input type=color> dialog",
+  "desc": "A colour picker modelled on Chrome's native colour dialog: a saturation / brightness area with a round handle, an eyedropper, the current colour, a hue slider (and here an alpha slider), the value as HEX, RGB or HSL fields with a button that cycles the format, and a row of recent or preset swatches. It opens in a popover from a swatch button (Chrome's own look, and a wider select-style trigger with alpha and presets) or sits inline, with the value in every format under it. The state (HSVA, so a grey keeps its hue), the conversions, what a typed value means, the keys and the popover's commit / restore are ColorPickerCtl's, on PopoverCtl and InputCtl. The eyedropper samples the demo's own WebGL canvas through a DOM loupe of 15 x 15 device pixels at 10x; the browser's EyeDropper API, where there is one, picks from the whole screen. Specified from Chrome's dialog and the WAI-ARIA slider pattern, not measured against a library."
  },
  "combobox": {
   "title": "Combobox",

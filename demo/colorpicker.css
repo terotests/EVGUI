@@ -1,0 +1,490 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * Color Picker, as an EVG stylesheet: Chrome's colour dialog (a 240px panel,
+ * the area on top, round white-ringed thumbs, small grey fields with their
+ * letters under them) in shadcn / ReUI's cards and zinc greys.
+ *
+ * Every class here is one ColorPickerDemo.rgr writes (`cp-*`). The colours
+ * that follow the picked colour — the area's hue, the thumbs, the fills —
+ * are written inline by the demo; nothing here depends on a rule that stops
+ * matching, so every state sets its values in full.
+ */
+
+/* --- the page: one card per pattern ------------------------------------------- */
+
+.cp-page {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 24px;
+  width: 900px;
+  background-color: #ffffff;
+}
+
+.cp-card {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  width: 418px;
+  height: 420px;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  background-color: #ffffff;
+}
+.cp-card-inline { height: 500px; }
+.cp-card-sample { height: 500px; }
+
+.cp-caption {
+  height: 40px;
+  line-height: 40px;
+  padding: 0 16px;
+  color: #71717a;
+  font-size: 12px;
+  font-weight: 500;
+  border-bottom: 1px solid #f4f4f5;
+}
+
+.cp-stage {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 12px;
+  flex-grow: 1;
+  padding: 24px 20px 20px 20px;
+}
+.cp-stage-inline { gap: 14px; padding: 20px; }
+.cp-stage-sample { gap: 10px; padding: 20px; }
+
+.cp-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.cp-slot {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+}
+
+.cp-tx { color: #09090b; font-size: 14px; font-weight: 500; height: 20px; line-height: 20px; }
+.cp-status { color: #52525b; font-size: 12px; height: 16px; line-height: 16px; }
+.cp-hint { color: #71717a; font-size: 12px; line-height: 17px; width: 100%; }
+
+/* --- triggers ----------------------------------------------------------------- */
+
+/* Chrome's <input type=color>: a small grey button with the colour inset. */
+.cp-trigger {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  width: 52px;
+  height: 30px;
+  padding: 4px;
+  border: 1px solid #d4d4d8;
+  border-radius: 6px;
+  background-color: #f4f4f5;
+  cursor: pointer;
+  transition: background-color 120ms ease-out, border-color 120ms ease-out;
+}
+.cp-trigger:hover { background-color: #e4e4e7; }
+.cp-trigger:focus { border-color: #71717a; }
+.cp-trigger-fill {
+  flex-grow: 1;
+  height: 20px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+}
+
+/* The wide one: swatch, value, chevron — an outline select. */
+.cp-trigger-wide {
+  width: 240px;
+  height: 36px;
+  gap: 8px;
+  padding: 0 10px 0 8px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background-color: #ffffff;
+  shadow-color: rgba(0, 0, 0, 0.05);
+  shadow-radius: 2px;
+  shadow-offset-y: 1px;
+}
+.cp-trigger-wide:hover { background-color: #f4f4f5; }
+.cp-trigger-swatch {
+  position: relative;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background-color: #ffffff;
+}
+.cp-trigger-text {
+  flex-grow: 1;
+  color: #09090b;
+  font-size: 13px;
+  height: 18px;
+  line-height: 18px;
+}
+
+.cp-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: #3f3f46;
+  stroke-width: 2;
+}
+.cp-chev { stroke: #a1a1aa; }
+
+/* --- the panel ------------------------------------------------------------------ */
+
+.cp-panel {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 12px;
+  width: 240px;
+  padding: 12px;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  background-color: #ffffff;
+}
+.cp-panel-pop {
+  shadow-color: rgba(0, 0, 0, 0.16);
+  shadow-radius: 14px;
+  shadow-offset-y: 6px;
+}
+
+/* White -> hue across (inline), transparent -> black down (the shade). */
+.cp-sv {
+  position: relative;
+  width: 100%;
+  height: 150px;
+  border-radius: 6px;
+  cursor: crosshair;
+}
+.cp-sv-shade {
+  position: absolute;
+  top: 0px;
+  left: 0px;
+  right: 0px;
+  height: 150px;
+  border-radius: 6px;
+}
+
+.cp-thumb {
+  position: absolute;
+  top: 0px;
+  left: 0px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #ffffff;
+  border-radius: 7px;
+  shadow-color: rgba(0, 0, 0, 0.45);
+  shadow-radius: 3px;
+  shadow-offset-y: 0px;
+}
+.cp-thumb-sv { width: 16px; height: 16px; border-radius: 8px; }
+
+.cp-tools {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+}
+
+.cp-iconbtn {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #e4e4e7;
+  border-radius: 6px;
+  background-color: #ffffff;
+  cursor: pointer;
+  transition: background-color 120ms ease-out;
+}
+.cp-iconbtn:hover { background-color: #f4f4f5; }
+.cp-iconbtn-on { background-color: #e0e7ff; border-color: #6366f1; }
+
+/* The current colour over a two-square checkerboard. */
+.cp-current {
+  position: relative;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 15px;
+  background-color: #ffffff;
+}
+.cp-check {
+  position: absolute;
+  width: 50%;
+  height: 50%;
+  background-color: #d4d4d8;
+}
+.cp-check-tl { top: 0px; left: 0px; border-radius: 15px 0 0 0; }
+.cp-check-br { bottom: 0px; right: 0px; border-radius: 0 0 15px 0; }
+.cp-check-tl-sm { border-radius: 4px 0 0 0; }
+.cp-check-br-sm { border-radius: 0 0 4px 0; }
+.cp-fill {
+  position: absolute;
+  top: 0px;
+  left: 0px;
+  right: 0px;
+  height: 30px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 15px;
+}
+.cp-fill-sm { height: 20px; border-radius: 4px; }
+
+.cp-sliders {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 8px;
+  flex-grow: 1;
+  min-width: 0px;
+}
+
+.cp-track {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  height: 10px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.cp-seg { position: relative; flex-grow: 1; flex-basis: 0px; height: 10px; }
+.cp-seg-fill { position: absolute; top: 0px; left: 0px; right: -1px; height: 10px; }
+.cp-seg-first { border-radius: 5px 0 0 5px; }
+.cp-seg-last { right: 0px; border-radius: 0 5px 5px 0; }
+
+/* The alpha checkerboard: 24 columns, a grey square top or bottom in each. */
+.cp-cell {
+  position: relative;
+  flex-grow: 1;
+  flex-basis: 0px;
+  height: 10px;
+  background-color: #ffffff;
+}
+.cp-cell-first { border-radius: 5px 0 0 5px; }
+.cp-cell-last { border-radius: 0 5px 5px 0; }
+.cp-cell-dark {
+  position: absolute;
+  left: 0px;
+  right: 0px;
+  height: 5px;
+  background-color: #d4d4d8;
+}
+.cp-cell-dark-top { top: 0px; }
+.cp-cell-dark-bottom { top: 5px; }
+.cp-alpha-grad {
+  position: absolute;
+  top: 0px;
+  left: 0px;
+  right: 0px;
+  height: 10px;
+  border-radius: 5px;
+}
+.cp-thumb-bar { top: -2px; }
+
+/* --- the fields ------------------------------------------------------------------- */
+
+.cp-fields {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 6px;
+}
+.cp-fcol {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 3px;
+  flex-grow: 1;
+  flex-basis: 0px;
+  min-width: 0px;
+}
+.cp-box {
+  position: relative;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid #d4d4d8;
+  border-radius: 5px;
+  background-color: #ffffff;
+  cursor: text;
+}
+.cp-box:focus { border-color: #3b82f6; }
+.cp-text {
+  color: #09090b;
+  font-family: Arial;
+  font-size: 12px;
+  white-space: pre;
+  height: 24px;
+  line-height: 24px;
+}
+.cp-caret {
+  position: absolute;
+  top: 5px;
+  width: 1px;
+  height: 14px;
+  background-color: #09090b;
+}
+.cp-band {
+  position: absolute;
+  top: 5px;
+  height: 14px;
+  background-color: #bfdbfe;
+}
+.cp-flabel {
+  width: 100%;
+  color: #71717a;
+  font-size: 10px;
+  font-weight: 500;
+  height: 12px;
+  line-height: 12px;
+  text-align: center;
+}
+
+.cp-fmt {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 26px;
+  border-radius: 5px;
+  background-color: #ffffff;
+  cursor: pointer;
+}
+.cp-fmt:hover { background-color: #f4f4f5; }
+
+/* --- swatches ---------------------------------------------------------------------- */
+
+.cp-presets {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+.cp-ptitle {
+  color: #71717a;
+  font-size: 11px;
+  font-weight: 500;
+  height: 14px;
+  line-height: 14px;
+}
+.cp-prow {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 7px;
+}
+.cp-preset {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.cp-preset-on { border: 2px solid #18181b; }
+
+/* --- the value lines ----------------------------------------------------------------- */
+
+.cp-values {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 4px;
+  width: 100%;
+}
+.cp-vrow {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 8px;
+  height: 18px;
+}
+.cp-vkey { width: 36px; color: #71717a; font-size: 11px; font-weight: 600; height: 18px; line-height: 18px; }
+.cp-vval { color: #09090b; font-size: 12px; height: 18px; line-height: 18px; }
+
+/* --- the scene ------------------------------------------------------------------------ */
+
+.cp-scene {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  width: 100%;
+  height: 330px;
+  border-radius: 8px;
+  cursor: crosshair;
+}
+.cp-sky {
+  position: relative;
+  flex-grow: 1;
+  background: linear-gradient(180deg, #312e81, #fb923c);
+  border-radius: 8px 8px 0 0;
+}
+.cp-sun {
+  position: absolute;
+  top: 36px;
+  left: 64%;
+  width: 64px;
+  height: 64px;
+  border-radius: 32px;
+  background: linear-gradient(180deg, #fef08a, #f97316);
+}
+.cp-hill {
+  position: absolute;
+  left: 0px;
+  right: 0px;
+  bottom: 20px;
+  height: 100px;
+}
+/* The ground under the hills: a hill keeps its aspect and sits at the top
+ * of its box, so on a narrow card the box is taller than the drawing. */
+.cp-ground {
+  position: absolute;
+  left: 0px;
+  right: 0px;
+  bottom: 0px;
+  height: 30px;
+  background-color: #1e1b4b;
+}
+.cp-hill-far { fill: #7c3aed; }
+.cp-hill-mid { fill: #be185d; }
+.cp-hill-near { fill: #1e1b4b; }
+.cp-tiles {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  height: 22px;
+}
+.cp-tile { flex-grow: 1; flex-basis: 0px; height: 22px; }
+
+/* --- a phone -------------------------------------------------------------------------- */
+
+@media (max-width: 600px) {
+  .cp-page { width: 100%; padding: 12px; gap: 12px; }
+  .cp-card { width: 100%; height: auto; }
+  .cp-card-inline { height: auto; }
+  .cp-card-sample { height: auto; }
+  .cp-stage { padding: 16px; flex-grow: 0; }
+  .cp-scene { height: 220px; }
+  .cp-hill { height: 80px; }
+  .cp-sun { top: 24px; width: 48px; height: 48px; border-radius: 24px; }
+}

@@ -98,6 +98,7 @@ const DEMOS = [
   ["KanbanDemo", "kanban.css"],
   ["DrawerDemo", "drawer.css"],
   ["ComboboxDemo", "combobox.css"],
+  ["ColorPickerDemo", "colorpicker.css"],
 ];
 
 const rect = (e) => ({

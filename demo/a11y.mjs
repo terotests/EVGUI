@@ -638,6 +638,44 @@ STATES.push(...[
   })));
 }
 
+// The colour picker: at rest (two closed triggers, the inline picker, the
+// picture); the plain popover open on HEX with its Recent row; the alpha one
+// open on RGB with four fields and the presets; the inline one on HSL with a
+// field being typed into; and the eyedropper in pick mode.
+{
+  const { ColorPickerDemo } = require(path.join(ROOT, "gallery/evgui/bin/ColorPickerDemo.cjs"));
+  const cp = () => atRest(ColorPickerDemo, "colorpicker.css");
+  const cpRest = cp();
+  const cpNative = cp();
+  cpNative.press("cpn-trigger");
+  cpNative.setFocus("cpn-hue");
+  cpNative.key("ArrowRight");
+  const cpAlpha = cp();
+  cpAlpha.setScreenPicker(true);
+  cpAlpha.press("cpa-trigger");
+  cpAlpha.setFocus("cpa-preset-2");
+  const cpTyping = cp();
+  cpTyping.press("cpi-fmt");
+  cpTyping.press("cpi-fmt");
+  cpTyping.press("cpi-f1");
+  cpTyping.applyEdit("cpi-f1", "4", 1, 1);
+  const cpPicking = cp();
+  cpPicking.press("cpi-eye");
+  for (const d of [cpRest, cpNative, cpAlpha, cpTyping, cpPicking]) d.displayListJson();
+  STATES.push(...[
+    ["colorpicker — at rest", cpRest, 100],
+    ["colorpicker — popover open, hue stepped", cpNative, 101],
+    ["colorpicker — alpha and presets open, a swatch focused", cpAlpha, 102],
+    ["colorpicker — inline on HSL, a field being typed", cpTyping, 103],
+    ["colorpicker — the eyedropper picking", cpPicking, 104],
+  ].map(([name, d, gen]) => ({
+    name,
+    size: [d.widthPx(), d.heightPx()],
+    lint: () => d.a11yProblems(),
+    tree: () => d.a11yJson(gen, d.focused || ""),
+  })));
+}
+
 // The menubar page: three bars at rest, then each kind of menu open, reached
 // by pressing (and hovering) the ids the hit test reports, as the page does —
 // the icons-and-shortcuts File menu, Account with its group and destructive
