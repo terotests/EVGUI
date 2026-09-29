@@ -1,0 +1,901 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; QuestionnaireDemo — a step-by-step questionnaire, ReUI / shadcn's look
+; =============================================================================
+; Two cards after the reference picture, each walking through three questions
+; of its own and ending on a summary with Start over:
+;
+;   A. "Workspace setup", the single-choice card: a bordered card with the
+;      question, its muted description and "Question 1 of 3" at the top
+;      right, three option rows (radio, bold label, muted second line, a key
+;      badge A / B / C), and a light grey footer band with Back and Next.
+;        1  What will you use the workspace for?   single, required
+;        2  How many people will join you?          single, required
+;        3  How familiar are you with tools like this?  a 1–5 scale, optional
+;
+;   B. "Notifications", the multiple-choice card: "Question 1 of 3" at the
+;      left and a "0 of 6 selected" badge at the right, the question, six
+;      checkbox rows with badges A–F, and Next at the bottom right.
+;        1  Which workflows should we switch on?  multiple, required
+;        2  Where should they reach you?          single, required
+;        3  How often is too often?               a 1–5 scale, optional
+;
+; THE FLOW IS NOT HERE. Each card is a `QuestionnaireCtl` — the steps, the
+; answers (a RadioGroupCtl per single-choice step, a CheckboxCtl per option of
+; a multiple-choice one), the gate, Next / Back / Start over, the keys and the
+; announcements — and this file draws what it says and routes the pointer and
+; the keyboard to the card that owns the target.
+;
+; A step change slides the new question in from 12px to the right as it fades
+; in (160ms): the step's body is a new element (its id carries the step), so
+; it is built once with `qn-enter` and the class is taken off after the first
+; cascade, which is what starts the transition. With reduced motion there is
+; no enter class and the step simply appears.
+;
+; A press, a key or a hover rebuilds the tree and folds it into the live one
+; (`EVGReconcile`), keyed by id, the way RatingDemo does.
+; =============================================================================
+
+Import "../src/QuestionnaireCtl.rgr"
+Import "../src/UiCtl.rgr"
+Import "../src/UiTree.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGUnit.rgr"
+Import "pkg:evg/EVGLayout.rgr"
+Import "pkg:evg/EVGDisplayList.rgr"
+Import "pkg:evg/EVGStyleSheet.rgr"
+Import "pkg:evg/EVGTransition.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+Import "pkg:evg/EVGA11yFromTree.rgr"
+Import "pkg:evg/EVGHitTest.rgr"
+Import "pkg:evg/EVGReconcile.rgr"
+
+treefactory Qn {
+    child addChild
+    text  textContent
+
+    tag Page     EVGElement (props (className "qn-page"))
+    tag Frame    EVGElement (props (className "qn-frame"))
+    ; The questionnaire: a form named after the card.
+    tag Card     EVGElement (props (className "qn-card") (role "form"))
+    tag Box      EVGElement (props (className "qn-box"))
+    tag Row      EVGElement (props (className "qn-row"))
+    tag Col      EVGElement (props (className "qn-col"))
+    tag Grow     EVGElement (props (className "qn-grow") (a11yHidden true))
+    tag Rule     EVGElement (props (className "qn-rule") (a11yHidden true))
+    tag Title    EVGElement (props (className "qn-title") (elementType 1) (role "heading") (a11yLevel 2))
+    tag Desc     EVGElement (props (className "qn-desc") (elementType 1) (role "text"))
+    tag Progress EVGElement (props (className "qn-progress") (elementType 1) (role "text"))
+    ; "2 of 6 selected": a status, so the count is announced as it changes.
+    tag Count    EVGElement (props (className "qn-badge") (elementType 1) (role "status"))
+    tag Badge    EVGElement (props (className "qn-badge") (elementType 1) (role "text"))
+    tag Error    EVGElement (props (className "qn-error") (elementType 1) (role "text"))
+    ; The step's answers: a radiogroup or a group of checkboxes.
+    tag Group    EVGElement (props (className "qn-group"))
+    ; One option row. Its name and description are set on it; the drawn
+    ; parts inside are decoration.
+    tag Opt      EVGElement (props (className "qn-opt") (a11yFocusable true) (cursor "pointer"))
+    tag Radio    EVGElement (props (className "qn-radio") (a11yHidden true))
+    tag Check    EVGElement (props (className "qn-check") (a11yHidden true))
+    tag Mark     EVGElement (props (className "qn-mark") (tagName "path") (elementType 3) (viewBox "0 0 16 16") (svgPath "M3.5 8.4 L6.6 11.5 L12.5 4.8") (a11yHidden true))
+    tag OptText  EVGElement (props (className "qn-opt-text") (a11yHidden true))
+    tag OptLabel EVGElement (props (className "qn-opt-label") (elementType 1) (a11yHidden true))
+    tag OptDesc  EVGElement (props (className "qn-opt-desc") (elementType 1) (a11yHidden true))
+    tag Key      EVGElement (props (className "qn-key") (elementType 1) (a11yHidden true))
+    ; A point of a scale: the number is the label and the badge at once.
+    tag Point    EVGElement (props (className "qn-pt") (elementType 1) (role "radio") (a11yFocusable true) (cursor "pointer"))
+    tag Ends     EVGElement (props (className "qn-ends") (a11yHidden true))
+    tag End      EVGElement (props (className "qn-end") (elementType 1) (a11yHidden true))
+    tag Button   EVGElement (props (className "qn-btn") (role "button") (a11yFocusable true) (cursor "pointer"))
+    tag BtnTx    EVGElement (props (className "qn-btn-text") (elementType 1))
+    tag List     EVGElement (props (className "qn-sum-list") (role "list"))
+    tag Item     EVGElement (props (className "qn-sum-row") (role "listitem"))
+    tag SumQ     EVGElement (props (className "qn-sum-q") (elementType 1) (role "text"))
+    tag SumA     EVGElement (props (className "qn-sum-a") (elementType 1) (role "text"))
+    ; Where step changes, refusals and counts are said. Visually hidden.
+    tag Live     EVGElement (props (className "qn-live") (elementType 1) (role "status"))
+}
+
+class QuestionnaireDemo {
+
+    def qa:QuestionnaireCtl (new QuestionnaireCtl())
+    def qb:QuestionnaireCtl (new QuestionnaireCtl())
+
+    def root@(optional):EVGElement
+    def sheet@(optional):EVGStyleSheet
+    def transitions:EVGTransition (new EVGTransition())
+    def reconciler:EVGReconcile (new EVGReconcile())
+    def layout@(optional):EVGLayout
+    def hovered:string ""
+    def pressed:string ""
+    def focused:string ""
+    def pageW:double 1040.0
+    def pageH:double 800.0
+    ; prefers-reduced-motion, as the host reads it.
+    def reducedMotion:boolean false
+    ; Step bodies built this pass that should slide in: the class comes off
+    ; after their first cascade.
+    def entering:[string]
+
+    Constructor () {
+        def e:[string]
+        entering = e
+    }
+
+    fn init:void (css:string) {
+        def s (new EVGStyleSheet())
+        s.parse(css)
+        sheet = s
+
+        qa.tid = "qa"
+        qa.name = "Workspace setup"
+        qa.addStep("use" "single" "What will you use the workspace for?" "This picks the default views. Nothing here is permanent." true)
+        qa.addChoice("use" "product" "Shipping product work" "Roadmap, sprint board and release notes")
+        qa.addChoice("use" "clients" "Running client projects" "Separate spaces, budgets and approvals")
+        qa.addChoice("use" "research" "Tracking research" "Interview notes, findings and shared tags")
+        qa.addStep("team" "single" "How many people will join you?" "We size the plan and the invites to it." true)
+        qa.addChoice("team" "solo" "Just me" "A private workspace, for now")
+        qa.addChoice("team" "small" "A small team" "Two to ten people")
+        qa.addChoice("team" "large" "A whole department" "More than ten, with groups")
+        qa.addStep("skill" "scale" "How familiar are you with tools like this?" "Optional. We show more tips at the lower end." false)
+        qa.setScale("skill" 5 "New to it" "Expert")
+
+        qb.tid = "qb"
+        qb.name = "Notifications"
+        qb.addStep("flows" "multiple" "Which workflows should we switch on?" "Choose any that apply." true)
+        qb.addChoice("flows" "digest" "Daily digest" "One summary of yesterday, sent at 08:00")
+        qb.addChoice("flows" "release" "Release notes" "Posted to the channel whenever a version ships")
+        qb.addChoice("flows" "incident" "Incident alerts" "Raised the moment a service starts degrading")
+        qb.addChoice("flows" "weekly" "Weekly roll-up" "Team activity, every Friday afternoon")
+        qb.addChoice("flows" "billing" "Billing reminders" "Three working days before an invoice falls due")
+        qb.addChoice("flows" "access" "Access reviews" "A quarterly check on who can see what")
+        qb.addStep("where" "single" "Where should they reach you?" "One place, so nothing arrives twice." true)
+        qb.addChoice("where" "email" "Email" "To the address on your account")
+        qb.addChoice("where" "slack" "Slack" "A direct message from the bot")
+        qb.addChoice("where" "app" "In the app" "A badge on the bell, nothing else")
+        qb.addStep("often" "scale" "How often is too often?" "Optional. We batch anything past your limit." false)
+        qb.setScale("often" 5 "Rarely" "Constantly")
+
+        this.rebuild()
+        this.laidOut()
+    }
+
+    fn setReducedMotion:void (on:boolean) {
+        reducedMotion = on
+    }
+
+    fn ctls:[QuestionnaireCtl] () {
+        def a:[QuestionnaireCtl]
+        push a qa
+        push a qb
+        return a
+    }
+
+    fn ownerIndex:int (target:string) {
+        if ((strlen target) == 0) {
+            return -1
+        }
+        def all:[QuestionnaireCtl] (this.ctls())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:QuestionnaireCtl (itemAt all i)
+            if (c.owns(target)) {
+                return i
+            }
+            i = (i + 1)
+        }
+        return -1
+    }
+
+    fn ctlAt:QuestionnaireCtl (i:int) {
+        def all:[QuestionnaireCtl] (this.ctls())
+        return (itemAt all i)
+    }
+
+    ; --- the pieces ---------------------------------------------------------------
+
+    fn button:EVGElement (id:string label:string variant:string) {
+        def txCls:string "qn-btn-text"
+        if (variant == "primary") {
+            txCls = "qn-btn-text qn-btn-text-on"
+        }
+        return (tree Qn
+            (Button (props (id id) (className ("qn-btn qn-btn-" + variant)) (a11yLabel label))
+                (BtnTx (props (className txCls)) label)))
+    }
+
+    ; The step's body, marked to slide in when it is new.
+    fn body:EVGElement (id:string cls:string) {
+        def full:string ("qn-body " + cls)
+        if (reducedMotion == false) {
+            full = (full + " qn-enter")
+            push entering id
+        }
+        return (tree Qn (Col (props (id id) (className full))))
+    }
+
+    ; One option row of a single- or multiple-choice step.
+    fn option:EVGElement (c:QuestionnaireCtl s:QStep i:int roving:int) {
+        def oid:string (c.optionTid(s i))
+        def on:boolean (c.isChosen(s i))
+        def cls:string "qn-opt"
+        if on {
+            cls = "qn-opt qn-opt-on"
+        }
+        def row (tree Qn (Opt (props (id oid) (className cls))))
+        row.a11yLabel = (itemAt s.labels i)
+        row.a11yDescription = (itemAt s.descs i)
+        row.a11yFocusable = (i == roving)
+        if on {
+            row.a11yChecked = (EVGA11yTri.yes())
+        } {
+            row.a11yChecked = (EVGA11yTri.no())
+        }
+        if (s.isMultiple()) {
+            row.role = "checkbox"
+            def box (tree Qn (Check))
+            if on {
+                box.className = "qn-check qn-check-on"
+                box.addChild((tree Qn (Mark)))
+            }
+            row.addChild(box)
+        } {
+            row.role = "radio"
+            def dot (tree Qn (Radio))
+            if on {
+                dot.className = "qn-radio qn-radio-on"
+            }
+            row.addChild(dot)
+        }
+        def label:string (itemAt s.labels i)
+        def desc:string (itemAt s.descs i)
+        def key:string (c.keyFor(s i))
+        row.addChild((tree Qn (OptText (OptLabel label) (OptDesc desc))))
+        row.addChild((tree Qn (Key key)))
+        return row
+    }
+
+    ; A scale: five numbered points in a row, the end labels under them.
+    fn scale:EVGElement (c:QuestionnaireCtl s:QStep group:EVGElement roving:int) {
+        def pts (tree Qn (Row (props (className "qn-row qn-scale"))))
+        def i:int 0
+        while (i < (s.count())) {
+            def oid:string (c.optionTid(s i))
+            def on:boolean (c.isChosen(s i))
+            def cls:string "qn-pt"
+            if on {
+                cls = "qn-pt qn-pt-on"
+            }
+            def num:string (itemAt s.labels i)
+            def p (tree Qn (Point (props (id oid) (className cls)) num))
+            def name:string num
+            def d:string (itemAt s.descs i)
+            if ((strlen d) > 0) {
+                name = (num + ", " + d)
+            }
+            p.a11yLabel = name
+            p.a11yFocusable = (i == roving)
+            if on {
+                p.a11yChecked = (EVGA11yTri.yes())
+            } {
+                p.a11yChecked = (EVGA11yTri.no())
+            }
+            pts.addChild(p)
+            i = (i + 1)
+        }
+        group.addChild(pts)
+        def lo:string s.lowLabel
+        def hi:string s.highLabel
+        group.addChild((tree Qn (Ends (End lo) (Grow) (End hi))))
+        return group
+    }
+
+    ; The answers of the current step, as a group labelled by the question and
+    ; described by its description (or by the error, once there is one).
+    fn group:EVGElement (c:QuestionnaireCtl) {
+        def s:QStep (c.current())
+        def g (tree Qn (Group (props (id (c.currentTid())))))
+        if (s.isMultiple()) {
+            g.role = "group"
+        } {
+            g.role = "radiogroup"
+        }
+        g.a11yLabelledBy = (c.titleTid())
+        g.a11yLabel = s.title
+        def err:string (c.errorText())
+        if ((strlen err) > 0) {
+            g.a11yDescribedBy = (c.errorTid())
+            g.a11yDescription = err
+            g.a11yInvalid = "true"
+        } {
+            if ((strlen s.description) > 0) {
+                g.a11yDescribedBy = (c.descTid())
+            }
+            g.a11yDescription = s.description
+        }
+        ; aria-required belongs to a radiogroup; a plain group does not take it,
+        ; and the checkbox group says "at least one" in its error instead.
+        if (s.required && ((s.isMultiple()) == false)) {
+            g.a11yRequired = "true"
+        }
+        def roving:int (c.rovingIndex())
+        if (s.kind == "scale") {
+            return (this.scale(c s g roving))
+        }
+        def i:int 0
+        while (i < (s.count())) {
+            g.addChild((this.option(c s i roving)))
+            i = (i + 1)
+        }
+        return g
+    }
+
+    fn errorEl:EVGElement (c:QuestionnaireCtl) {
+        def err:string (c.errorText())
+        return (tree Qn (Error (props (id (c.errorTid()))) err))
+    }
+
+    fn live:EVGElement (c:QuestionnaireCtl) {
+        def said:string c.said
+        return (tree Qn (Live (props (id (c.liveTid()))) said))
+    }
+
+    ; The summary: every question and what was answered, then Back and
+    ; Start over.
+    ; `inHead`: the title goes into the head row, before the progress (card A),
+    ; rather than under it (card B).
+    fn summary:EVGElement (c:QuestionnaireCtl cls:string top:EVGElement inHead:boolean) {
+        def b:EVGElement (this.body((c.summaryTid()) cls))
+        def t (tree Qn (Title (props (id (c.summaryTitleTid()))) "All set"))
+        ; Where the focus goes after Finish, so a reader starts at the top of
+        ; the summary.
+        t.a11yFocusable = true
+        if inHead {
+            def text (tree Qn (Col (props (className "qn-col qn-headtext"))))
+            text.addChild(t)
+            def head (tree Qn (Row (props (className "qn-row qn-head"))))
+            head.addChild(text)
+            head.addChild(top)
+            b.addChild(head)
+        } {
+            b.addChild(top)
+            b.addChild(t)
+        }
+        b.addChild((tree Qn (Desc (props (id (c.tid + "-summary-desc"))) "Here is what you picked. You can change any of it later in Settings.")))
+        def list (tree Qn (List (props (id (c.tid + "-summary-list")))))
+        list.a11yLabel = "Your answers"
+        def i:int 0
+        while (i < (c.count())) {
+            def s:QStep (c.stepAt(i))
+            def item (tree Qn (Item (props (id (c.tid + "-summary-" + (to_string i))))))
+            def q:string s.title
+            item.addChild((tree Qn (SumQ q)))
+            def a:string (c.answerText(i))
+            def aCls:string "qn-sum-a"
+            if (a == "Skipped") {
+                aCls = "qn-sum-a qn-sum-skip"
+            }
+            item.addChild((tree Qn (SumA (props (className aCls)) a)))
+            if (i > 0) {
+                list.addChild((tree Qn (Rule)))
+            }
+            list.addChild(item)
+            i = (i + 1)
+        }
+        b.addChild(list)
+        return b
+    }
+
+    ; --- card A: the single-choice card ---------------------------------------------
+
+    fn cardA:EVGElement () {
+        def c:QuestionnaireCtl qa
+        def card (tree Qn (Card (props (id c.tid) (className "qn-card qn-card-framed"))))
+        card.a11yLabel = c.name
+        if c.done {
+            def prog (tree Qn (Progress (props (id (c.progressTid()))) (c.progressText())))
+            card.addChild((this.summary(c "qn-pad" prog true)))
+        } {
+            def s:QStep (c.current())
+            def b:EVGElement (this.body(((c.currentTid()) + "-body") "qn-pad"))
+            def st:string s.title
+            def sd:string s.description
+            def text (tree Qn (Col (props (className "qn-col qn-headtext"))
+                (Title (props (id (c.titleTid()))) st)
+                (Desc (props (id (c.descTid()))) sd)))
+            def head (tree Qn (Row (props (className "qn-row qn-head"))))
+            head.addChild(text)
+            head.addChild((tree Qn (Progress (props (id (c.progressTid()))) (c.progressText()))))
+            b.addChild(head)
+            b.addChild((this.group(c)))
+            if ((strlen (c.errorText())) > 0) {
+                b.addChild((this.errorEl(c)))
+            }
+            card.addChild(b)
+        }
+        card.addChild((tree Qn (Rule)))
+        def foot (tree Qn (Row (props (className "qn-row qn-band"))))
+        this.buttons(c foot)
+        card.addChild(foot)
+        card.addChild((this.live(c)))
+        return card
+    }
+
+    fn buttons:void (c:QuestionnaireCtl foot:EVGElement) {
+        if c.done {
+            foot.addChild((this.button((c.backTid()) "Back" "outline")))
+            foot.addChild((tree Qn (Grow)))
+            foot.addChild((this.button((c.restartTid()) "Start over" "primary")))
+            return
+        }
+        if (c.index > 0) {
+            foot.addChild((this.button((c.backTid()) "Back" "outline")))
+        }
+        foot.addChild((tree Qn (Grow)))
+        foot.addChild((this.button((c.nextTid()) (c.nextLabel()) "primary")))
+    }
+
+    ; --- card B: the multiple-choice card ---------------------------------------------
+
+    fn cardB:EVGElement () {
+        def c:QuestionnaireCtl qb
+        def card (tree Qn (Card (props (id c.tid) (className "qn-card qn-card-plain"))))
+        card.a11yLabel = c.name
+        def top (tree Qn (Row (props (className "qn-row qn-top"))))
+        top.addChild((tree Qn (Progress (props (id (c.progressTid()))) (c.progressText()))))
+        top.addChild((tree Qn (Grow)))
+        if c.done {
+            card.addChild((this.summary(c "qn-gap" top false)))
+        } {
+            def s:QStep (c.current())
+            if (s.isMultiple()) {
+                top.addChild((tree Qn (Count (props (id (c.countTid()))) (c.selectedText()))))
+            } {
+                if (s.required == false) {
+                    top.addChild((tree Qn (Badge (props (id (c.tid + "-optional"))) "Optional")))
+                }
+            }
+            def b:EVGElement (this.body(((c.currentTid()) + "-body") "qn-gap"))
+            b.addChild(top)
+            def qt:string s.title
+            b.addChild((tree Qn (Title (props (id (c.titleTid())) (className "qn-title qn-title-lg")) qt)))
+            if (s.isMultiple()) {
+                ; The picture has no description under this question; the
+                ; group still carries it for a reader ("Choose any that
+                ; apply"), and the id it points at is the hidden one below.
+                def hd:string s.description
+                def hid (tree Qn (Desc (props (id (c.descTid())) (className "qn-desc qn-sr")) hd))
+                b.addChild(hid)
+            } {
+                def sd:string s.description
+                b.addChild((tree Qn (Desc (props (id (c.descTid()))) sd)))
+            }
+            b.addChild((this.group(c)))
+            if ((strlen (c.errorText())) > 0) {
+                b.addChild((this.errorEl(c)))
+            }
+            card.addChild(b)
+        }
+        def foot (tree Qn (Row (props (className "qn-row qn-foot"))))
+        this.buttons(c foot)
+        card.addChild(foot)
+        card.addChild((this.live(c)))
+        return card
+    }
+
+    fn page:EVGElement () {
+        def e:[string]
+        entering = e
+        def p (tree Qn (Page (props (id "qn-page"))))
+        def fa (tree Qn (Frame (props (id "qn-frame-a"))))
+        fa.addChild((this.cardA()))
+        p.addChild(fa)
+        def fb (tree Qn (Frame (props (id "qn-frame-b"))))
+        fb.addChild((this.cardB()))
+        p.addChild(fb)
+        return p
+    }
+
+    sfn keyAll:void (el:EVGElement) {
+        if ((strlen el.id) > 0) {
+            el.key = el.id
+        }
+        def i:int 0
+        while (i < (array_length el.children)) {
+            def kid:EVGElement (itemAt el.children i)
+            QuestionnaireDemo.keyAll(kid)
+            i = (i + 1)
+        }
+    }
+
+    ; Only a NEW step body slides in: one that was on screen last pass keeps
+    ; the class off (the rebuild after a hover must not replay the entry).
+    fn rebuild:void () {
+        def before:[string] entering
+        def next:EVGElement (this.page())
+        QuestionnaireDemo.keyAll(next)
+        if (null? root) {
+            ; The first build is not an entry: nothing slides in on load.
+            def j:int 0
+            while (j < (array_length entering)) {
+                def first@(optional):EVGElement (UiTree.findById(next (itemAt entering j)))
+                if (!null? first) {
+                    UiTree.removeClass((unwrap first) "qn-enter")
+                }
+                j = (j + 1)
+            }
+            root = next
+            def none:[string]
+            entering = none
+            return
+        }
+        def r:EVGElement (unwrap root)
+        def keep:[string]
+        def i:int 0
+        while (i < (array_length entering)) {
+            def id:string (itemAt entering i)
+            def was@(optional):EVGElement (UiTree.findById(r id))
+            def pending:boolean false
+            def k:int 0
+            while (k < (array_length before)) {
+                if ((itemAt before k) == id) {
+                    pending = true
+                }
+                k = (k + 1)
+            }
+            if ((null? was) || pending) {
+                push keep id
+            } {
+                def fresh@(optional):EVGElement (UiTree.findById(next id))
+                if (!null? fresh) {
+                    UiTree.removeClass((unwrap fresh) "qn-enter")
+                }
+            }
+            i = (i + 1)
+        }
+        entering = keep
+        reconciler.reconcile(r next)
+    }
+
+    ; --- the host ----------------------------------------------------------------
+
+    fn press:boolean (target:string) {
+        def k:int (this.ownerIndex(target))
+        if (k < 0) {
+            if ((strlen focused) > 0) {
+                focused = ""
+                this.rebuild()
+            }
+            return false
+        }
+        def c:QuestionnaireCtl (this.ctlAt(k))
+        def f:string (c.activate(target))
+        if ((strlen f) == 0) {
+            return false
+        }
+        focused = f
+        c.onFocus(f)
+        this.rebuild()
+        return true
+    }
+
+    fn key:boolean (k:string) {
+        return (this.keyWith(k false false))
+    }
+
+    fn keyWith:boolean (k:string shift:boolean ctrl:boolean) {
+        def i:int (this.ownerIndex(focused))
+        if (i < 0) {
+            return false
+        }
+        def c:QuestionnaireCtl (this.ctlAt(i))
+        def f:string (c.keyDownMods(focused k shift ctrl))
+        if ((strlen f) == 0) {
+            return false
+        }
+        focused = f
+        c.onFocus(f)
+        this.rebuild()
+        return true
+    }
+
+    fn ownsKey:boolean (k:string) {
+        def i:int (this.ownerIndex(focused))
+        if (i < 0) {
+            return false
+        }
+        def c:QuestionnaireCtl (this.ctlAt(i))
+        return (c.takesKey(focused k))
+    }
+
+    fn setHover:boolean (id:string) {
+        if (id == hovered) {
+            return false
+        }
+        hovered = id
+        this.rebuild()
+        return true
+    }
+
+    fn setPressed:void (id:string) {
+        pressed = id
+    }
+
+    ; Focus arriving from the page (a Tab, a reader).
+    fn setFocus:void (id:string) {
+        if (id == focused) {
+            return
+        }
+        focused = id
+        def k:int (this.ownerIndex(id))
+        if (k >= 0) {
+            def c:QuestionnaireCtl (this.ctlAt(k))
+            c.onFocus(id)
+        }
+        this.rebuild()
+    }
+
+    fn cursorAt:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def hit (new EVGHitTest())
+        return (hit.cursorAt(r px py))
+    }
+
+    ; The keyboard ring goes round the element itself (the option row, the
+    ; scale point, the button): "x,y,w,h".
+    fn ringBoxJson:string (id:string) {
+        return (this.boxOf(id))
+    }
+
+    fn boxOf:string (id:string) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def hit@(optional):EVGElement (UiTree.findById(r id))
+        if (null? hit) {
+            return ""
+        }
+        def e:EVGElement (unwrap hit)
+        return ((to_string e.calculatedX) + "," + (to_string e.calculatedY) + "," + (to_string e.calculatedWidth) + "," + (to_string e.calculatedHeight))
+    }
+
+    ; For checks: where each card is and what it holds.
+    fn ctlJson:string (c:QuestionnaireCtl) {
+        def s:QStep (c.current())
+        def chosen:string ""
+        def i:int 0
+        while (i < (s.count())) {
+            if (c.isChosen(s i)) {
+                if ((strlen chosen) > 0) {
+                    chosen = (chosen + ",")
+                }
+                chosen = (chosen + (itemAt s.values i))
+            }
+            i = (i + 1)
+        }
+        def answers:string ""
+        def k:int 0
+        while (k < (c.count())) {
+            if (k > 0) {
+                answers = (answers + "|")
+            }
+            answers = (answers + (c.answerText(k)))
+            k = (k + 1)
+        }
+        return ("{\"step\":" + (to_string c.index) + ",\"done\":" + (to_string c.done) + ",\"kind\":\"" + s.kind + "\",\"chosen\":\"" + chosen + "\",\"progress\":\"" + (c.progressText()) + "\",\"count\":\"" + (c.selectedText()) + "\",\"error\":\"" + (c.errorText()) + "\",\"said\":\"" + c.said + "\",\"answers\":\"" + answers + "\"}")
+    }
+
+    fn stateJson:string () {
+        return ("{\"qa\":" + (this.ctlJson(qa)) + ",\"qb\":" + (this.ctlJson(qb)) + ",\"focused\":\"" + focused + "\",\"entering\":" + (to_string (array_length entering)) + ",\"still\":" + (to_string reducedMotion) + "}")
+    }
+
+    fn markStates:void (el:EVGElement) {
+        el.isHovered = false
+        el.isPressed = false
+        el.isFocused = false
+        if ((strlen el.id) > 0) {
+            if (el.id == hovered) {
+                el.isHovered = true
+            }
+            if (el.id == pressed) {
+                el.isPressed = true
+            }
+            if (el.id == focused) {
+                el.isFocused = true
+            }
+        }
+        def i:int 0
+        while (i < (array_length el.children)) {
+            def kid:EVGElement (itemAt el.children i)
+            this.markStates(kid)
+            i = (i + 1)
+        }
+    }
+
+    sfn padBottom:double (el:EVGElement) {
+        def pad:double 0.0
+        if (!null? el.box) {
+            def bx:EVGBox el.box
+            def pb:EVGUnit bx.paddingBottom
+            if (!null? pb) {
+                if pb.isSet {
+                    pad = pb.pixels
+                }
+            }
+        }
+        return pad
+    }
+
+    ; Where the content ends: the lowest CARD, plus its frame's padding and
+    ; border and the page's padding. Not the frames themselves: in a row they
+    ; are stretched to the page, so measuring them could never shrink it.
+    fn contentBottom:double () {
+        def r:EVGElement (unwrap root)
+        def bottom:double 0.0
+        def i:int 0
+        while (i < (r.getChildCount())) {
+            def f:EVGElement (r.getChild(i))
+            def k:int 0
+            while (k < (f.getChildCount())) {
+                def c:EVGElement (f.getChild(k))
+                def b:double ((c.calculatedY + c.calculatedHeight) + (QuestionnaireDemo.padBottom(f)) + 1.0)
+                if (b > bottom) {
+                    bottom = b
+                }
+                k = (k + 1)
+            }
+            i = (i + 1)
+        }
+        return (bottom + (QuestionnaireDemo.padBottom(r)))
+    }
+
+    fn fitHeight:void (lay:EVGLayout) {
+        def want:double (to_double (to_int ((this.contentBottom()) + 0.999)))
+        def diff:double (want - pageH)
+        if ((diff > 0.5) || (diff < -0.5)) {
+            pageH = want
+            def s:EVGStyleSheet (unwrap sheet)
+            def r:EVGElement (unwrap root)
+            UiTree.inline(r "height" ((to_string (to_int pageH)) + "px"))
+            s.setViewport(pageW pageH false)
+            s.applyTree(r "")
+            lay.setPageSize(pageW pageH)
+            lay.layout(r)
+        }
+    }
+
+    ; The first cascade of a new step body puts it where it enters FROM; then
+    ; the class comes off and the second cascade starts the transition to where
+    ; it rests.
+    fn settleEntering:void (r:EVGElement s:EVGStyleSheet t:EVGTransition) {
+        if ((array_length entering) == 0) {
+            return
+        }
+        def i:int 0
+        while (i < (array_length entering)) {
+            def hit@(optional):EVGElement (UiTree.findById(r (itemAt entering i)))
+            if (!null? hit) {
+                UiTree.removeClass((unwrap hit) "qn-enter")
+            }
+            i = (i + 1)
+        }
+        def none:[string]
+        entering = none
+        s.applyTree(r "")
+        t.reconcileTree(r)
+    }
+
+    fn laidOut:EVGLayout () {
+        def r:EVGElement (unwrap root)
+        def s:EVGStyleSheet (unwrap sheet)
+        UiTree.inline(r "height" ((to_string (to_int pageH)) + "px"))
+        s.setViewport(pageW pageH false)
+        this.markStates(r)
+        s.applyTree(r "")
+        def t:EVGTransition transitions
+        t.reconcileTree(r)
+        this.settleEntering(r s t)
+        if layout {
+            def lay:EVGLayout (unwrap layout)
+            if ((s.layoutClean()) == false) {
+                lay.setPageSize(pageW pageH)
+                lay.layout(r)
+                this.fitHeight(lay)
+            }
+            return lay
+        }
+        QuestionnaireDemo.forgetFlex(r)
+        def fresh (new EVGLayout())
+        fresh.setPageSize(pageW pageH)
+        layout = fresh
+        fresh.layout(r)
+        this.fitHeight(fresh)
+        return fresh
+    }
+
+    sfn forgetFlex:void (el:EVGElement) {
+        el.calculatedFlexHeight = 0.0
+        el.calculatedHeight = 0.0
+        el.calculatedWidth = 0.0
+        el.calculatedInnerHeight = 0.0
+        el.calculatedInnerWidth = 0.0
+        el.hasDefiniteHeight = false
+        el.layoutClean = false
+        def i:int 0
+        while (i < (array_length el.children)) {
+            QuestionnaireDemo.forgetFlex((itemAt el.children i))
+            i = (i + 1)
+        }
+    }
+
+    fn tick:boolean (dtMs:double) {
+        def r:EVGElement (unwrap root)
+        def t:EVGTransition transitions
+        t.advanceTree(r dtMs)
+        return (t.busy(r))
+    }
+
+    fn busyNow:boolean () {
+        def r:EVGElement (unwrap root)
+        def t:EVGTransition transitions
+        return (t.busy(r))
+    }
+
+    fn displayListJson:string () {
+        def lay:EVGLayout (this.laidOut())
+        def r:EVGElement (unwrap root)
+        def dl (new EVGDisplayList())
+        dl.setTextEngine((lay.getTextEngine()))
+        dl.build(r)
+        return (dl.toJson())
+    }
+
+    fn hitId:string (px:double py:double) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def hit (new EVGHitTest())
+        return (hit.idAt(r px py))
+    }
+
+    fn a11yJson:string (generation:int focusId:string) {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Questionnaire demo" generation focusId))
+        return (t.toJson())
+    }
+
+    fn a11yProblems:[string] () {
+        this.laidOut()
+        def r:EVGElement (unwrap root)
+        def b (new EVGA11yFromTree())
+        def t:EVGA11yTree (b.build(r "Questionnaire demo" 1 ""))
+        def out:[string] (t.lint())
+        def i:int 0
+        while (i < (array_length t.notes)) {
+            push out (itemAt t.notes i)
+            i = (i + 1)
+        }
+        return out
+    }
+
+    fn styleErrorCount:int () {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (s.getErrorCount())
+    }
+
+    fn styleErrorAt:string (i:int) {
+        def s:EVGStyleSheet (unwrap sheet)
+        return (s.getError(i))
+    }
+
+    fn heightPx:double () {
+        this.laidOut()
+        return pageH
+    }
+
+    fn widthPx:double () {
+        return pageW
+    }
+}

@@ -1,0 +1,402 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * Questionnaire, as an EVG stylesheet: ReUI / shadcn's look — zinc greys,
+ * 1px #e4e4e7 lines, 10–14px radii, a near-black primary button. An option
+ * is a bordered row: a radio or a checkbox, a bold label over a muted line,
+ * and a key badge at the right. The selected row gets a dark border and a
+ * filled radio / check.
+ *
+ * Class-first, one token per selector (EVG has no descendant selectors).
+ * Which option is chosen, and which step is entering, is written by
+ * QuestionnaireDemo as classes; hover is the engine's `:hover`. EVG does not
+ * put a property back when a rule stops matching, so every state rule sets
+ * all the properties its base rule sets.
+ */
+
+/* --- the page and its two frames ------------------------------------------- */
+
+.qn-page {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 16px;
+  padding: 16px;
+  width: 100%;
+  background-color: #ffffff;
+}
+
+/* The picture's two panels: a light frame each, the example centred in it. */
+.qn-frame {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: flex-start;
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0px;
+  padding: 48px 24px;
+  border: 1px solid #ececef;
+  border-radius: 16px;
+  background-color: #ffffff;
+}
+
+/* --- the cards -------------------------------------------------------------- */
+
+.qn-card {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  position: relative;
+  width: 400px;
+  background-color: #ffffff;
+}
+
+/* A: a bordered card with a grey footer band. */
+.qn-card-framed {
+  border: 1px solid #e4e4e7;
+  border-radius: 14px;
+  shadow-color: rgba(0, 0, 0, 0.04);
+  shadow-radius: 2px;
+  shadow-offset-y: 1px;
+}
+
+/* B: no card of its own, the frame is the card. */
+.qn-card-plain { gap: 20px; }
+
+.qn-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.qn-col {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+}
+
+.qn-grow { flex-grow: 1; flex-shrink: 1; height: 1px; }
+
+/* A step's body: what slides in. */
+.qn-body {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  opacity: 1;
+  transform: translateX(0px);
+  transition: opacity 160ms ease-out, transform 160ms ease-out;
+}
+.qn-enter {
+  opacity: 0;
+  transform: translateX(12px);
+}
+.qn-pad { padding: 24px; gap: 16px; }
+.qn-gap { gap: 16px; }
+
+.qn-head { align-items: flex-start; gap: 16px; }
+.qn-headtext { flex-grow: 1; flex-shrink: 1; gap: 6px; }
+.qn-top { gap: 8px; }
+
+/* --- text ------------------------------------------------------------------- */
+
+.qn-title {
+  width: 100%;
+  color: #09090b;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 24px;
+}
+.qn-title-lg { font-size: 18px; line-height: 26px; }
+
+.qn-desc {
+  width: 100%;
+  color: #71717a;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+/* A description that is for a reader only (the picture shows none). */
+.qn-sr {
+  position: absolute;
+  left: 0px;
+  top: 0px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  color: rgba(0, 0, 0, 0);
+}
+
+.qn-progress {
+  flex-shrink: 0;
+  color: #71717a;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.qn-badge {
+  flex-shrink: 0;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid #e4e4e7;
+  border-radius: 6px;
+  background-color: #f4f4f5;
+  color: #18181b;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.qn-error {
+  width: 100%;
+  color: #dc2626;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+/* --- the options -------------------------------------------------------------- */
+
+.qn-group {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 8px;
+  width: 100%;
+}
+
+.qn-opt {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  background-color: #ffffff;
+  cursor: pointer;
+  transition: border-color 120ms ease-out, background-color 120ms ease-out;
+}
+.qn-opt:hover { border-color: #d4d4d8; background-color: #fafafa; }
+.qn-opt-on { border-color: #18181b; background-color: #fafafa; }
+.qn-opt-on:hover { border-color: #18181b; background-color: #f4f4f5; }
+
+.qn-radio {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  border: 1px solid #d4d4d8;
+  border-radius: 8px;
+  background-color: #ffffff;
+}
+.qn-radio-on { border-width: 5px; border-color: #18181b; }
+
+.qn-check {
+  flex-shrink: 0;
+  position: relative;
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  border: 1px solid #d4d4d8;
+  border-radius: 4px;
+  background-color: #ffffff;
+}
+.qn-check-on { border-color: #18181b; background-color: #18181b; }
+
+/* The tick: out of flow, over the box. Absolute children are placed from the
+ * content box, so the 1px border is taken back off. */
+.qn-mark {
+  position: absolute;
+  left: -1px;
+  top: -1px;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: #fafafa;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.qn-opt-text {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  flex-grow: 1;
+  flex-shrink: 1;
+  gap: 2px;
+}
+
+.qn-opt-label {
+  width: 100%;
+  color: #09090b;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.qn-opt-desc {
+  width: 100%;
+  color: #71717a;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+/* The key badge: A, B, C… */
+.qn-key {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border: 1px solid #e4e4e7;
+  border-radius: 5px;
+  background-color: #ffffff;
+  color: #71717a;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+  text-align: center;
+}
+
+/* --- a scale -------------------------------------------------------------------- */
+
+.qn-scale { gap: 8px; width: 100%; }
+
+.qn-pt {
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0px;
+  height: 44px;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  background-color: #ffffff;
+  color: #09090b;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 42px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 120ms ease-out, background-color 120ms ease-out;
+}
+.qn-pt:hover { border-color: #d4d4d8; background-color: #fafafa; color: #09090b; }
+.qn-pt-on { border-color: #18181b; background-color: #18181b; color: #fafafa; }
+.qn-pt-on:hover { border-color: #18181b; background-color: #27272a; color: #fafafa; }
+
+.qn-ends {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  width: 100%;
+  margin-top: 2px;
+}
+.qn-end { color: #71717a; font-size: 13px; line-height: 18px; }
+
+/* --- the summary ------------------------------------------------------------------ */
+
+.qn-sum-list {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  width: 100%;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+}
+
+.qn-sum-row {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 2px;
+  padding: 10px 12px;
+}
+
+.qn-sum-q { width: 100%; color: #71717a; font-size: 13px; line-height: 18px; }
+.qn-sum-a { width: 100%; color: #09090b; font-size: 15px; font-weight: 500; line-height: 22px; }
+.qn-sum-skip { color: #a1a1aa; font-weight: 400; }
+
+/* --- the footer and its buttons ------------------------------------------------------ */
+
+/* A 1px element, not a border-top: EVG borders are four-sided. */
+.qn-rule { height: 1px; width: 100%; background-color: #e4e4e7; }
+
+.qn-band {
+  gap: 8px;
+  padding: 16px 24px;
+  border-radius: 0 0 13px 13px;
+  background-color: #fafafa;
+}
+
+.qn-foot { gap: 8px; }
+
+.qn-btn {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid #18181b;
+  border-radius: 8px;
+  background-color: #18181b;
+  cursor: pointer;
+  transition: background-color 120ms ease-out, border-color 120ms ease-out;
+}
+.qn-btn-primary:hover { background-color: #27272a; border-color: #27272a; }
+.qn-btn-outline {
+  border-color: #e4e4e7;
+  background-color: #ffffff;
+  shadow-color: rgba(0, 0, 0, 0.05);
+  shadow-radius: 2px;
+  shadow-offset-y: 1px;
+}
+.qn-btn-outline:hover { border-color: #e4e4e7; background-color: #f4f4f5; }
+
+.qn-btn-text {
+  color: #09090b;
+  font-size: 14px;
+  font-weight: 500;
+  height: 20px;
+  line-height: 20px;
+  text-align: center;
+}
+.qn-btn-text-on { color: #fafafa; }
+
+/* The status region: read, not seen. */
+.qn-live {
+  position: absolute;
+  left: 0px;
+  top: 0px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  color: rgba(0, 0, 0, 0);
+  font-size: 1px;
+  line-height: 1px;
+}
+
+/* --- narrower: the frames stack ------------------------------------------------------ */
+
+@media (max-width: 860px) {
+  .qn-page { flex-direction: column; align-items: stretch; }
+  .qn-frame { flex-grow: 0; flex-basis: auto; }
+}
+
+/* --- a phone -------------------------------------------------------------------------- */
+
+@media (max-width: 600px) {
+  .qn-page { padding: 12px; gap: 12px; }
+  .qn-frame { padding: 16px 12px; }
+  .qn-card { width: 100%; }
+  .qn-pad { padding: 16px; }
+  .qn-band { padding: 12px 16px; }
+}

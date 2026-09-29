@@ -676,6 +676,41 @@ STATES.push(...[
   })));
 }
 
+// The questionnaire: both cards at rest; both refusing Next with the inline
+// error; options picked with letters and the arrows (a radio checked, three
+// checkboxes, the focus moved); the scales, card B's marked Optional; and
+// both summaries, the focus on a summary heading.
+{
+  const { QuestionnaireDemo } = require(path.join(ROOT, "gallery/evgui/bin/QuestionnaireDemo.cjs"));
+  const qn = () => atRest(QuestionnaireDemo, "questionnaire.css");
+  const qnRest = qn();
+  const qnError = qn();
+  qnError.press("qa-next");
+  qnError.press("qb-next");
+  const qnPicked = qn();
+  qnPicked.setFocus("qa-s0-product");
+  qnPicked.key("b");
+  qnPicked.setFocus("qb-s0-digest");
+  for (const k of ["a", "c", "d", "ArrowDown"]) qnPicked.key(k);
+  const qnScale = qn();
+  for (const id of ["qa-s0-product", "qa-next", "qa-s1-solo", "qa-next", "qa-s2-3", "qb-s0-weekly", "qb-next", "qb-s1-slack", "qb-next"]) qnScale.press(id);
+  const qnDone = qn();
+  for (const id of ["qa-s0-clients", "qa-next", "qa-s1-large", "qa-next", "qa-next", "qb-s0-digest", "qb-s0-access", "qb-next", "qb-s1-app", "qb-next", "qb-s2-2", "qb-next"]) qnDone.press(id);
+  for (const d of [qnRest, qnError, qnPicked, qnScale, qnDone]) d.displayListJson();
+  STATES.push(...[
+    ["questionnaire — both cards at rest", qnRest, 110],
+    ["questionnaire — Next refused, the inline errors", qnError, 111],
+    ["questionnaire — picked by letter and arrow, the count at 3", qnPicked, 112],
+    ["questionnaire — the 1–5 scales, one Optional", qnScale, 113],
+    ["questionnaire — both summaries", qnDone, 114],
+  ].map(([name, d, gen]) => ({
+    name,
+    size: [d.widthPx(), d.heightPx()],
+    lint: () => d.a11yProblems(),
+    tree: () => d.a11yJson(gen, d.focused || ""),
+  })));
+}
+
 // The menubar page: three bars at rest, then each kind of menu open, reached
 // by pressing (and hovering) the ids the hit test reports, as the page does —
 // the icons-and-shortcuts File menu, Account with its group and destructive

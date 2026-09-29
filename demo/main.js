@@ -76,6 +76,8 @@ import { ComboboxDemo } from "./generated-host.js";
 import { COMBOBOX_CSS } from "./generated.js";
 import { ColorPickerDemo } from "./generated-host.js";
 import { COLORPICKER_CSS } from "./generated.js";
+import { QuestionnaireDemo } from "./generated-host.js";
+import { QUESTIONNAIRE_CSS } from "./generated.js";
 import { EVG_CSS_FACTS } from "./generated.js";
 // The Styles panel: a guide to each demo's classes and a live editor for its
 // stylesheet. See styles-panel.js. The one compiled module it borrows is only
@@ -494,6 +496,14 @@ let colorpicker = new ColorPickerDemo();
 colorpicker.init(cssFor("colorpicker", COLORPICKER_CSS));
 colorpicker.setScreenPicker(typeof window.EyeDropper === "function");
 let lastColorpickerHover = "";
+// Questionnaire: two cards, each a QuestionnaireCtl (steps, answers on
+// RadioGroupCtl / CheckboxCtl, the required gate, the keys, the
+// announcements). A new step slides in unless the reader asked for less motion.
+const questionnaireStill = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+let questionnaire = new QuestionnaireDemo();
+questionnaire.setReducedMotion(questionnaireStill);
+questionnaire.init(cssFor("questionnaire", QUESTIONNAIRE_CSS));
+let lastQuestionnaireHover = "";
 // ONE DRIVER FOR THE PAGE. It reads the effect instances off whatever display
 // list is being painted, so it works for any demo whose stylesheet declares an
 // effect and costs nothing on the nineteen that do not.
@@ -1741,6 +1751,40 @@ DEMOS.colorpicker = {
     root: () => null,
   }),
 };
+// Questionnaire. No `ownsTab`: the page's generic Tab walk makes each
+// card's options one stop (a radio group is a composite; in a checkbox group
+// only the roving option is focusable), then Back and Next. The letters, the
+// arrows, Space and Enter are QuestionnaireCtl's, through `keyWith`.
+DEMOS.questionnaire = {
+  height: () => questionnaire.heightPx(),
+  list: () => questionnaire.displayListJson(),
+  hit: (x, y) => questionnaire.hitId(x, y),
+  a11y: (gen, focus) => questionnaire.a11yJson(gen, focus),
+  cursorAt: (x, y) => questionnaire.cursorAt(x, y),
+  press: (id) => questionnaire.press(id),
+  hover: (id) => {
+    if (id === lastQuestionnaireHover) return false;
+    lastQuestionnaireHover = id;
+    return questionnaire.setHover(id);
+  },
+  keyWith: (k, shift, ctrl) => questionnaire.keyWith(k, shift, ctrl),
+  key: (k) => questionnaire.key(k),
+  ownsKey: (k) => questionnaire.ownsKey(k),
+  animated: true,
+  host: () => ({
+    tick: (dt) => questionnaire.tick(dt),
+    busy: () => questionnaire.busyNow(),
+    setHover: (id) => {
+      if (id === lastQuestionnaireHover) return false;
+      lastQuestionnaireHover = id;
+      return questionnaire.setHover(id);
+    },
+    setPressed: (id) => questionnaire.setPressed(id),
+    root: () => null,
+  }),
+};
+window.__qnState = () => JSON.parse(questionnaire.stateJson());
+window.__qnBox = (id) => questionnaire.boxOf(id);
 
 // =============================================================================
 // COLOR PICKER — the eyedropper's loupe, and the browser's own picker
@@ -2346,6 +2390,7 @@ INSTANCE.kanban = () => kanban;
 INSTANCE.drawer = () => drawer;
 INSTANCE.combobox = () => combobox;
 INSTANCE.colorpicker = () => colorpicker;
+INSTANCE.questionnaire = () => questionnaire;
 INSTANCE.menubar = () => menubar;
 // A press on the page outside the canvas is outside the popover too, and
 // Radix dismisses on a pointer down outside wherever it lands.
@@ -2500,6 +2545,9 @@ NARROW.drawer = { min: 320, h: "auto", keep: true };
 NARROW.combobox = { min: 320, h: "own" };
 // The page is as tall as its cards lay out; the cards stack on a phone.
 NARROW.colorpicker = { min: 320, h: "own" };
+// Laid out at the room (up to its 1040), as tall as its two cards; the
+// frames stack under 860.
+NARROW.questionnaire = { min: 320, h: "own", grow: true };
 // Laid out at the room (up to its 1000), and as tall as its three cards lay out.
 NARROW.eventcal = { min: 320, h: "own", grow: true };
 window.__ecBox = (id) => {
@@ -3001,6 +3049,7 @@ DEMO_NAMES.push("kanban");
 DEMO_NAMES.push("drawer");
 DEMO_NAMES.push("combobox");
 DEMO_NAMES.push("colorpicker");
+DEMO_NAMES.push("questionnaire");
 const wanted = new URLSearchParams(location.search).get("demo");
 if (wanted && DEMO_NAMES.includes(wanted)) state.which = wanted;
 
@@ -3663,6 +3712,7 @@ function recreateDemo(name, css) {
   else if (name === "drawer") { drawer = new DrawerDemo(); drawer.init(css ?? cssFor("drawer", DRAWER_CSS)); lastDrawerHover = ""; }
   else if (name === "combobox") { combobox = new ComboboxDemo(); combobox.init(css ?? cssFor("combobox", COMBOBOX_CSS)); lastComboboxHover = ""; }
   else if (name === "colorpicker") { cpStop(); colorpicker = new ColorPickerDemo(); colorpicker.init(css ?? cssFor("colorpicker", COLORPICKER_CSS)); colorpicker.setScreenPicker(typeof window.EyeDropper === "function"); lastColorpickerHover = ""; }
+  else if (name === "questionnaire") { questionnaire = new QuestionnaireDemo(); questionnaire.setReducedMotion(questionnaireStill); questionnaire.init(css ?? cssFor("questionnaire", QUESTIONNAIRE_CSS)); lastQuestionnaireHover = ""; }
   else if (name === "dialog") { dialog = new DialogDemo(); dialog.init(css ?? cssFor("dialog", DIALOG_CSS)); lastDialogHover = ""; }
   else if (name === "popover") { popover = new PopoverDemo(); popover.init(css ?? cssFor("popover", POPOVER_CSS)); lastPopoverHover = ""; }
   else return false;
@@ -4558,6 +4608,7 @@ const DEFAULT_CSS = {
   radio: RADIO_CSS, rating: RATING_CSS, kanban: KANBAN_CSS, drawer: DRAWER_CSS,
   combobox: COMBOBOX_CSS, colorpicker: COLORPICKER_CSS,
 };
+DEFAULT_CSS.questionnaire = QUESTIONNAIRE_CSS;
 // The file each one ships as, for the download's name.
 const CSS_FILE = { tree: "tree.css", resizable: "resize.css" };
 // The text each demo is running now, so the panel can tell an edit that only

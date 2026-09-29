@@ -945,6 +945,30 @@
               <strong>&uarr;</strong> / <strong>&darr;</strong> instead.
             </p>
           </section>
+          <section data-for="questionnaire">
+            <h2>what to try</h2>
+            <p class="hint">
+              Press <strong>Next</strong> without choosing: the question stays and
+              says &ldquo;Choose an option to continue.&rdquo; under the options
+              (the group is <code>aria-invalid</code> and described by it). Pick an
+              option &mdash; click it, or press its letter &mdash; and Next moves on;
+              &ldquo;Question 2 of 3&rdquo; follows and a status region announces
+              the new question. The third question of each card is an optional
+              1&ndash;5 scale; <strong>Finish</strong> shows the summary with
+              <strong>Back</strong> and <strong>Start over</strong>.
+            </p>
+            <p class="hint">
+              From the keyboard: Tab reaches each card&rsquo;s options as one stop,
+              then Back and Next. <strong>A</strong>&ndash;<strong>F</strong> pick
+              (single choice) or toggle (multiple choice) the option with that badge,
+              <strong>1</strong>&ndash;<strong>5</strong> on a scale. In a radio group
+              the arrows move and select (WAI-ARIA); in the checkbox group they only
+              move the focus and <strong>Space</strong> toggles, and the
+              &ldquo;0 of 6 selected&rdquo; badge counts and is announced.
+              <strong>Enter</strong> is Next, and after it the focus is on the new
+              question. With reduced motion on, the steps change without the slide.
+            </p>
+          </section>
           <section data-for="colorpicker">
             <h2>what to try</h2>
             <p class="hint">
@@ -1740,6 +1764,12 @@
   "src": "DrawerDemo",
   "caption": "DrawerCtl · after Base UI's Drawer and vaul, ReUI's look",
   "desc": "ReUI's Drawer patterns, one card each: the Right Drawer (Move Goal, ten paragraphs scrolling inside, Submit and Cancel pinned), shadcn's bottom drawer with a handle, a goal stepper and a bar chart, a left navigation drawer, a top drawer, and a responsive one that is a dialog on a wide demo and a drawer on a narrow one. Each is a modal DrawerCtl: open and closed, the focus in and back to the trigger, Escape and the overlay press, the 300ms ease-out slide from its edge and the drag towards that edge that dismisses past a quarter of the panel or on a fling and snaps back otherwise. The page behind is dimmed and blurred (backdrop-filter) and inert, and the demo traps Tab. The behaviour follows Base UI's and vaul's documented Drawer; there is no recorded trace of either, so it is specified, not measured."
+ },
+ "questionnaire": {
+  "title": "Questionnaire",
+  "src": "QuestionnaireDemo",
+  "caption": "QuestionnaireCtl · ReUI / shadcn's look, on RadioGroupCtl and CheckboxCtl",
+  "desc": "A step-by-step questionnaire in two cards, after the reference: a single-choice card (the question, a muted description and \"Question 1 of 3\" at the top right, three bordered option rows with a radio, a bold label, a muted second line and a key badge, and a grey footer band with Next) and a multiple-choice card (\"Question 1 of 3\" and a \"0 of 6 selected\" badge, six checkbox rows A–F, Next at the bottom right). Each walks through three questions of its own — single, multiple or single again, and an optional 1–5 scale — and ends on a summary with Back and Start over. QuestionnaireCtl owns the steps, the answers (a RadioGroupCtl per single-choice step, a CheckboxCtl per option of a multiple-choice one), the required gate with its inline error, Next / Back / Start over, the keys (letters, arrows, Space, Enter) and what a status region announces. Each step is a radiogroup or a group labelled by its question and described by its description; a new step slides in over 160ms unless reduced motion is asked for. Specified from the picture and the WAI-ARIA radio and checkbox patterns, not measured against a library."
  },
  "colorpicker": {
   "title": "Color Picker",
