@@ -75,6 +75,8 @@ BROWSER_SUITES=(
   # One frame, looked at as pixels: a surface effect must draw OVER the page.
   ui:demo:frame
   ui:demo:a11y
+  # The Styles panel: its guide, its live editor, the pixels an edit makes.
+  ui:styles:check
 )
 [ $browser -eq 1 ] && SUITES+=("${BROWSER_SUITES[@]}")
 

@@ -340,6 +340,130 @@
         .panel-body { grid-template-columns: minmax(0, 1fr); }
         .note { font-size: 13px; }
       }
+      /* --- the Styles panel ------------------------------------------------------
+         A drawer over the right of the page, not a column beside it: the
+         canvas keeps the width it was fitted to, so opening the panel moves no
+         demo pixel and no mirror node. */
+      .mod-badge {
+        display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 999px;
+        font-size: 11px; font-weight: 600; line-height: 1; letter-spacing: .01em;
+        color: #9a3412; background: #ffedd5; border: 1px solid #fdba74;
+      }
+      :root[data-theme="dark"] .mod-badge { color: #fed7aa; background: #431407; border-color: #9a3412; }
+      @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .mod-badge { color: #fed7aa; background: #431407; border-color: #9a3412; } }
+      .mod-badge[hidden] { display: none; }
+      #demos label[data-modified]::after {
+        content: ""; width: 7px; height: 7px; border-radius: 50%; background: #f97316; flex: none; order: 3;
+      }
+      .styles-panel {
+        position: fixed; z-index: 45; top: 64px; right: 0; bottom: 0; width: min(560px, 44vw);
+        display: flex; flex-direction: column; min-height: 0;
+        background: var(--panel); color: var(--ink); border-left: 1px solid var(--line); box-shadow: var(--pop-shadow);
+      }
+      .styles-panel[hidden] { display: none; }
+      .sp-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 16px; border-bottom: 1px solid var(--line); }
+      .sp-head h2 { margin: 0; font-size: 15px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .sp-head h2:focus { outline: none; }
+      .sp-head h2:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 4px; }
+      .sp-demo { color: var(--dim); font-weight: 500; }
+      .sp-tabs { display: flex; gap: 4px; padding: 8px 12px 0; border-bottom: 1px solid var(--line); }
+      .sp-tabs [role=tab] {
+        font: inherit; font-size: 13.5px; font-weight: 500; color: var(--dim); background: none; border: 0;
+        border-bottom: 2px solid transparent; padding: 6px 10px 8px; cursor: pointer; margin-bottom: -1px;
+      }
+      .sp-tabs [role=tab][aria-selected=true] { color: var(--ink); border-bottom-color: var(--ink); }
+      .sp-tabs [role=tab]:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; border-radius: 6px; }
+      .sp-pane { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px 24px; }
+      .sp-pane[hidden] { display: none; }
+      #spane-edit { display: flex; flex-direction: column; gap: 8px; }
+      #spane-edit[hidden] { display: none; }
+      .sg-summary { margin: 0 0 10px; color: var(--dim); font-size: 13px; line-height: 1.5; }
+      .sg-tools { display: flex; gap: 8px; margin-bottom: 12px; }
+      .sg-tools .field { flex: 1; }
+      .sg-tools .field input { height: 32px; font-size: 13px; }
+      .sg-comp { margin: 0 0 18px; }
+      .sg-comp h3 { font-size: 12px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--dim); margin: 0 0 8px; }
+      .sg-dim { color: var(--faint); font-weight: 400; text-transform: none; letter-spacing: 0; }
+      .sg-sel { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0 0 8px; }
+      .sg-sel-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+      .sg-jump {
+        font: inherit; background: none; border: 0; padding: 0; cursor: pointer; color: var(--ink);
+      }
+      .sg-jump code { font-size: 12.5px; font-weight: 600; }
+      .sg-jump:hover code { text-decoration: underline; }
+      .sg-jump:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 5px; }
+      .sg-tags { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+      .sg-tag { font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-2); }
+      .sg-tag.state { color: #1d4ed8; border-color: #93c5fd; background: color-mix(in srgb, #3b82f6 10%, transparent); font-weight: 600; }
+      .sg-tag.variant { color: #7c3aed; border-color: #c4b5fd; }
+      .sg-tag.dim { color: var(--dim); }
+      :root[data-theme="dark"] .sg-tag.state { color: #93c5fd; }
+      @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .sg-tag.state { color: #93c5fd; } }
+      .sg-say { margin: 6px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+      .sg-sub { margin: 8px 0 2px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--dim); }
+      .sg-props { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 10px; margin: 0; font-size: 12px; }
+      .sg-props dt, .sg-props dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+      .sg-props dt.bad code { color: var(--danger); text-decoration: line-through; }
+      .sg-more { margin-top: 6px; font-size: 12px; }
+      .sg-more > summary { cursor: pointer; color: var(--dim); }
+      .sg-fam { display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; margin: 6px 0 0; }
+      .sg-fam-t { font-size: 11.5px; color: var(--dim); min-width: 100%; }
+      .sg-fam code { font-size: 11.5px; }
+      .sg-ref { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 12px; font-size: 13px; line-height: 1.55; }
+      .sg-ref > summary { cursor: pointer; font-weight: 600; }
+      .sg-ref h4 { margin: 14px 0 4px; font-size: 13px; }
+      .sg-ref ul { margin: 0; padding-left: 18px; }
+      .sg-ref p { margin: 4px 0; }
+      .sed-bar { display: flex; flex-wrap: wrap; gap: 8px; }
+      .sed-status { margin: 0; font-size: 12.5px; color: var(--dim); min-height: 18px; }
+      .sed-status.ok { color: #15803d; }
+      .sed-status.warn { color: #b45309; }
+      .sed-status.error { color: var(--danger); }
+      .sed {
+        position: relative; display: flex; flex: 1 1 auto; min-height: 260px;
+        border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--subtle);
+      }
+      .sed:focus-within { border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 25%, transparent); }
+      .sed-gutter {
+        flex: none; width: 44px; overflow: hidden; padding: 8px 0; border-right: 1px solid var(--line);
+        font: 12px/20px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--faint); text-align: right;
+        user-select: none;
+      }
+      .sed-ln { display: block; height: 20px; padding-right: 8px; }
+      .sed-ln.error { color: var(--danger); font-weight: 700; }
+      .sed-ln.warn { color: #b45309; font-weight: 700; }
+      .sed-main { position: relative; flex: 1; min-width: 0; overflow: hidden; }
+      .sed-marks { position: absolute; left: 0; right: 0; top: 8px; pointer-events: none; }
+      .sed-mark { position: absolute; left: 0; right: 0; height: 20px; }
+      .sed-mark.error { background: color-mix(in srgb, var(--danger) 14%, transparent); }
+      .sed-mark.warn { background: color-mix(in srgb, #f59e0b 16%, transparent); }
+      .sed-main textarea {
+        position: relative; display: block; width: 100%; height: 100%; margin: 0; resize: none; border: 0; outline: none;
+        padding: 8px 10px; background: transparent; color: var(--ink);
+        font: 12px/20px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; tab-size: 2; white-space: pre; overflow: auto;
+      }
+      .sed-help { margin: 0; font-size: 12px; color: var(--dim); }
+      .sed-problems { list-style: none; margin: 0; padding: 0; max-height: 30%; overflow: auto; font-size: 12.5px; line-height: 1.45; flex: none; }
+      .sed-problems[hidden] { display: none; }
+      .sed-problems li { display: flex; gap: 8px; padding: 5px 8px; border-radius: 6px; margin: 0 0 4px; }
+      .sed-problems li.error { background: color-mix(in srgb, var(--danger) 9%, transparent); }
+      .sed-problems li.warn { background: color-mix(in srgb, #f59e0b 12%, transparent); }
+      .sed-goto {
+        flex: none; font: inherit; font-size: 11.5px; font-weight: 600; color: var(--ink-2); background: var(--btn);
+        border: 1px solid var(--line); border-radius: 5px; padding: 0 6px; height: 20px; cursor: pointer; white-space: nowrap;
+      }
+      span.sed-goto { cursor: default; }
+      @media (max-width: 860px) {
+        /* A phone: a sheet from the bottom, the full width of the screen. */
+        .styles-panel {
+          top: auto; left: 0; width: auto; height: 64vh; height: 64dvh; min-height: 420px;
+          border-left: 0; border-top: 1px solid var(--line); border-radius: 14px 14px 0 0;
+        }
+        /* The footer is tight on a phone: the badge becomes a dot there (the
+           button's label still says "modified"). */
+        #stylesmod { width: 9px; height: 9px; padding: 0; font-size: 0; background: #f97316; border-color: #f97316; }
+        .sed { min-height: 200px; }
+      }
       /* A pointer that cannot hover has no hover to show, and a finger wants
          a taller row than a mouse. */
       @media (pointer: coarse) {
@@ -436,6 +560,13 @@
                 <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg>
                 <span>View source</span>
               </a>
+              <!-- The Styles panel (styles-panel.js): a guide to this demo's
+                   classes and a live editor for its stylesheet. -->
+              <button type="button" class="btn" id="stylesbtn" aria-controls="stylespanel" aria-expanded="false" aria-haspopup="dialog">
+                <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a10 10 0 1 1 10-10c0 2.8-2.2 4-4 4h-2.2a1.8 1.8 0 0 0-1.3 3.1A1.7 1.7 0 0 1 12 22z"/><circle cx="7.5" cy="10.5" r="1.2"/><circle cx="12" cy="7" r="1.2"/><circle cx="16.5" cy="10.5" r="1.2"/></svg>
+                <span>Styles</span>
+                <span class="mod-badge" id="stylesmod" hidden>modified</span>
+              </button>
             </div>
           </div>
         </div>
@@ -1415,6 +1546,55 @@
         </div>
       </main>
     </div>
+    <!-- The Styles panel. Non-modal: the demo stays live beside it, so an
+         edit is seen as it is typed. A drawer on the right on a desktop, a
+         sheet from the bottom on a phone; Escape closes it and the focus goes
+         back to the Styles button. -->
+    <section class="styles-panel" id="stylespanel" role="dialog" aria-modal="false" aria-labelledby="styleshead" hidden>
+      <header class="sp-head">
+        <h2 id="styleshead" tabindex="-1">Styles <span class="sp-demo" id="stylesdemo"></span></h2>
+        <span class="mod-badge" id="stylesmod2" hidden>modified</span>
+        <button type="button" class="icon-btn ghost" id="stylesclose" aria-label="Close the styles panel">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </header>
+      <div class="sp-tabs" role="tablist" aria-label="Styles">
+        <button type="button" role="tab" id="stab-guide" aria-selected="true" aria-controls="spane-guide">Guide</button>
+        <button type="button" role="tab" id="stab-edit" aria-selected="false" aria-controls="spane-edit" tabindex="-1">Editor</button>
+      </div>
+      <div class="sp-pane" id="spane-guide" role="tabpanel" aria-labelledby="stab-guide">
+        <p class="sg-summary" id="sgsummary"></p>
+        <div class="sg-tools">
+          <div class="field">
+            <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg>
+            <input type="search" id="sgfilter" placeholder="Filter selectors…" aria-label="Filter the selectors" autocomplete="off" />
+          </div>
+          <button type="button" class="btn" id="sgrescan" title="Read the live element tree again (after opening a popup, say)">Rescan</button>
+        </div>
+        <div id="sgbody"></div>
+        <details class="sg-ref" id="sgref">
+          <summary>EVG CSS reference</summary>
+          <div id="sgrefbody"></div>
+        </details>
+      </div>
+      <div class="sp-pane" id="spane-edit" role="tabpanel" aria-labelledby="stab-edit" hidden>
+        <div class="sed-bar">
+          <button type="button" class="btn" id="sedreset">Reset to default</button>
+          <button type="button" class="btn" id="sedcopy">Copy CSS</button>
+          <button type="button" class="btn" id="seddownload">Download .css</button>
+        </div>
+        <p class="sed-status" id="sedstatus" role="status" aria-live="polite"></p>
+        <div class="sed">
+          <div class="sed-gutter" aria-hidden="true"><div id="sedlines"></div></div>
+          <div class="sed-main">
+            <div class="sed-marks" id="sedmarks" aria-hidden="true"></div>
+            <textarea id="sedtext" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" aria-describedby="sedhelp sedproblems"></textarea>
+          </div>
+        </div>
+        <p class="sed-help" id="sedhelp">Edits apply as you type (Ctrl+Enter applies at once) and are saved in this browser. Escape closes the panel.</p>
+        <ul class="sed-problems" id="sedproblems" aria-label="Problems in the stylesheet" hidden></ul>
+      </div>
+    </section>
     <script type="application/json" id="demo-meta">
 {
  "menubar": {

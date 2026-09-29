@@ -148,6 +148,79 @@ fs.writeFileSync(
     )};\n`,
 );
 
+// --- what EVG's CSS understands, read out of the engine ------------------------
+//
+// The Styles panel's reference and its validator are built from THIS, not from
+// a list typed into the page: every property name `EVGElement.setAttribute`
+// has a branch for, the pseudo-classes `EVGPseudo.parse` knows, the media
+// features `applyFeature` reads, the units `EVGUnit.parse` takes, and so on.
+// A property added to the engine shows up in the panel on the next build, and
+// one removed stops being offered. Source-scraping is crude, and it is checked:
+// `styles-check.mjs` fails if any of these lists comes back empty.
+function evgCssFacts() {
+  const LIB = path.join(HERE, "..", "..", "..", "lib", "evg");
+  const read = (f) => fs.readFileSync(path.join(LIB, f), "utf8");
+  const between = (src, from, to) => {
+    const a = src.indexOf(from);
+    if (a < 0) return "";
+    const b = to ? src.indexOf(to, a + from.length) : -1;
+    return src.slice(a, b < 0 ? undefined : b);
+  };
+  const all = (src, re) => [...src.matchAll(re)].map((m) => m[1]);
+  const uniq = (xs) => [...new Set(xs)];
+  const el = read("EVGElement.rgr");
+  const setAttr = between(el, "fn setAttribute:void (name:string value:string)", "sfn isHostProp:boolean");
+  // One entry per branch: the names it answers to, and what it does with the
+  // value (a colour, a length, a number, a keyword…), read off its body.
+  const props = [];
+  const branch = /\n {8}if \(([^\n]*?name == "[^\n]*)\) \{\n([\s\S]*?)\n {8}\}/g;
+  for (const m of setAttr.matchAll(branch)) {
+    const names = all(m[1], /name == "([^"]+)"/g);
+    const body = m[2];
+    const type = /EVGColor\.parse\(value\)/.test(body) ? "color"
+      : /unitOf\(name value\)|boxSides|EVGUnit\.parse/.test(body) ? "length"
+      : /EVGGradient\.parse/.test(body) ? "gradient"
+      : /to_double|numberOr|to_int/.test(body) ? "number"
+      : "keyword";
+    props.push({ names, type, rejects: /EVGReject\.note/.test(body) });
+  }
+  const sheet = read("EVGStyleSheet.rgr");
+  const pseudo = all(between(sheet, "sfn parse:int (name:string)", "sfn holds"), /name == "([^"]+)"/g);
+  const media = uniq(all(between(sheet, "fn applyFeature:void", "fn parsePx"), /name == "([^"]+)"/g));
+  const resetOnLeave = uniq(all(between(sheet, "sfn initialValue:string", "sfn isLayoutProperty"), /name == "([a-z-]+)"/g));
+  const paintOnly = uniq(all(between(sheet, "sfn isLayoutProperty:boolean", "fn applyGroup"), /name == "([a-z-]+)"\)\s*\{ return false/g));
+  const timingMsg = (sheet.match(/Unsupported timing function \(([^)]*\)[^"]*)\): "/) || [])[1] || "";
+  const unit = read("EVGUnit.rgr");
+  const units = uniq([
+    ...all(unit, /suffix3? == "([a-z]+)"/g),
+    ...all(between(unit, "sfn pxPerUnit", "}\n\n"), /suffix == "([a-z]+)"/g),
+    ...(/lastChar == 37/.test(unit) ? ["%"] : []),
+  ]);
+  const unitKeywords = uniq(all(unit, /trimmed == "([a-z-]+)"/g));
+  const transformFns = uniq(all(between(el, "fn applyTransform:void", "fn applyTransformOrigin"), /callArgs\(one "([A-Za-z]+)"\)/g));
+  const grad = read("EVGGradient.rgr");
+  const gradients = uniq(all(grad, /indexOf gradStr "([a-z-]+)"/g));
+  const tr = read("EVGTransition.rgr");
+  const recon = between(tr, "fn reconcile:void (el:EVGElement)", "fn reconcileColor");
+  const transitionable = uniq([
+    ...all(recon, /reconcile(?:Color|Number) ?\(el "([a-z-]+)"/g),
+    ...all(recon, /reconcileNumberAs\(el "[^"]+" "([a-z-]+)"/g),
+    ...all(recon, /reconcileOriginAxis\(el "([a-z-]+)\./g),
+  ]);
+  const borderWords = uniq(all(between(el, "sfn isBorderStyleWord", "\n    }\n"), /tok == "([a-z]+)"/g));
+  return {
+    props, pseudo, media, resetOnLeave, paintOnly, units, unitKeywords, transformFns, gradients,
+    transitionable, borderWords,
+    timing: timingMsg.split(/,\s*/).filter(Boolean),
+    fxPrefix: /head == "evg-fx-"/.test(setAttr) ? "evg-fx-" : "",
+    atRules: ["@media", "@vars"].filter((a) => sheet.includes(`"${a}"`)),
+  };
+}
+fs.appendFileSync(
+  path.join(HERE, "generated.js"),
+  `export const EVG_CSS_FACTS = ${JSON.stringify(evgCssFacts())};\n`,
+);
+
 const esbuild = requireDom("esbuild");
 
 // The dashboard's chart measures its own axis labels with `UITextRenderer`,

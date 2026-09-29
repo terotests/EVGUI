@@ -47,6 +47,14 @@ import { installCanvasMeasurer } from "../../../lib/evg/gl/evg-measure.js";
 import * as ToolbarModule from "../bin/ToolbarDemo.cjs";
 import * as SortableModule from "../bin/SortableDemo.cjs";
 const fontMeasure = installCanvasMeasurer(MODULES);
+// A demo's stylesheet: the one the Styles panel saved for it in this browser,
+// or the one it ships with. Every `init` below goes through this, so an edited
+// sheet is in force from the first frame after a reload — not applied over
+// the default afterwards, which would leave anything the edit removed behind.
+const cssFor = (name, dflt) => storedCss(name) ?? dflt;
+// Made at the end of this file, once every demo exists; `syncChrome` tells it
+// when the demo on screen changes.
+let stylesPanel = null;
 window.__fontMeasure = fontMeasure;
 import { AccordionDemo } from "./generated-host.js";
 import { ACCORDION_CSS } from "./generated.js";
@@ -68,6 +76,13 @@ import { ComboboxDemo } from "./generated-host.js";
 import { COMBOBOX_CSS } from "./generated.js";
 import { ColorPickerDemo } from "./generated-host.js";
 import { COLORPICKER_CSS } from "./generated.js";
+import { EVG_CSS_FACTS } from "./generated.js";
+// The Styles panel: a guide to each demo's classes and a live editor for its
+// stylesheet. See styles-panel.js. The one compiled module it borrows is only
+// for the ENGINE's classes (EVGStyleSheet, EVGElement, EVGReject) — every
+// demo carries an identical copy of lib/evg.
+import { ComboboxDemoModule } from "./generated-host.js";
+import { storedCss, createStylesPanel } from "./styles-panel.js";
 import { MENUBAR_CSS, TOOLBAR_CSS, SORTABLE_CSS, MOTION_CSS, TABLE_CSS, DROPDOWN_CSS, DIALOG_CSS, TREE_CSS, TIMELINE_CSS, RESIZE_CSS, FORM_CSS, PROFILE_CSS, DASHBOARD_CSS, CALENDAR_CSS, FILTERS_CSS, EVENTCAL_CSS, MESSAGE_CSS, CONTROLS_CSS, OTP_CSS, METADATA_CSS, EFFECTS_CSS, SEPARATOR_CSS, TABS_CSS, EFFECT_PRESETS_CSS } from "./generated.js";
 
 // The default stage width. A demo wider than this says so — the dashboard
@@ -175,6 +190,11 @@ function keptTree(mod, css, label, initialSize) {
   const reconciler = new mod.EVGReconcile();
 
   return {
+    /** The stylesheet, replaced in place: the tree and its flights stay. */
+    reload(css) {
+      sheet.reload(css);
+      lay = null;
+    },
     /** Rebuild only if the data changed. */
     sync(nextKey, build) {
       if (nextKey === key) return;
@@ -273,7 +293,7 @@ let generation = 0;
 let lastHover = "";
 let lastTableHover = "";
 const motion = new MotionDemo();
-motion.init(MOTION_CSS);
+motion.init(cssFor("motion", MOTION_CSS));
 
 /**
  * The table, and the second demo here that keeps its tree.
@@ -288,7 +308,7 @@ motion.init(MOTION_CSS);
  * hard part of a table.
  */
 const table = new TableDemo();
-table.init(TABLE_CSS);
+table.init(cssFor("table", TABLE_CSS));
 
 /**
  * The dropdown menu, and the third demo here that keeps its tree.
@@ -306,7 +326,7 @@ table.init(TABLE_CSS);
  * while that wait is outstanding even though nothing is moving on screen.
  */
 const dropdown = new DropdownDemo();
-dropdown.init(DROPDOWN_CSS);
+dropdown.init(cssFor("dropdown", DROPDOWN_CSS));
 let lastDropdownHover = "";
 
 /**
@@ -316,7 +336,7 @@ let lastDropdownHover = "";
  * look, the focus and its page's height, which follows the open items.
  */
 const accordion = new AccordionDemo();
-accordion.init(ACCORDION_CSS);
+accordion.init(cssFor("accordion", ACCORDION_CSS));
 let lastAccordionHover = "";
 
 /**
@@ -326,7 +346,7 @@ let lastAccordionHover = "";
  * are InputCtls behind the page's text session, like the form's.
  */
 let dialog = new DialogDemo();
-dialog.init(DIALOG_CSS);
+dialog.init(cssFor("dialog", DIALOG_CSS));
 let lastDialogHover = "";
 
 /**
@@ -335,42 +355,42 @@ let lastDialogHover = "";
  * the demo owns the look and not one rule of the behaviour.
  */
 const treeview = new TreeDemo();
-treeview.init(TREE_CSS);
+treeview.init(cssFor("tree", TREE_CSS));
 
 // The timeline. The one demo on this page with no controller behind it,
 // because there is nothing to control: a list of records and one integer.
 const timeline = new TimelineDemo();
-timeline.init(TIMELINE_CSS);
+timeline.init(cssFor("timeline", TIMELINE_CSS));
 
 // Nested resizable panels, with a breadcrumb in the left one that gives way as
 // the panel narrows. The one demo here whose CONTENT depends on its own size.
 const resize = new ResizeDemo();
-resize.init(RESIZE_CSS);
+resize.init(cssFor("resizable", RESIZE_CSS));
 let form = new FormDemo();
-form.init(FORM_CSS);
+form.init(cssFor("form", FORM_CSS));
 let lastFormHover = "";
 let profile = new ProfileDemo();
-profile.init(PROFILE_CSS);
+profile.init(cssFor("profile", PROFILE_CSS));
 let lastProfileHover = "";
 // The calendar. `CalendarCtl` answers every key and every click here — the
 // same controller `ui:calendar:check` runs against react-day-picker — so this
 // demo owns the look and not one rule of the month arithmetic.
 const calendar = new CalendarDemo();
-calendar.init(CALENDAR_CSS);
+calendar.init(cssFor("calendar", CALENDAR_CSS));
 
 // The filter bar. `FilterCtl` decides every predicate here — the same
 // controller `ui:filters:check` runs against @tanstack/table-core — and the
 // list of matching tasks under the chips is that controller's answer, not a
 // second opinion drawn to look like one.
 const filters = new FilterDemo();
-filters.init(FILTERS_CSS);
+filters.init(cssFor("filters", FILTERS_CSS));
 let lastFiltersHover = "";
 
 // The event calendar. Where each box sits is `EventCalCtl`'s answer, measured
 // against a rendered @schedule-x/calendar; this page turns its fractions into
 // pixels and nothing else.
 const eventcal = new EventCalDemo();
-eventcal.init(EVENTCAL_CSS);
+eventcal.init(cssFor("eventcal", EVENTCAL_CSS));
 eventcal.useClock(new Date().getFullYear(), new Date().getMonth() + 1, new Date().getDate(), new Date().getHours() * 60 + new Date().getMinutes(), -new Date().getTimezoneOffset());
 let lastEventcalHover = "";
 
@@ -379,45 +399,45 @@ let lastEventcalHover = "";
 // the only place a person looks. That is the same shape of hole as a
 // controller with no surface, one level up.
 let message = new MessageDemo();
-message.init(MESSAGE_CSS);
+message.init(cssFor("message", MESSAGE_CSS));
 let lastMessageHover = "";
 
 // A stepper, a progress bar and a number field on one panel. They are together
 // because the INTERACTION is the thing worth showing: filling the field
 // completes the step, which moves the bar and enables Next.
 let controls = new ControlsDemo();
-controls.init(CONTROLS_CSS);
+controls.init(cssFor("controls", CONTROLS_CSS));
 
 // The one-time code. `OtpCtl` is measured against input-otp — the library
 // behind shadcn's Input OTP — in `ui:otp:check`; this page draws the slots and
 // wires Verify to a complete code.
 let otp = new OtpDemo();
-otp.init(OTP_CSS);
+otp.init(cssFor("otp", OTP_CSS));
 let lastOtpHover = "";
 // The M-Files metadata card: two comboboxes (one with chips), three text
 // fields, a date field and a segmented Yes/No, on one label column. The
 // combobox is measured against Base UI in `ui:combobox:check`; this page is
 // where its list has to open UNDER its box and above the rows below it.
 let metadata = new MetadataDemo();
-metadata.init(METADATA_CSS);
+metadata.init(cssFor("metadata", METADATA_CSS));
 let lastMetadataHover = "";
 // Separator: six uses of one rule, after shadcn / ReUI. Nothing on it moves or
 // takes a press — every rule is a picture, and the ones that divide two things
 // are `role="separator"` in the mirror (see SeparatorCtl).
 const separator = new SeparatorDemo();
-separator.init(SEPARATOR_CSS);
+separator.init(cssFor("separator", SEPARATOR_CSS));
 let lastControlsHover = "";
 let lastCalendarHover = "";
 const dashboard = new DashboardDemo();
-dashboard.init(DASHBOARD_CSS);
+dashboard.init(cssFor("dashboard", DASHBOARD_CSS));
 // `let`, because the editor below rebuilds it from whatever is in the
 // textarea — the same reason `form`, `profile` and `otp` are.
 let effects = new EffectsDemo();
-effects.init(EFFECTS_CSS);
+effects.init(cssFor("effects", EFFECTS_CSS));
 // Tabs: TabsCtl (measured against @radix-ui/react-tabs) owns the strip; the
 // fields are InputCtls on the page's text session, like the form's.
 let tabs = new TabsDemo();
-tabs.init(TABS_CSS);
+tabs.init(cssFor("tabs", TABS_CSS));
 let lastTabsHover = "";
 // Popover: every popover is a PopoverCtl (measured against
 // @radix-ui/react-popover); the Dimensions fields are InputCtls on the text
@@ -427,51 +447,51 @@ let lastTabsHover = "";
 // MenuCtls (measured against @radix-ui/react-dropdown-menu); the page passes
 // keys, presses and hovers straight through.
 let menubar = new MenubarDemo();
-menubar.init(MENUBAR_CSS);
+menubar.init(cssFor("menubar", MENUBAR_CSS));
 let lastMenubarHover = "";
 let popover = new PopoverDemo();
-popover.init(POPOVER_CSS);
+popover.init(cssFor("popover", POPOVER_CSS));
 let lastPopoverHover = "";
 // Autocomplete: six ComboboxCtls in autocomplete mode (Base UI's Autocomplete,
 // ReUI's look), their boxes on the page's text session like the form's.
 let autocomplete = new AutocompleteDemo();
-autocomplete.init(AUTOCOMPLETE_CSS);
+autocomplete.init(cssFor("autocomplete", AUTOCOMPLETE_CSS));
 let lastAutocompleteHover = "";
 // Pagination: ReUI's ten patterns, each over a PaginationCtl; the go-to-page
 // boxes are InputCtls on the page's text session, the selects SelectCtls.
 let pagination = new PaginationDemo();
-pagination.init(PAGINATION_CSS);
+pagination.init(cssFor("pagination", PAGINATION_CSS));
 let lastPaginationHover = "";
 // Radio Group: ReUI's ten patterns, one RadioGroupCtl (measured against
 // Radix RadioGroup) per group; the arrows check as they move (WAI-ARIA).
 let radio = new RadioGroupDemo();
-radio.init(RADIO_CSS);
+radio.init(cssFor("radio", RADIO_CSS));
 let lastRadioHover = "";
 // Rating: ReUI's patterns, every row of stars a RatingCtl (value, preview,
 // precision, keys, and role img or slider).
 let rating = new RatingDemo();
-rating.init(RATING_CSS);
+rating.init(cssFor("rating", RATING_CSS));
 let lastRatingHover = "";
 // Kanban: ReUI's board, a KanbanCtl (one SortableCtl per column plus the
 // moves across them, the keyboard sensor and the announcements).
 let kanban = new KanbanDemo();
-kanban.init(KANBAN_CSS);
+kanban.init(cssFor("kanban", KANBAN_CSS));
 let lastKanbanHover = "";
 // Drawer: ReUI's patterns, each a modal DrawerCtl (the slide, the drag to
 // dismiss, focus in and back); the demo owns the trapped Tab ring.
 let drawer = new DrawerDemo();
-drawer.init(DRAWER_CSS);
+drawer.init(cssFor("drawer", DRAWER_CSS));
 let lastDrawerHover = "";
 // Combobox: ReUI's patterns, every box a ComboboxCtl in its default mode (the
 // value is the chosen item), on the page's text session like the autocomplete.
 let combobox = new ComboboxDemo();
-combobox.init(COMBOBOX_CSS);
+combobox.init(cssFor("combobox", COMBOBOX_CSS));
 let lastComboboxHover = "";
 // Color Picker: Chrome's <input type=color> dialog, three ColorPickerCtls
 // (HSVA, the conversions, the fields, the keys, the popover's restore). The
 // eyedropper's sampling is this page's: see "COLOR PICKER" below.
 let colorpicker = new ColorPickerDemo();
-colorpicker.init(COLORPICKER_CSS);
+colorpicker.init(cssFor("colorpicker", COLORPICKER_CSS));
 colorpicker.setScreenPicker(typeof window.EyeDropper === "function");
 let lastColorpickerHover = "";
 // ONE DRIVER FOR THE PAGE. It reads the effect instances off whatever display
@@ -506,8 +526,8 @@ let lastTimelineHover = "";
 // `page()` functions the PNG snapshots and the accessibility audit call, so
 // there is one description of each demo and not two.
 const HOSTS = {
-  toolbar: keptTree(ToolbarModule, TOOLBAR_CSS, "Toolbar demo", [W, 320]),
-  sortable: keptTree(SortableModule, SORTABLE_CSS, "Sortable demo", [W, 560]),
+  toolbar: keptTree(ToolbarModule, cssFor("toolbar", TOOLBAR_CSS), "Toolbar demo", [W, 320]),
+  sortable: keptTree(SortableModule, cssFor("sortable", SORTABLE_CSS), "Sortable demo", [W, 560]),
 };
 
 // Six demos, six factories, one page. Each one says how tall it is and
@@ -3089,6 +3109,7 @@ function syncChrome() {
     src.href = SOURCE_BASE + m.src + ".rgr";
     src.setAttribute("aria-label", `View the source of the ${m.title} demo on GitHub`);
   }
+  if (stylesPanel) stylesPanel.sync();
   // The controls panel only when this demo has controls.
   const panel = document.getElementById("picker");
   if (panel) panel.hidden = !panel.querySelector("[data-for]:not([hidden])");
@@ -3619,26 +3640,36 @@ function syncTextSession() {
 // typed into a field the next would read "Ada ZXLovelace". Reloading works and
 // costs a 10 MB bundle per scenario; this costs a constructor. Only the pages
 // with text fields, and those four are `let` for exactly this reason.
-window.__resetDemo = (name) => {
-  if (name === "form") { form = new FormDemo(); form.init(FORM_CSS); lastFormHover = ""; }
-  else if (name === "profile") { profile = new ProfileDemo(); profile.init(PROFILE_CSS); lastProfileHover = ""; }
-  else if (name === "controls") { controls = new ControlsDemo(); controls.init(CONTROLS_CSS); lastControlsHover = ""; }
-  else if (name === "otp") { otp = new OtpDemo(); otp.init(OTP_CSS); lastOtpHover = ""; }
-  else if (name === "metadata") { metadata = new MetadataDemo(); metadata.init(METADATA_CSS); lastMetadataHover = ""; }
-  else if (name === "message") { message = new MessageDemo(); message.init(MESSAGE_CSS); lastMessageHover = ""; }
-  else if (name === "tabs") { tabs = new TabsDemo(); tabs.init(TABS_CSS); lastTabsHover = ""; }
-  else if (name === "autocomplete") { autocomplete = new AutocompleteDemo(); autocomplete.init(AUTOCOMPLETE_CSS); lastAutocompleteHover = ""; }
-  else if (name === "pagination") { pagination = new PaginationDemo(); pagination.init(PAGINATION_CSS); lastPaginationHover = ""; }
-  else if (name === "radio") { radio = new RadioGroupDemo(); radio.init(RADIO_CSS); lastRadioHover = ""; }
-  else if (name === "menubar") { menubar = new MenubarDemo(); menubar.init(MENUBAR_CSS); lastMenubarHover = ""; }
-  else if (name === "rating") { rating = new RatingDemo(); rating.init(RATING_CSS); lastRatingHover = ""; }
-  else if (name === "kanban") { kanban = new KanbanDemo(); kanban.init(KANBAN_CSS); lastKanbanHover = ""; }
-  else if (name === "drawer") { drawer = new DrawerDemo(); drawer.init(DRAWER_CSS); lastDrawerHover = ""; }
-  else if (name === "combobox") { combobox = new ComboboxDemo(); combobox.init(COMBOBOX_CSS); lastComboboxHover = ""; }
-  else if (name === "colorpicker") { cpStop(); colorpicker = new ColorPickerDemo(); colorpicker.init(COLORPICKER_CSS); colorpicker.setScreenPicker(typeof window.EyeDropper === "function"); lastColorpickerHover = ""; }
-  else if (name === "dialog") { dialog = new DialogDemo(); dialog.init(DIALOG_CSS); lastDialogHover = ""; }
-  else if (name === "popover") { popover = new PopoverDemo(); popover.init(POPOVER_CSS); lastPopoverHover = ""; }
+//
+// `css` is the stylesheet to build it with; left out, it is whatever the page
+// is using for that demo now (the Styles panel's text, or the default). The
+// Styles panel rebuilds through `recreateDemo` when an edit REMOVES a
+// declaration: the cascade writes what a rule says and never un-writes what a
+// rule stopped saying, so only a fresh tree shows the removal.
+function recreateDemo(name, css) {
+  if (name === "form") { form = new FormDemo(); form.init(css ?? cssFor("form", FORM_CSS)); lastFormHover = ""; }
+  else if (name === "profile") { profile = new ProfileDemo(); profile.init(css ?? cssFor("profile", PROFILE_CSS)); lastProfileHover = ""; }
+  else if (name === "controls") { controls = new ControlsDemo(); controls.init(css ?? cssFor("controls", CONTROLS_CSS)); lastControlsHover = ""; }
+  else if (name === "otp") { otp = new OtpDemo(); otp.init(css ?? cssFor("otp", OTP_CSS)); lastOtpHover = ""; }
+  else if (name === "metadata") { metadata = new MetadataDemo(); metadata.init(css ?? cssFor("metadata", METADATA_CSS)); lastMetadataHover = ""; }
+  else if (name === "message") { message = new MessageDemo(); message.init(css ?? cssFor("message", MESSAGE_CSS)); lastMessageHover = ""; }
+  else if (name === "tabs") { tabs = new TabsDemo(); tabs.init(css ?? cssFor("tabs", TABS_CSS)); lastTabsHover = ""; }
+  else if (name === "autocomplete") { autocomplete = new AutocompleteDemo(); autocomplete.init(css ?? cssFor("autocomplete", AUTOCOMPLETE_CSS)); lastAutocompleteHover = ""; }
+  else if (name === "pagination") { pagination = new PaginationDemo(); pagination.init(css ?? cssFor("pagination", PAGINATION_CSS)); lastPaginationHover = ""; }
+  else if (name === "radio") { radio = new RadioGroupDemo(); radio.init(css ?? cssFor("radio", RADIO_CSS)); lastRadioHover = ""; }
+  else if (name === "menubar") { menubar = new MenubarDemo(); menubar.init(css ?? cssFor("menubar", MENUBAR_CSS)); lastMenubarHover = ""; }
+  else if (name === "rating") { rating = new RatingDemo(); rating.init(css ?? cssFor("rating", RATING_CSS)); lastRatingHover = ""; }
+  else if (name === "kanban") { kanban = new KanbanDemo(); kanban.init(css ?? cssFor("kanban", KANBAN_CSS)); lastKanbanHover = ""; }
+  else if (name === "drawer") { drawer = new DrawerDemo(); drawer.init(css ?? cssFor("drawer", DRAWER_CSS)); lastDrawerHover = ""; }
+  else if (name === "combobox") { combobox = new ComboboxDemo(); combobox.init(css ?? cssFor("combobox", COMBOBOX_CSS)); lastComboboxHover = ""; }
+  else if (name === "colorpicker") { cpStop(); colorpicker = new ColorPickerDemo(); colorpicker.init(css ?? cssFor("colorpicker", COLORPICKER_CSS)); colorpicker.setScreenPicker(typeof window.EyeDropper === "function"); lastColorpickerHover = ""; }
+  else if (name === "dialog") { dialog = new DialogDemo(); dialog.init(css ?? cssFor("dialog", DIALOG_CSS)); lastDialogHover = ""; }
+  else if (name === "popover") { popover = new PopoverDemo(); popover.init(css ?? cssFor("popover", POPOVER_CSS)); lastPopoverHover = ""; }
   else return false;
+  return true;
+}
+window.__resetDemo = (name, css) => {
+  if (!recreateDemo(name, css)) return false;
   held = false;
   textInput.blurField();
   canvas.focus({ preventScroll: true });
@@ -4392,7 +4423,7 @@ function startClock() {
 const fxCss = document.getElementById("fxcss");
 if (fxCss) {
   const fxErr = document.getElementById("fxcsserr");
-  fxCss.value = EFFECTS_CSS;
+  fxCss.value = cssFor("effects", EFFECTS_CSS);
 
   const applyFxCss = () => {
     let next;
@@ -4506,6 +4537,84 @@ if (fxCss) {
     applyFxCss();
   });
 }
+
+// --- the Styles panel -----------------------------------------------------------
+//
+// Every demo's stylesheet, by the name the switcher uses. The panel edits the
+// text and hands it back through `apply`, which replaces the demo's sheet IN
+// PLACE (`EVGStyleSheet.reload`) so what the demo is doing — an open popup, a
+// chosen value, a flight in the air — survives the edit. Only an edit that
+// takes a declaration away rebuilds the demo, where it can be rebuilt: the
+// cascade writes what the rules say and never un-writes what they stopped
+// saying, so a reload alone would leave the removed value on the elements.
+const DEFAULT_CSS = {
+  menubar: MENUBAR_CSS, toolbar: TOOLBAR_CSS, sortable: SORTABLE_CSS, motion: MOTION_CSS,
+  table: TABLE_CSS, dropdown: DROPDOWN_CSS, dialog: DIALOG_CSS, tree: TREE_CSS,
+  timeline: TIMELINE_CSS, resizable: RESIZE_CSS, form: FORM_CSS, profile: PROFILE_CSS,
+  dashboard: DASHBOARD_CSS, calendar: CALENDAR_CSS, filters: FILTERS_CSS, eventcal: EVENTCAL_CSS,
+  message: MESSAGE_CSS, controls: CONTROLS_CSS, otp: OTP_CSS, metadata: METADATA_CSS,
+  effects: EFFECTS_CSS, accordion: ACCORDION_CSS, separator: SEPARATOR_CSS, tabs: TABS_CSS,
+  popover: POPOVER_CSS, autocomplete: AUTOCOMPLETE_CSS, pagination: PAGINATION_CSS,
+  radio: RADIO_CSS, rating: RATING_CSS, kanban: KANBAN_CSS, drawer: DRAWER_CSS,
+  combobox: COMBOBOX_CSS, colorpicker: COLORPICKER_CSS,
+};
+// The file each one ships as, for the download's name.
+const CSS_FILE = { tree: "tree.css", resizable: "resize.css" };
+// The text each demo is running now, so the panel can tell an edit that only
+// changes values from one that removes something.
+const runningCss = {};
+for (const n of Object.keys(DEFAULT_CSS)) runningCss[n] = cssFor(n, DEFAULT_CSS[n]);
+
+stylesPanel = createStylesPanel({
+  facts: EVG_CSS_FACTS,
+  engine: ComboboxDemoModule,
+  names: () => DEMO_NAMES.filter((n) => n in DEFAULT_CSS),
+  current: () => state.which,
+  title: (name) => demoMeta(name).title,
+  defaultCss: (name) => DEFAULT_CSS[name],
+  runningCss: (name) => runningCss[name],
+  fileName: (name) => CSS_FILE[name] || name + ".css",
+  root: (name) => {
+    if (HOSTS[name]) return HOSTS[name].root();
+    const owner = INSTANCE[name];
+    const inst = owner ? owner() : null;
+    return inst && inst.root ? inst.root : null;
+  },
+  // `fresh` asks for a rebuilt demo. It is honoured where the page can rebuild
+  // one (`recreateDemo`); elsewhere the sheet is reloaded and the answer says
+  // so, and the panel tells the reader a page reload shows the removal.
+  apply(name, css, fresh) {
+    let how = "";
+    if (fresh && recreateDemo(name, css)) how = "rebuilt";
+    else if (HOSTS[name]) { HOSTS[name].reload(css); how = "reloaded"; }
+    else {
+      const owner = INSTANCE[name];
+      const inst = owner ? owner() : null;
+      if (inst && inst.sheet && typeof inst.sheet.reload === "function") {
+        inst.sheet.reload(css);
+        how = "reloaded";
+      } else if (recreateDemo(name, css)) how = "rebuilt";
+    }
+    if (!how) return "";
+    runningCss[name] = css;
+    // A rebuilt demo has new fields: the text session must not keep editing
+    // the old one's.
+    if (how === "rebuilt" && name === state.which) {
+      held = false;
+      textInput.blurField();
+    }
+    if (name === "effects") {
+      if (fxCss) fxCss.value = css;
+      syncFxSwitches();
+    }
+    if (name === state.which) {
+      paint();
+      startClock();
+    }
+    return how;
+  },
+});
+window.__styles = stylesPanel.api;
 
 syncPanels();
 syncMotionClock();
