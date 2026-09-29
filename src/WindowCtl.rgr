@@ -74,6 +74,53 @@ class WindowCtl extends UiCtl {
 
     def dragging:boolean false
 
+    ; --- the desktop layer (all optional; a window that sets none of these is
+    ; the window it always was) ----------------------------------------------
+    ;
+    ; The frame's size, in page pixels, when the OWNER sizes the window rather
+    ; than letting its content do it. Zero means "whatever the layout made":
+    ; `moveBy` then reads the frame's laid-out box, as it always did.
+    def w:double 0.0
+    def h:double 0.0
+    ; The smallest a resize may make it. A window resized to nothing is a
+    ; window whose title bar nobody can find.
+    def minW:double 200.0
+    def minH:double 120.0
+    ; A modal that can still be moved by its title bar. It keeps everything
+    ; else a modal is — the scrim, the masking, Escape, the focus return — and
+    ; gives back the one thing a modal usually takes: getting it out of the way
+    ; of the thing it asks about.
+    def movableModal:boolean false
+    ; The title bar carries minimize and maximize buttons as well as close.
+    def hasMinMax:boolean false
+
+    def minimized:boolean false
+    def maximized:boolean false
+    ; "left" or "right" while the window fills that half of the page.
+    def snapped:string ""
+    ; The geometry to go back to from maximized or snapped.
+    def restX:double 0.0
+    def restY:double 0.0
+    def restW:double 0.0
+    def restH:double 0.0
+
+    ; A resize in progress: the edge ("n", "se", ...) and where it started.
+    def resizeEdge:string ""
+    def startX:double 0.0
+    def startY:double 0.0
+    def startW:double 0.0
+    def startH:double 0.0
+
+    ; A geometry jump (maximize, restore, snap) eased over `animMs`. The
+    ; LOGICAL geometry (x, y, w, h) is the destination the moment the jump
+    ; happens; `shownX()` and friends are where it is drawn on the way there.
+    def animMs:double 160.0
+    def animT:double 1.0
+    def fromX:double 0.0
+    def fromY:double 0.0
+    def fromW:double 0.0
+    def fromH:double 0.0
+
     def triggerEl:EVGElement
     def scrimEl:EVGElement
     def frameEl:EVGElement
@@ -128,6 +175,20 @@ class WindowCtl extends UiCtl {
         return (target == (this.titleTid()))
     }
 
+    ; A modal's title bar is a heading, not a control — unless the modal was
+    ; made movable, when it is the handle a movable window's is.
+    fn barIsLabel:boolean () {
+        return (isModal && (movableModal == false))
+    }
+
+    ; The maximize button says what it will do: maximize, or put it back.
+    fn maxLabel:string () {
+        if (maximized || ((strlen snapped) > 0)) {
+            return "Restore"
+        }
+        return "Maximize"
+    }
+
     fn baseClass:string () {
         if isModal {
             return "ui-dialog"
@@ -180,7 +241,7 @@ class WindowCtl extends UiCtl {
         def head2:EVGElement (unwrap headEl)
         head2.role = ""
         def bar:EVGElement (unwrap barEl)
-        if isModal {
+        if (this.barIsLabel()) {
             ; A heading over the dialog it names, and nothing a reader should
             ; be offered as a control.
             bar.role = ""
@@ -198,7 +259,7 @@ class WindowCtl extends UiCtl {
         ; The title is the bar's label in words and must not announce again as
         ; a node of its own; the same for the close glyph.
         def titleEl3:EVGElement (unwrap titleEl)
-        titleEl3.a11yHidden = (isModal == false)
+        titleEl3.a11yHidden = ((this.barIsLabel()) == false)
 
         def close:EVGElement (unwrap closeEl)
         close.role = "button"
@@ -284,6 +345,24 @@ class WindowCtl extends UiCtl {
         bar.addChild(titleEl2)
         head.addChild(bar)
 
+        if hasMinMax {
+            def mn (EVGElement.createDiv())
+            mn.id = (this.minTid())
+            mn.className = (base + "-minimize")
+            mn.role = "button"
+            mn.a11yLabel = "Minimize"
+            mn.a11yFocusable = true
+            UiTree.leafText(mn "–")
+            head.addChild(mn)
+            def mx (EVGElement.createDiv())
+            mx.id = (this.maxTid())
+            mx.className = (base + "-maximize")
+            mx.role = "button"
+            mx.a11yLabel = (this.maxLabel())
+            mx.a11yFocusable = true
+            UiTree.leafText(mx "□")
+            head.addChild(mx)
+        }
         def close:EVGElement (unwrap closeEl)
         close.id = (this.closeTid())
         close.className = (base + "-close")
@@ -358,12 +437,22 @@ class WindowCtl extends UiCtl {
         if (target == (this.closeTid())) {
             return (this.closeWindow())
         }
+        if hasMinMax {
+            if (target == (this.minTid())) {
+                this.minimize()
+                return (this.triggerTid())
+            }
+            if (target == (this.maxTid())) {
+                this.toggleMaximize()
+                return target
+            }
+        }
         ; Pressing the handle focuses the HANDLE, whichever part of it was
         ; actually hit. A click lands on the label — it fills the bar — and
         ; leaving focus there would put it on something that answers no keys,
         ; so the arrows would stop working the moment you clicked the window.
         if (this.isHandle(target)) {
-            if (isModal == false) {
+            if ((this.barIsLabel()) == false) {
                 return (this.barTid())
             }
         }
@@ -390,7 +479,7 @@ class WindowCtl extends UiCtl {
         if (open == false) {
             return ""
         }
-        if isModal {
+        if (this.barIsLabel()) {
             return ""
         }
         if ((this.isHandle(target)) == false) {
@@ -419,7 +508,7 @@ class WindowCtl extends UiCtl {
     ; --- moving ------------------------------------------------------------------------
 
     fn dragsFreely:boolean () {
-        if isModal {
+        if (isModal && (movableModal == false)) {
             return false
         }
         return open
@@ -429,7 +518,7 @@ class WindowCtl extends UiCtl {
         if (open == false) {
             return ""
         }
-        if isModal {
+        if (isModal && (movableModal == false)) {
             return ""
         }
         if ((this.isHandle(target)) == false) {
@@ -467,12 +556,12 @@ class WindowCtl extends UiCtl {
     fn moveBy:void (dx:double dy:double) {
         x = (x + dx)
         y = (y + dy)
-        def w:double frameEl.calculatedWidth
-        def h:double frameEl.calculatedHeight
+        def fw:double (this.frameW())
+        def fh:double (this.frameH())
         ; Before the first layout there is no width to reason about, and a
         ; clamp against zero would pin the window to the corner.
-        if (w > 0.0) {
-            def minX:double (keepOnScreen - w)
+        if (fw > 0.0) {
+            def minX:double (keepOnScreen - fw)
             def maxX:double (pageW - keepOnScreen)
             if (x < minX) {
                 x = minX
@@ -481,7 +570,7 @@ class WindowCtl extends UiCtl {
                 x = maxX
             }
         }
-        if (h > 0.0) {
+        if (fh > 0.0) {
             ; The title bar must stay reachable, so the top never goes above
             ; the page: a window whose handle is off the top cannot be pulled
             ; back down.
@@ -496,6 +585,507 @@ class WindowCtl extends UiCtl {
         def frame:EVGElement (unwrap frameEl)
         frame.overlayX = x
         frame.overlayY = y
+    }
+
+    ; --- the desktop layer: size, resize, minimize, maximize, snap -----------------------
+    ;
+    ; Everything below is additive. A window whose owner never sets `w` / `h`
+    ; and never calls these is the movable window above, unchanged; the demo
+    ; desktop (`demo/WindowDemo.rgr`) is the owner that does.
+
+    fn minTid:string ()      { return (tid + "-minimize") }
+    fn maxTid:string ()      { return (tid + "-maximize") }
+    ; One thin strip per edge and a square per corner: "n", "s", "e", "w",
+    ; "ne", "nw", "se", "sw".
+    fn resizeTid:string (edge:string) {
+        return (tid + "-resize-" + edge)
+    }
+
+    ; The edge a resize-handle id names, or "" when it is not one of this
+    ; window's handles.
+    fn edgeOf:string (target:string) {
+        def pre:string (tid + "-resize-")
+        def n:int (strlen pre)
+        if ((strlen target) <= n) {
+            return ""
+        }
+        if ((substring target 0 n) != pre) {
+            return ""
+        }
+        return (substring target n (strlen target))
+    }
+
+    sfn edges:[string] () {
+        return ([] _:string ("n" "s" "e" "w" "ne" "nw" "se" "sw"))
+    }
+
+    ; The frame's size: the owner's when it set one, the layout's otherwise.
+    fn frameW:double () {
+        if (w > 0.0) {
+            return w
+        }
+        return frameEl.calculatedWidth
+    }
+
+    fn frameH:double () {
+        if (h > 0.0) {
+            return h
+        }
+        return frameEl.calculatedHeight
+    }
+
+    ; Can it be resized now? Not while it fills the page or a half of it, and
+    ; not while it is off the page in the dock.
+    fn resizable:boolean () {
+        if (open == false) {
+            return false
+        }
+        if (isModal && (movableModal == false)) {
+            return false
+        }
+        if (minimized || maximized) {
+            return false
+        }
+        return ((strlen snapped) == 0)
+    }
+
+    ; Move to a place, rather than by a distance, and keep it grabbable. A
+    ; pointer drag is written this way: the window's place is where it started
+    ; plus how far the pointer has gone, so a clamp on one frame does not pull
+    ; the window out from under the pointer on the next.
+    fn moveTo:void (nx:double ny:double) {
+        x = nx
+        y = ny
+        this.moveBy(0.0 0.0)
+    }
+
+    ; The page changed size (the desktop was laid out narrower, a phone turned).
+    ; A maximized or snapped window follows it; any other is made to fit and
+    ; kept grabbable.
+    fn fitPage:void (pw:double ph:double) {
+        pageW = pw
+        pageH = ph
+        if maximized {
+            x = 0.0
+            y = 0.0
+            w = pw
+            h = ph
+            return
+        }
+        if (snapped == "left") {
+            this.snapGeometry("left")
+            return
+        }
+        if (snapped == "right") {
+            this.snapGeometry("right")
+            return
+        }
+        if (w > pw) {
+            w = pw
+        }
+        if (h > ph) {
+            h = ph
+        }
+        if (restW > pw) {
+            restW = pw
+        }
+        if (restH > ph) {
+            restH = ph
+        }
+        this.moveBy(0.0 0.0)
+    }
+
+    ; --- resizing ---
+
+    fn beginResize:boolean (edge:string) {
+        if ((this.resizable()) == false) {
+            return false
+        }
+        if ((strlen edge) == 0) {
+            return false
+        }
+        resizeEdge = edge
+        startX = x
+        startY = y
+        startW = (this.frameW())
+        startH = (this.frameH())
+        return true
+    }
+
+    fn resizing:boolean () {
+        return ((strlen resizeEdge) > 0)
+    }
+
+    sfn has:boolean (edge:string c:string) {
+        def i:int 0
+        while (i < (strlen edge)) {
+            if ((substring edge i (i + 1)) == c) {
+                return true
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    ; The pointer has gone (dx, dy) since `beginResize`. Each edge that is
+    ; moving goes with it, down to the minimum size and no further out than
+    ; the page — or than the window already was, so a window that was hanging
+    ; off an edge does not jump the moment you touch it.
+    fn resizeTo:boolean (dx:double dy:double) {
+        if ((strlen resizeEdge) == 0) {
+            return false
+        }
+        def nx:double startX
+        def ny:double startY
+        def nw:double startW
+        def nh:double startH
+        def right:double (startX + startW)
+        def bottom:double (startY + startH)
+        if (WindowCtl.has(resizeEdge "e")) {
+            def maxR:double pageW
+            if (right > maxR) {
+                maxR = right
+            }
+            nw = (startW + dx)
+            if ((startX + nw) > maxR) {
+                nw = (maxR - startX)
+            }
+            if (nw < minW) {
+                nw = minW
+            }
+        }
+        if (WindowCtl.has(resizeEdge "w")) {
+            def minL:double 0.0
+            if (startX < minL) {
+                minL = startX
+            }
+            nx = (startX + dx)
+            if (nx < minL) {
+                nx = minL
+            }
+            if ((right - nx) < minW) {
+                nx = (right - minW)
+            }
+            nw = (right - nx)
+        }
+        if (WindowCtl.has(resizeEdge "s")) {
+            def maxB:double pageH
+            if (bottom > maxB) {
+                maxB = bottom
+            }
+            nh = (startH + dy)
+            if ((startY + nh) > maxB) {
+                nh = (maxB - startY)
+            }
+            if (nh < minH) {
+                nh = minH
+            }
+        }
+        if (WindowCtl.has(resizeEdge "n")) {
+            ; The top never goes above the page: the title bar is up there.
+            ny = (startY + dy)
+            if (ny < 0.0) {
+                ny = 0.0
+            }
+            if ((bottom - ny) < minH) {
+                ny = (bottom - minH)
+            }
+            nh = (bottom - ny)
+        }
+        def changed:boolean ((((nx != x) || (ny != y)) || (nw != w)) || (nh != h))
+        x = nx
+        y = ny
+        w = nw
+        h = nh
+        return changed
+    }
+
+    fn endResize:boolean () {
+        if ((strlen resizeEdge) == 0) {
+            return false
+        }
+        resizeEdge = ""
+        return true
+    }
+
+    ; The keyboard's resize: the right and bottom edges move, as Windows' own
+    ; Size command does once an arrow has picked them. Same limits as a drag.
+    fn resizeBy:boolean (dw:double dh:double) {
+        if ((this.resizable()) == false) {
+            return false
+        }
+        def ow:double (this.frameW())
+        def oh:double (this.frameH())
+        def nw:double (ow + dw)
+        def nh:double (oh + dh)
+        def maxW:double (pageW - x)
+        if (maxW < ow) {
+            maxW = ow
+        }
+        def maxH:double (pageH - y)
+        if (maxH < oh) {
+            maxH = oh
+        }
+        if (nw > maxW) {
+            nw = maxW
+        }
+        if (nh > maxH) {
+            nh = maxH
+        }
+        if (nw < minW) {
+            nw = minW
+        }
+        if (nh < minH) {
+            nh = minH
+        }
+        if ((nw == ow) && (nh == oh)) {
+            return false
+        }
+        w = nw
+        h = nh
+        return true
+    }
+
+    ; The keyboard's move: the arrows, `step` pixels at a time. True when the
+    ; window actually went somewhere (a clamp can refuse).
+    fn nudge:boolean (dx:double dy:double) {
+        if ((this.dragsFreely()) == false) {
+            return false
+        }
+        if (minimized || maximized) {
+            return false
+        }
+        def ox:double x
+        def oy:double y
+        if ((strlen snapped) > 0) {
+            snapped = ""
+            w = restW
+            h = restH
+        }
+        this.moveBy(dx dy)
+        return ((ox != x) || (oy != y))
+    }
+
+    ; --- minimize, maximize, restore, snap ---
+
+    fn saveRest:void () {
+        restX = x
+        restY = y
+        restW = (this.frameW())
+        restH = (this.frameH())
+    }
+
+    fn startAnim:void (ox:double oy:double ow:double oh:double) {
+        fromX = ox
+        fromY = oy
+        fromW = ow
+        fromH = oh
+        if (animMs > 0.0) {
+            animT = 0.0
+        } {
+            animT = 1.0
+        }
+    }
+
+    fn minimize:boolean () {
+        if ((open == false) || minimized) {
+            return false
+        }
+        if isModal {
+            return false
+        }
+        minimized = true
+        dragging = false
+        resizeEdge = ""
+        animT = 1.0
+        return true
+    }
+
+    fn maximize:boolean () {
+        if ((open == false) || maximized) {
+            return false
+        }
+        if isModal {
+            return false
+        }
+        def ox:double x
+        def oy:double y
+        def ow:double (this.frameW())
+        def oh:double (this.frameH())
+        if ((strlen snapped) == 0) {
+            this.saveRest()
+        }
+        snapped = ""
+        minimized = false
+        maximized = true
+        x = 0.0
+        y = 0.0
+        w = pageW
+        h = pageH
+        this.startAnim(ox oy ow oh)
+        return true
+    }
+
+    ; Back one step: out of the dock first, then out of maximized or snapped.
+    fn restore:boolean () {
+        if (open == false) {
+            return false
+        }
+        if minimized {
+            minimized = false
+            return true
+        }
+        if ((maximized == false) && ((strlen snapped) == 0)) {
+            return false
+        }
+        def ox:double x
+        def oy:double y
+        def ow:double (this.frameW())
+        def oh:double (this.frameH())
+        maximized = false
+        snapped = ""
+        x = restX
+        y = restY
+        w = restW
+        h = restH
+        if (w > pageW) {
+            w = pageW
+        }
+        if (h > pageH) {
+            h = pageH
+        }
+        this.moveBy(0.0 0.0)
+        this.startAnim(ox oy ow oh)
+        return true
+    }
+
+    fn toggleMaximize:boolean () {
+        if maximized {
+            return (this.restore())
+        }
+        return (this.maximize())
+    }
+
+    fn snapGeometry:void (side:string) {
+        def half:double ((to_double (to_int (pageW / 2.0))))
+        y = 0.0
+        h = pageH
+        w = half
+        if (side == "left") {
+            x = 0.0
+        } {
+            x = (pageW - half)
+        }
+    }
+
+    ; Fill the left or the right half of the page — what dropping a window on
+    ; that edge does. Restoring puts back the size it had before.
+    fn snapTo:boolean (side:string) {
+        if ((open == false) || isModal) {
+            return false
+        }
+        if ((side != "left") && (side != "right")) {
+            return false
+        }
+        if ((snapped == side) && (maximized == false)) {
+            return false
+        }
+        def ox:double x
+        def oy:double y
+        def ow:double (this.frameW())
+        def oh:double (this.frameH())
+        if (((strlen snapped) == 0) && (maximized == false)) {
+            this.saveRest()
+        }
+        maximized = false
+        snapped = side
+        this.snapGeometry(side)
+        this.startAnim(ox oy ow oh)
+        return true
+    }
+
+    ; Picked up by the title bar while it fills the page (or a half): it comes
+    ; back to its own size UNDER THE POINTER, at the same fraction across the
+    ; bar — what every desktop does, and the only way a drag of a maximized
+    ; window can mean anything. `px` is the pointer, `frac` how far across
+    ; the bar it was (0..1).
+    fn unsnapUnder:void (px:double frac:double) {
+        maximized = false
+        snapped = ""
+        def nw:double restW
+        if (nw > pageW) {
+            nw = pageW
+        }
+        if (nw < minW) {
+            nw = minW
+        }
+        def nh:double restH
+        if (nh > pageH) {
+            nh = pageH
+        }
+        if (nh < minH) {
+            nh = minH
+        }
+        w = nw
+        h = nh
+        x = (px - (frac * nw))
+        animT = 1.0
+        this.moveBy(0.0 0.0)
+    }
+
+    ; --- the clock ---
+
+    fn animating:boolean () {
+        return (animT < 1.0)
+    }
+
+    fn tickCtl:void (dtMs:double) {
+        if (animT >= 1.0) {
+            return
+        }
+        if (animMs <= 0.0) {
+            animT = 1.0
+            return
+        }
+        animT = (animT + (dtMs / animMs))
+        if (animT > 1.0) {
+            animT = 1.0
+        }
+    }
+
+    ; ease-out: fast away, gentle arrival.
+    fn eased:double () {
+        def t:double animT
+        if (t >= 1.0) {
+            return 1.0
+        }
+        def u:double (1.0 - t)
+        return (1.0 - ((u * u) * u))
+    }
+
+    fn shownX:double () {
+        return (fromX + ((x - fromX) * (this.eased())))
+    }
+
+    fn shownY:double () {
+        return (fromY + ((y - fromY) * (this.eased())))
+    }
+
+    fn shownW:double () {
+        return (fromW + (((this.frameW()) - fromW) * (this.eased())))
+    }
+
+    fn shownH:double () {
+        return (fromH + (((this.frameH()) - fromH) * (this.eased())))
+    }
+
+    ; What a reader is told after a move or a resize, in whole pixels.
+    fn placeText:string () {
+        return ((to_string (to_int x)) + ", " + (to_string (to_int y)))
+    }
+
+    fn sizeText:string () {
+        return ((to_string (to_int (this.frameW()))) + " by " + (to_string (to_int (this.frameH()))))
     }
 
     ; --- what the host and the reader see ------------------------------------------------
@@ -514,6 +1104,10 @@ class WindowCtl extends UiCtl {
             push a (this.titleTid())
             if ((strlen description) > 0) {
                 push a (this.descTid())
+            }
+            if hasMinMax {
+                push a (this.minTid())
+                push a (this.maxTid())
             }
             push a (this.closeTid())
             push a (this.bodyTid())
@@ -534,12 +1128,17 @@ class WindowCtl extends UiCtl {
         if (target == (this.closeTid())) {
             return true
         }
+        if hasMinMax {
+            if ((target == (this.minTid())) || (target == (this.maxTid()))) {
+                return true
+            }
+        }
         ; The bar takes focus only when it is a handle. A modal's bar is a
         ; label, and a tab stop that does nothing is worse than no tab stop.
         ; The title counts as the bar here for the same reason it does in
         ; `isHandle`: it is what a click actually lands on.
         if (this.isHandle(target)) {
-            return (isModal == false)
+            return ((this.barIsLabel()) == false)
         }
         return false
     }
@@ -588,7 +1187,7 @@ class WindowCtl extends UiCtl {
         ; is a heading over the dialog it names.
         def barRole:int (EVGA11yRole.none())
         def barName:string ""
-        if (isModal == false) {
+        if ((this.barIsLabel()) == false) {
             barRole = (EVGA11yRole.button())
             barName = (title + ", move window")
         }
@@ -598,7 +1197,7 @@ class WindowCtl extends UiCtl {
 
         def barRow:UiRow (UiRow.of((this.barTid()) barRole barName))
         barRow.parentTid = (this.headTid())
-        if (isModal == false) {
+        if ((this.barIsLabel()) == false) {
             barRow.focusable = true
             barRow.tabStop = true
             ; What a reader says instead of "button": this one is not pressed,
@@ -613,6 +1212,18 @@ class WindowCtl extends UiCtl {
             push out descRow
         }
 
+        if hasMinMax {
+            def minRow:UiRow (UiRow.of((this.minTid()) (EVGA11yRole.button()) "Minimize"))
+            minRow.parentTid = (this.headTid())
+            minRow.focusable = true
+            minRow.tabStop = true
+            push out minRow
+            def maxRow:UiRow (UiRow.of((this.maxTid()) (EVGA11yRole.button()) (this.maxLabel())))
+            maxRow.parentTid = (this.headTid())
+            maxRow.focusable = true
+            maxRow.tabStop = true
+            push out maxRow
+        }
         def closeRow:UiRow (UiRow.of((this.closeTid()) (EVGA11yRole.button()) closeLabel))
         closeRow.parentTid = (this.headTid())
         closeRow.focusable = true

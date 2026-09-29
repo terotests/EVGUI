@@ -76,6 +76,8 @@ import { ComboboxDemo } from "./generated-host.js";
 import { COMBOBOX_CSS } from "./generated.js";
 import { ColorPickerDemo } from "./generated-host.js";
 import { COLORPICKER_CSS } from "./generated.js";
+import { WindowDemo } from "./generated-host.js";
+import { WINDOW_CSS } from "./generated.js";
 import { EVG_CSS_FACTS } from "./generated.js";
 // The Styles panel: a guide to each demo's classes and a live editor for its
 // stylesheet. See styles-panel.js. The one compiled module it borrows is only
@@ -494,6 +496,14 @@ let colorpicker = new ColorPickerDemo();
 colorpicker.init(cssFor("colorpicker", COLORPICKER_CSS));
 colorpicker.setScreenPicker(typeof window.EyeDropper === "function");
 let lastColorpickerHover = "";
+// Window: a small desktop in a card, every window a WindowCtl (drag, resize,
+// minimize / maximize / snap, the keyboard's move and size); the Desktop
+// settings dialog is the same controller with isModal. The demo owns the Tab
+// ring (the dialog's trap), the z-order and the dock. Not `window`: that name
+// is taken.
+let windemo = new WindowDemo();
+windemo.init(cssFor("window", WINDOW_CSS));
+let lastWindowHover = "";
 // ONE DRIVER FOR THE PAGE. It reads the effect instances off whatever display
 // list is being painted, so it works for any demo whose stylesheet declares an
 // effect and costs nothing on the nineteen that do not.
@@ -1646,6 +1656,54 @@ DEMOS.drawer = {
   animated: true,
 };
 window.__drwState = () => ({ summary: drawer.summary(), open: drawer.openWhich(), focus: drawer.focused, busy: drawer.busyNow() });
+// Window. A gesture like the drawer's: a press on a title bar or a resize
+// grip is held (the page captures the pointer, so a fast drag keeps the
+// window), the move carries it, the release drops or snaps it. The text boxes
+// are on the page's text session; a double-click on a title bar maximizes.
+// `ownsTab`: the demo's ring, trapped inside the open dialog. `animated`: the
+// maximize / restore / snap ease on WindowCtl's clock.
+DEMOS.window = {
+  height: () => windemo.heightPx(),
+  list: () => windemo.displayListJson(),
+  hit: (x, y) => windemo.hitId(x, y),
+  a11y: (gen, focus) => windemo.a11yJson(gen, focus),
+  cursorAt: (x, y) => windemo.cursorAt(x, y),
+  textSession: {
+    focused: () => windemo.focusedField(),
+    state: (tid) => JSON.parse(windemo.fieldStateJson(tid)),
+    apply: (tid, v, a, b) => windemo.applyEdit(tid, v, a, b),
+  },
+  press: (id, x, y, ev) => windemo.pointerDown(id, x, y, ev && ev.timeStamp ? ev.timeStamp : performance.now()),
+  drag: (id, ev) => windemo.pointerMove(ev.offsetX, ev.offsetY, ev.timeStamp),
+  drop: () => windemo.pointerUp(),
+  dblclick: (id, x) => windemo.dblclick(id, x),
+  scroll: (dy) => windemo.scrollBy(dy),
+  hover: (id) => {
+    if (id === lastWindowHover) return false;
+    lastWindowHover = id;
+    windemo.setHover(id);
+    return true;
+  },
+  keyWith: (k, shift, ctrl, alt) => windemo.keyWith(k, shift, ctrl, !!alt),
+  ownsTab: true,
+  key: (k) => windemo.key(k),
+  ownsKey: (k, ev) => windemo.ownsKeyAlt(k, !!(ev && ev.altKey)),
+  host: () => ({
+    tick: (dt) => windemo.tick(dt),
+    busy: () => windemo.busyNow(),
+    setHover: (id) => {
+      if (id === lastWindowHover) return false;
+      lastWindowHover = id;
+      windemo.setHover(id);
+      return true;
+    },
+    setPressed: (id) => windemo.setPressed(id),
+    root: () => null,
+  }),
+  animated: true,
+};
+window.__wdState = () => JSON.parse(windemo.stateJson());
+window.__wdBox = (id) => windemo.boxOf(id);
 // Combobox. The generic Tab walk (each box one stop; `setFocus` closes a
 // list and puts its label back as the focus leaves). The arrows, and in the
 // chip box Backspace / ArrowLeft at the start, are claimed from the editing
@@ -2346,6 +2404,7 @@ INSTANCE.kanban = () => kanban;
 INSTANCE.drawer = () => drawer;
 INSTANCE.combobox = () => combobox;
 INSTANCE.colorpicker = () => colorpicker;
+INSTANCE.window = () => windemo;
 INSTANCE.menubar = () => menubar;
 // A press on the page outside the canvas is outside the popover too, and
 // Radix dismisses on a pointer down outside wherever it lands.
@@ -2500,6 +2559,8 @@ NARROW.drawer = { min: 320, h: "auto", keep: true };
 NARROW.combobox = { min: 320, h: "own" };
 // The page is as tall as its cards lay out; the cards stack on a phone.
 NARROW.colorpicker = { min: 320, h: "own" };
+// The page keeps its height; on a phone the windows open as full sheets.
+NARROW.window = { min: 320, h: "own" };
 // Laid out at the room (up to its 1000), and as tall as its three cards lay out.
 NARROW.eventcal = { min: 320, h: "own", grow: true };
 window.__ecBox = (id) => {
@@ -3001,6 +3062,7 @@ DEMO_NAMES.push("kanban");
 DEMO_NAMES.push("drawer");
 DEMO_NAMES.push("combobox");
 DEMO_NAMES.push("colorpicker");
+DEMO_NAMES.push("window");
 const wanted = new URLSearchParams(location.search).get("demo");
 if (wanted && DEMO_NAMES.includes(wanted)) state.which = wanted;
 
@@ -3663,6 +3725,7 @@ function recreateDemo(name, css) {
   else if (name === "drawer") { drawer = new DrawerDemo(); drawer.init(css ?? cssFor("drawer", DRAWER_CSS)); lastDrawerHover = ""; }
   else if (name === "combobox") { combobox = new ComboboxDemo(); combobox.init(css ?? cssFor("combobox", COMBOBOX_CSS)); lastComboboxHover = ""; }
   else if (name === "colorpicker") { cpStop(); colorpicker = new ColorPickerDemo(); colorpicker.init(css ?? cssFor("colorpicker", COLORPICKER_CSS)); colorpicker.setScreenPicker(typeof window.EyeDropper === "function"); lastColorpickerHover = ""; }
+  else if (name === "window") { windemo = new WindowDemo(); windemo.init(css ?? cssFor("window", WINDOW_CSS)); lastWindowHover = ""; }
   else if (name === "dialog") { dialog = new DialogDemo(); dialog.init(css ?? cssFor("dialog", DIALOG_CSS)); lastDialogHover = ""; }
   else if (name === "popover") { popover = new PopoverDemo(); popover.init(css ?? cssFor("popover", POPOVER_CSS)); lastPopoverHover = ""; }
   else return false;
@@ -4558,6 +4621,7 @@ const DEFAULT_CSS = {
   radio: RADIO_CSS, rating: RATING_CSS, kanban: KANBAN_CSS, drawer: DRAWER_CSS,
   combobox: COMBOBOX_CSS, colorpicker: COLORPICKER_CSS,
 };
+DEFAULT_CSS.window = WINDOW_CSS;
 // The file each one ships as, for the download's name.
 const CSS_FILE = { tree: "tree.css", resizable: "resize.css" };
 // The text each demo is running now, so the panel can tell an edit that only
