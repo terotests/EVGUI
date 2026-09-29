@@ -79,6 +79,15 @@ if (overlay && fs.realpathSync(REPO) !== (fs.existsSync(TARGET) && fs.realpathSy
 }
 fs.mkdirSync(path.join(TARGET, "bin"), { recursive: true });
 
+// lib/evg (and gallery/componentengine) are not in Ranger's git: its
+// `npm run deps` fetches them from the commits its ranger.json pins. It
+// fetches nothing when they are already in place. An older checkout, which
+// still tracks lib/evg, has no scripts/deps.mjs.
+if (fs.existsSync(path.join(ranger, "scripts", "deps.mjs"))) {
+  const r = spawnSync(process.execPath, [path.join(ranger, "scripts", "deps.mjs")], { cwd: ranger, stdio: "inherit" });
+  if (r.status !== 0) process.exit(r.status ?? 1);
+}
+
 // `npm run <task>` inside a command becomes a call back into this runner, so a
 // task defined here can call another; anything else stays an npm script of
 // Ranger's.

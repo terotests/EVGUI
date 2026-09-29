@@ -6,7 +6,8 @@
 #   /web/    Radix on the left, Ranger on the right, the behaviour trace below
 #
 # The demos are Ranger source. The controllers are this repository's src/;
-# the EVG library (lib/evg) and the conformance harness the playground runs
+# the EVG library (lib/evg, which Ranger fetches from terotests/evg at the
+# commit its ranger.json pins) and the conformance harness the playground runs
 # (gallery/ui/conformance) come from Ranger, and the compiler committed there
 # (dist/rgrc.js) compiles everything, so no compiler build is needed: a sparse,
 # shallow checkout of the parts the build reads is enough, and this repository
@@ -48,10 +49,16 @@ jobs:
           ref: ${{ env.RANGER_REF }}
           path: ranger
           fetch-depth: 1
+          # bin (git-http.mjs), scripts (deps.mjs) and gallery/ts_parser are
+          # what `npm run deps` needs to fetch lib/evg, which Ranger no
+          # longer tracks; scripts/run.mjs runs it before the first task.
           sparse-checkout: |
             compiler
             lib
             dist
+            bin
+            scripts
+            gallery/ts_parser
             gallery/ui/conformance
             gallery/vela
             gallery/game_engine/ui

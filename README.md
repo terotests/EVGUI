@@ -51,6 +51,14 @@ A clone somewhere else works too: `--ranger <dir>` (or `RANGER_DIR`, default
 `bench/` and `ranger.json` are copied to its `gallery/evgui/` before each task
 (`--no-overlay` skips the copy). `gallery/evgui/` is git-ignored in Ranger.
 
+EVG is Ranger's `lib/evg`, which Ranger no longer tracks: it is
+[terotests/evg](https://github.com/terotests/evg) at the commit Ranger's root
+`ranger.json` pins, put in place by Ranger's `npm run deps`.
+`scripts/run.mjs` runs that before the first task (it fetches nothing when
+`lib/evg` is already right), so `ranger.json` here keeps
+`"evg": { "path": "../../lib/evg" }` and gets the same EVG as the rest of
+the gallery it imports.
+
 ## CI and Pages
 
 `.github/workflows/pages.yml` runs on every push and pull request: a sparse,
