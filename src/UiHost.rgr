@@ -1218,6 +1218,9 @@ class UiHost {
                 n.focusable = row.focusable
                 n.modal = row.modal
                 n.checked = row.checked
+                ; A toggle button reports `pressed`, not `checked`; dropping it
+                ; here told a reader every Bold button was an ordinary one.
+                n.pressed = row.pressed
                 n.expanded = row.expanded
                 ; Depth, size and position within the siblings. The TRACE has
                 ; carried these since the tree went in; the accessibility tree
