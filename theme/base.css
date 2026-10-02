@@ -149,6 +149,20 @@
 .ui-input-text { color: #0f172a; font-size: 13px; height: 18px; }
 .ui-input-placeholder { color: #64748b; }
 .ui-input-caret { width: 2px; height: 18px; background-color: #2563eb; }
+/* InputCtl.clearable: the × at the end while the field holds text, the
+ * room in between taken by an empty grower. */
+.ui-input-grow { flex-grow: 1; height: 1px; }
+.ui-input-clear {
+  width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  color: #64748b;
+  background-color: #f1f5f9;
+  font-size: 13px;
+  text-align: center;
+  line-height: 18px;
+  margin-left: 6px;
+}
 
 /* A checkbox is a box with a tick in it, beside its words — not a pill that
    changes colour. The box, the mark and the label are three classes a

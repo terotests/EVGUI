@@ -88,6 +88,14 @@ class InputCtl extends UiCtl {
     ; 0 means no limit, matching `maxlength`'s absence rather than a made-up
     ; ceiling.
     def maxLength:int 0
+    ; A clear button (×) at the end of the box while it holds text, as a
+    ; search field has. Off unless asked for: the conformance specs compare
+    ; against a plain <input type="text">, which has none. A press on it is
+    ; the host's to route (`isClearHit`, then `clearValue`). It is not a tab
+    ; stop and not a row of its own, like the clear button of a native
+    ; search field: Ctrl+A and Backspace empty the field from the keyboard.
+    def clearable:boolean false
+    def clearLabel:string "Clear"
 
     ; The caret, and the other end of the selection. `selstart`/`selend` are
     ; DERIVED from these two and never stored, because storing both a caret and
@@ -108,11 +116,15 @@ class InputCtl extends UiCtl {
 
     def textEl:EVGElement
     def caretEl:EVGElement
+    def clearEl:EVGElement
+    def growEl:EVGElement
 
     Constructor () {
         rootEl = (EVGElement.createDiv())
         textEl = (EVGElement.createDiv())
         caretEl = (EVGElement.createDiv())
+        clearEl = (EVGElement.createDiv())
+        growEl = (EVGElement.createDiv())
     }
 
     ; --- names ----------------------------------------------------------------
@@ -123,6 +135,43 @@ class InputCtl extends UiCtl {
 
     fn caretTid:string () {
         return (tid + "-caret")
+    }
+
+    fn clearTid:string () {
+        return (tid + "-clear")
+    }
+
+    fn growTid:string () {
+        return (tid + "-grow")
+    }
+
+    ; --- the clear button -----------------------------------------------------
+
+    ; Shown while there is something to clear and the field may be changed.
+    fn showsClear:boolean () {
+        if (clearable == false) {
+            return false
+        }
+        if (disabled || readOnly) {
+            return false
+        }
+        return ((strlen value) > 0)
+    }
+
+    fn isClearHit:boolean (hit:string) {
+        if (hit != (this.clearTid())) {
+            return false
+        }
+        return (this.showsClear())
+    }
+
+    ; The field emptied, the caret at its start.
+    fn clearValue:void () {
+        value = ""
+        caret = 0
+        anchor = 0
+        scrollX = 0.0
+        this.build()
     }
 
     ; --- the selection --------------------------------------------------------
@@ -964,6 +1013,9 @@ class InputCtl extends UiCtl {
         if invalid {
             UiTree.addClass(root "ui-input-invalid")
         }
+        if clearable {
+            UiTree.addClass(root "ui-input-clearable")
+        }
         UiTree.clearChildren(root)
 
         def txt:EVGElement (unwrap textEl)
@@ -983,6 +1035,23 @@ class InputCtl extends UiCtl {
         car.className = "ui-input-caret"
         UiTree.clearChildren(car)
         root.addChild(car)
+
+        if (this.showsClear()) {
+            ; the room between the text and the button, so the button sits
+            ; at the box's right edge
+            def gr:EVGElement (unwrap growEl)
+            gr.id = (this.growTid())
+            gr.className = "ui-input-grow"
+            UiTree.clearChildren(gr)
+            root.addChild(gr)
+            def clr:EVGElement (unwrap clearEl)
+            clr.id = (this.clearTid())
+            clr.className = "ui-input-clear"
+            clr.textContent = "×"
+            clr.a11yLabel = clearLabel
+            UiTree.clearChildren(clr)
+            root.addChild(clr)
+        }
     }
 
     fn tids:[string] () {
@@ -990,6 +1059,10 @@ class InputCtl extends UiCtl {
         push a tid
         push a (this.textTid())
         push a (this.caretTid())
+        if clearable {
+            push a (this.growTid())
+            push a (this.clearTid())
+        }
         return a
     }
 
