@@ -1433,3 +1433,9 @@
 .theme-dark .ui-combobox-content { background-color: #0f172a; border-color: #334155; }
 .theme-dark .ui-combobox-item { color: #e2e8f0; }
 .theme-dark .ui-combobox-item-state-selected { background-color: #1e3a8a; }
+
+/* --- menu separators -----------------------------------------------------------
+ * MenuCtl.addSeparator: a line between a menu's groups. It needs a size, as
+ * every separator does, or it draws nothing. */
+.ui-dropdownmenu-separator,
+.ui-contextmenu-separator { height: 1px; background-color: #e4e4e7; margin: 4px 0; }
