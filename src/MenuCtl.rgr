@@ -158,6 +158,58 @@ class MenuCtl extends UiCtl {
         return it
     }
 
+    ; The shortcut of a row of the root menu, by value: `addItem` returns
+    ; nothing, so this is how its row gets one. A submenu's rows are set
+    ; directly (`MenuCtl.addKid(...).shortcut = "Meta+D"`).
+    fn setShortcut:void (itemValue:string keys:string) {
+        def i:int 0
+        while (i < (array_length items)) {
+            def it:UiItem (itemAt items i)
+            if (it.value == itemValue) {
+                it.shortcut = keys
+            }
+            i = (i + 1)
+        }
+    }
+
+    ; One key of an aria-keyshortcuts chord as its cap reads: the modifiers as
+    ; their symbols, the named keys short, everything else as it is.
+    sfn keyCap:string (k:string) {
+        if (k == "Meta") { return "⌘" }
+        if (k == "Control") { return "Ctrl" }
+        if (k == "Shift") { return "⇧" }
+        if (k == "Alt") { return "Alt" }
+        if (k == "Enter") { return "↵" }
+        if (k == "Delete") { return "Del" }
+        if (k == "Backspace") { return "⌫" }
+        if (k == "Escape") { return "Esc" }
+        if (k == "ArrowUp") { return "↑" }
+        if (k == "ArrowDown") { return "↓" }
+        if (k == "ArrowLeft") { return "←" }
+        if (k == "ArrowRight") { return "→" }
+        if (k == "Space") { return "Space" }
+        return k
+    }
+
+    ; A chord as key caps, one per key (reui's Kbd group): `Meta+Shift+D`
+    ; is ⌘ ⇧ D. A Mac menu runs the modifiers together as ⌘⇧D, but a cap per
+    ; key reads the same on every platform, and Ctrl+Shift+D needs it.
+    sfn keyCaps:EVGElement (keys:string base:string) {
+        def box (EVGElement.createDiv())
+        box.className = (base + "-shortcut")
+        box.a11yHidden = true
+        def parts:[string] (strsplit keys "+")
+        def i:int 0
+        while (i < (array_length parts)) {
+            def k:string (trim (itemAt parts i))
+            if ((strlen k) > 0) {
+                box.addChild((UiTree.label("" "ui-kbd" (MenuCtl.keyCap(k)))))
+            }
+            i = (i + 1)
+        }
+        return box
+    }
+
     ; --- checkable rows and separators ------------------------------------------
     ; Radix's CheckboxItem, RadioItem and Separator. A checkbox toggles and a
     ; radio checks itself (and unchecks its group) when chosen, and choosing
@@ -414,7 +466,18 @@ class MenuCtl extends UiCtl {
                 el.addChild((UiTree.label("" (base + "-item-label") it.name)))
                 el.addChild((UiTree.label("" (base + "-subtrigger-chevron") "▸")))
             } {
-                UiTree.leafText(el it.name)
+                if ((strlen it.shortcut) > 0) {
+                    ; The name at the start and the key caps at the far edge,
+                    ; as a sub-trigger's chevron is.
+                    UiTree.addClass(el (base + "-item-keys"))
+                    UiTree.clearChildren(el)
+                    el.textContent = ""
+                    el.elementType = 0
+                    el.addChild((UiTree.label("" (base + "-item-label") it.name)))
+                    el.addChild((MenuCtl.keyCaps(it.shortcut base)))
+                } {
+                    UiTree.leafText(el it.name)
+                }
             }
             surface.addChild(el)
 
@@ -1023,6 +1086,8 @@ class MenuCtl extends UiCtl {
             }
             def row:UiRow (UiRow.of(rtid role rowNm))
             row.parentTid = (itemAt rowOwner i)
+            def keyed:UiItem (itemAt rowItem i)
+            row.keyShortcut = keyed.shortcut
             row.disabled = (itemAt rowDisabled i)
             if (kindOf == "separator") {
                 row.disabled = false
