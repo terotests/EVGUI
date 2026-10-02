@@ -225,6 +225,12 @@ class UiItem {
     ; A radio's group: checking one unchecks the others in the same list with
     ; the same group, as a Radix Menu.RadioGroup does.
     def group:string ""
+    ; The key chord that does what this row does without opening the menu, in
+    ; `aria-keyshortcuts` form: "Control+Shift+N", "Meta+D", "Delete", "F5".
+    ; MenuCtl draws it at the row's far edge as one key cap per key and
+    ; publishes it as the row's aria-keyshortcuts. Drawing it is all it does:
+    ; the app still listens for the keys itself. Empty for no shortcut.
+    def shortcut:string ""
 
     Constructor () {
         el = (EVGElement.createDiv())

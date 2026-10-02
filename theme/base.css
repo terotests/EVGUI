@@ -1439,3 +1439,36 @@
  * every separator does, or it draws nothing. */
 .ui-dropdownmenu-separator,
 .ui-contextmenu-separator { height: 1px; background-color: #e4e4e7; margin: 4px 0; }
+
+/* --- menu shortcuts ------------------------------------------------------------
+ * A row with UiItem.shortcut: its name at the start and its keys at the far
+ * edge, one cap per key, as reui's Kbd (muted, rounded, 20px tall). */
+.ui-dropdownmenu-item-keys, .ui-contextmenu-item-keys {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  align-items: center;
+}
+.ui-dropdownmenu-shortcut, .ui-contextmenu-shortcut {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 2px;
+  margin-left: 16px;
+}
+.ui-kbd {
+  min-width: 20px;
+  height: 20px;
+  line-height: 20px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background-color: #f4f4f5;
+  color: #52525b;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+  white-space: nowrap;
+}
+.theme-dark .ui-kbd { background-color: #27272a; color: #d4d4d8; }
