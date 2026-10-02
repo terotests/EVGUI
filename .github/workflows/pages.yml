@@ -100,8 +100,10 @@ jobs:
       - name: Smoke test the published tree
         run: node ranger/gallery/evgui/scripts/run.mjs --no-overlay ui:pages:smoke
 
+      # ui:input:bench runs in the input-bench job beside this one: it takes
+      # about thirteen minutes, and the deploy does not wait for it.
       - name: Demo suites
-        run: bash ranger/gallery/evgui/scripts/gate.sh --prebuilt
+        run: bash ranger/gallery/evgui/scripts/gate.sh --prebuilt --skip ui:input:bench
 
       - name: Collect the site
         run: cp -r ranger/gallery/evgui/web/dist _site
@@ -111,6 +113,58 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
+
+  # Every text field on every demo page against a native <input>. A failure
+  # marks the run red but does not hold back the deploy.
+  input-bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout Ranger (compiler, EVG, conformance harness)
+        uses: actions/checkout@v4
+        with:
+          repository: terotests/Ranger
+          ref: ${{ env.RANGER_REF }}
+          path: ranger
+          fetch-depth: 1
+          sparse-checkout: |
+            compiler
+            lib
+            dist
+            bin
+            scripts
+            gallery/ts_parser
+            gallery/ui/conformance
+            gallery/vela
+            gallery/game_engine/ui
+            gallery/office/text
+            gallery/pdf_writer/src
+            gallery/mfiles
+
+      - name: Checkout EVGUI
+        uses: actions/checkout@v4
+        with:
+          path: ranger/gallery/evgui
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install the conformance host
+        run: node ranger/gallery/evgui/scripts/run.mjs ui:conformance:install
+
+      - name: Install Chromium
+        working-directory: ranger/gallery/ui/conformance/dom
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.* \
+                     /etc/apt/sources.list.d/microsoft-prod.*
+          npx playwright-core install --with-deps chromium ||
+            npx playwright-core install chromium
+
+      # Compiles the demos, bundles them and runs the bench.
+      - name: Input bench
+        run: node ranger/gallery/evgui/scripts/run.mjs --no-overlay ui:input:bench
 
   deploy:
     if: github.event_name != 'pull_request' && github.ref_name == 'main'

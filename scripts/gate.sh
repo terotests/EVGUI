@@ -7,12 +7,13 @@
 # run-gallery-browser-tests.sh with the demos: each one compiles a demo (or the
 # page) and checks what it draws. The last group opens a real browser.
 #
-#   bash scripts/gate.sh [--ranger <dir>] [--no-browser] [--prebuilt]
+#   bash scripts/gate.sh [--ranger <dir>] [--no-browser] [--prebuilt] [--skip <suite>]...
 #
 # The demos are compiled once (about two minutes) and every suite then reuses
 # that build: EVGUI_PREBUILT tells scripts/run.mjs to skip the `npm run
 # ui:demo:build` / `ui:build` each task starts with. --prebuilt skips the one
 # build too, for a caller that has just run them (CI builds the pages first).
+# --skip leaves a suite out (CI runs ui:input:bench in a job of its own).
 #
 # Needs `npm run ui:conformance:install` in the Ranger checkout once, for
 # esbuild, playwright-core and the Radix reference host.
@@ -22,11 +23,13 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ranger_args=()
 browser=1
 prebuilt=0
+skip=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --ranger) ranger_args=(--ranger "$(cd "$2" && pwd)"); shift 2 ;;
     --no-browser) browser=0; shift ;;
     --prebuilt) prebuilt=1; shift ;;
+    --skip) skip+=("$2"); shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -82,6 +85,13 @@ BROWSER_SUITES=(
   ui:styles:check
 )
 [ $browser -eq 1 ] && SUITES+=("${BROWSER_SUITES[@]}")
+if [ ${#skip[@]} -ne 0 ]; then
+  kept=()
+  for suite in "${SUITES[@]}"; do
+    case " ${skip[*]} " in *" $suite "*) ;; *) kept+=("$suite") ;; esac
+  done
+  SUITES=("${kept[@]}")
+fi
 
 # Put this repository's sources in place and compile once; every suite then
 # runs on that build.
