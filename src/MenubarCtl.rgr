@@ -640,6 +640,10 @@ class MenubarCtl extends UiCtl {
                 content.className = "ui-menubar-content"
                 UiTree.setState(content "ui-menubar-content" word)
                 UiTree.surface(content "bottom" "start")
+                ; Named outright: every trigger in the bar is an anchor and
+                ; they are all this surface's siblings, so the sibling search
+                ; found the FIRST one — every menu opened under File.
+                content.overlayAnchor = trig
                 UiTree.clearChildren(content)
                 if m.hasMenu {
                     ; The MenuCtl's own surface, rows and submenus, moved under
