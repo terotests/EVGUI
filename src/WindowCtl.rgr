@@ -1039,18 +1039,22 @@ class WindowCtl extends UiCtl {
         return (animT < 1.0)
     }
 
-    fn tickCtl:void (dtMs:double) {
+    ; A string, as UiCtl's is: UiHost.tick reads what every controller
+    ; returns as the id focus moves to, and a void override handed it
+    ; nothing at all — a window in a UiHost stopped the host's first tick.
+    fn tickCtl:string (dtMs:double) {
         if (animT >= 1.0) {
-            return
+            return ""
         }
         if (animMs <= 0.0) {
             animT = 1.0
-            return
+            return ""
         }
         animT = (animT + (dtMs / animMs))
         if (animT > 1.0) {
             animT = 1.0
         }
+        return ""
     }
 
     ; ease-out: fast away, gentle arrival.
