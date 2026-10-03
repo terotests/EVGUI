@@ -1,0 +1,292 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * "retro": a glossy lime skin in the spirit of the late-90s media player
+ * skins (and of terotests/EVGMusicPlayer's `lime`, whose palette this is).
+ * Chrome is a shell of lime gradients with a dark edge; anything that holds
+ * content (menus, lists, inputs, dialogs) is a dark inset display with pale
+ * lime ink; buttons are round glossy caps, the primary one lit.
+ *
+ * A SKIN IS A THEME. Load this sheet after base.css (and after the app's own
+ * sheet): every rule is `.theme-retro .x`, so it does nothing until the tree
+ * is applied with "retro" among its themes — `applyTree(root "retro")`, or
+ * `host.setTheme("tb retro")` next to a theme the app already uses. Scoped
+ * rules beat unscoped ones and, among scoped ones, the later sheet wins, so
+ * the skin overrides colours without the base sheet knowing about it.
+ *
+ * Only colour, gradient, border, radius and shadow are set here: sizes,
+ * padding and layout stay the base sheet's, so a screen lays out the same
+ * in every skin.
+ */
+
+@vars retro {
+  --retro-shell-a: #c8f76e;
+  --retro-shell-b: #4f8f1a;
+  --retro-crest-a: #eeffc0;
+  --retro-crest-b: #86c932;
+  --retro-chin-a: #3a6b14;
+  --retro-chin-b: #142807;
+  --retro-edge: #1f3d08;
+  --retro-rim: #e6ff9a;
+  --retro-screen: #041003;
+  --retro-screen-2: #0c1f04;
+  --retro-screen-3: #1b3509;
+  --retro-ink: #e6ffb8;
+  --retro-ink-dim: #8fc24e;
+  --retro-btn-a: #f4ffd8;
+  --retro-btn-b: #8cc63f;
+  --retro-btn-ink: #1c3a06;
+  --retro-hot-a: #ffffff;
+  --retro-hot-b: #c6ff5a;
+  --retro-play-a: #d6ff6a;
+  --retro-play-b: #4b8f12;
+  --retro-glow: rgba(170, 255, 60, 0.55);
+  --retro-danger: #ff8a6a;
+  /* A gradient that paints nothing. A state rule that lays a gradient on
+     (hover, open, checked) needs the base rule to lay one too: `background`
+     has no initial value to fall back to when the state ends. */
+  --retro-clear: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0));
+}
+
+.theme-retro .ui-root { background-color: var(--retro-chin-b); }
+
+/* --- buttons: glossy round caps ------------------------------------------- */
+.theme-retro .ui-button,
+.theme-retro .ui-button-secondary,
+.theme-retro .ui-iconbutton,
+.theme-retro .ui-toggle,
+.theme-retro .ui-toolbar-button,
+.theme-retro .ui-dialog-trigger,
+.theme-retro .ui-alertdialog-trigger,
+.theme-retro .ui-alertdialog-cancel,
+.theme-retro .ui-dialog-close,
+.theme-retro .ui-drawer-close,
+.theme-retro .ui-popover-trigger {
+  background: linear-gradient(180deg, var(--retro-btn-a), var(--retro-btn-b));
+  border: 1.5px solid var(--retro-edge);
+  border-radius: 18px;
+  color: var(--retro-btn-ink);
+  shadow-color: rgba(0, 0, 0, 0.45); shadow-radius: 4px; shadow-offset-y: 2px;
+}
+.theme-retro .ui-button:hover,
+.theme-retro .ui-iconbutton:hover,
+.theme-retro .ui-toggle:hover,
+.theme-retro .ui-toolbar-button:hover,
+.theme-retro .ui-dialog-trigger:hover,
+.theme-retro .ui-popover-trigger:hover {
+  background: linear-gradient(180deg, var(--retro-hot-a), var(--retro-hot-b));
+}
+.theme-retro .ui-button:active,
+.theme-retro .ui-iconbutton:active,
+.theme-retro .ui-toggle:active,
+.theme-retro .ui-toolbar-button:active {
+  background: linear-gradient(0deg, var(--retro-hot-a), var(--retro-hot-b));
+}
+.theme-retro .ui-button-primary,
+.theme-retro .ui-alertdialog-action,
+.theme-retro .ui-toggle-state-on {
+  background: linear-gradient(180deg, var(--retro-play-a), var(--retro-play-b));
+  border: 1.5px solid var(--retro-edge);
+  border-radius: 18px;
+  shadow-color: var(--retro-glow); shadow-radius: 12px; shadow-offset-y: 0px;
+}
+.theme-retro .ui-button-danger {
+  background: linear-gradient(180deg, #ffd0b8, #d4471c);
+  border: 1.5px solid #4a1206;
+  border-radius: 18px;
+}
+.theme-retro .ui-button-ghost {
+  background: var(--retro-clear);
+  background-color: rgba(0, 0, 0, 0);
+  border-color: rgba(0, 0, 0, 0);
+  shadow-color: rgba(0, 0, 0, 0);
+}
+.theme-retro .ui-button-ghost:hover {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(198, 255, 90, 0.35));
+  border-color: var(--retro-edge);
+}
+.theme-retro .ui-button-label,
+.theme-retro .ui-iconbutton-glyph { color: var(--retro-btn-ink); font-weight: 700; }
+
+/* --- inputs and selects: dark inset displays ------------------------------- */
+.theme-retro .ui-input,
+.theme-retro .ui-combobox-group,
+.theme-retro .ui-select-trigger {
+  background: linear-gradient(180deg, var(--retro-screen), var(--retro-screen-2));
+  border: 1.5px solid var(--retro-edge);
+  border-radius: 10px;
+  color: var(--retro-ink);
+}
+.theme-retro .ui-select-trigger:hover,
+.theme-retro .ui-select-trigger:focus { border-color: var(--retro-rim); }
+.theme-retro .ui-input-text,
+.theme-retro .ui-combobox-input,
+.theme-retro .ui-select-value { color: var(--retro-ink); }
+.theme-retro .ui-input-placeholder { color: var(--retro-ink-dim); }
+.theme-retro .ui-input-caret { background-color: var(--retro-hot-b); }
+.theme-retro .ui-input-invalid { border-color: var(--retro-danger); }
+.theme-retro .ui-field-label,
+.theme-retro .ui-label { color: var(--retro-ink); }
+.theme-retro .ui-field-help { color: var(--retro-ink-dim); }
+.theme-retro .ui-field-error { color: var(--retro-danger); }
+
+/* --- menus and lists: the screen with lime ink ------------------------------ */
+.theme-retro .ui-select-content,
+.theme-retro .ui-combobox-content,
+.theme-retro .ui-dropdownmenu-content,
+.theme-retro .ui-contextmenu-content,
+.theme-retro .ui-menubar-content,
+.theme-retro .ui-navmenu-content,
+.theme-retro .ui-popover-content,
+.theme-retro .ui-hovercard-content {
+  background: linear-gradient(180deg, var(--retro-screen-2), var(--retro-screen));
+  border: 2px solid var(--retro-rim);
+  border-radius: 14px;
+  shadow-color: var(--retro-glow); shadow-radius: 16px; shadow-offset-y: 0px;
+}
+.theme-retro .ui-select-item,
+.theme-retro .ui-combobox-item,
+.theme-retro .ui-dropdownmenu-item,
+.theme-retro .ui-dropdownmenu-item-label,
+.theme-retro .ui-contextmenu-item,
+.theme-retro .ui-contextmenu-item-label,
+.theme-retro .ui-menubar-item,
+.theme-retro .ui-navmenu-link,
+.theme-retro .ui-popover-body { color: var(--retro-ink); background-color: rgba(0, 0, 0, 0); }
+.theme-retro .ui-select-item:hover,
+.theme-retro .ui-select-item:focus,
+.theme-retro .ui-combobox-item-active,
+.theme-retro .ui-dropdownmenu-item:hover,
+.theme-retro .ui-dropdownmenu-item:focus,
+.theme-retro .ui-dropdownmenu-subtrigger-state-open,
+.theme-retro .ui-contextmenu-item:hover,
+.theme-retro .ui-contextmenu-item:focus,
+.theme-retro .ui-menubar-item:hover,
+.theme-retro .ui-menubar-item:focus { background-color: var(--retro-screen-3); }
+.theme-retro .ui-select-item-state-checked,
+.theme-retro .ui-combobox-item-state-selected { background-color: var(--retro-screen-3); color: var(--retro-hot-b); }
+.theme-retro .ui-select-item-disabled,
+.theme-retro .ui-dropdownmenu-item-disabled,
+.theme-retro .ui-dropdownmenu-shortcut,
+.theme-retro .ui-dropdownmenu-subtrigger-chevron { color: var(--retro-ink-dim); }
+.theme-retro .ui-dropdownmenu-item-destructive { color: var(--retro-danger); }
+.theme-retro .ui-dropdownmenu-item-destructive:hover,
+.theme-retro .ui-dropdownmenu-item-destructive:focus { background-color: #3a1206; }
+.theme-retro .ui-dropdownmenu-separator,
+.theme-retro .ui-contextmenu-separator,
+.theme-retro .ui-separator { background-color: var(--retro-screen-3); }
+.theme-retro .ui-kbd {
+  color: var(--retro-ink);
+  background-color: var(--retro-screen-3);
+  border: 1px solid var(--retro-chin-a);
+}
+
+/* --- menu bar triggers: caps on the shell ----------------------------------- */
+.theme-retro .ui-menubar { background: linear-gradient(180deg, var(--retro-crest-a), var(--retro-shell-b)); border-color: var(--retro-edge); }
+.theme-retro .ui-menubar-trigger,
+.theme-retro .ui-dropdownmenu-trigger { background: var(--retro-clear); color: var(--retro-btn-ink); font-weight: 700; }
+.theme-retro .ui-menubar-trigger:hover,
+.theme-retro .ui-menubar-trigger-state-open,
+.theme-retro .ui-dropdownmenu-trigger:hover,
+.theme-retro .ui-dropdownmenu-trigger-state-open {
+  background: linear-gradient(180deg, var(--retro-hot-a), var(--retro-hot-b));
+  border-radius: 16px;
+}
+
+/* --- tabs: the LISTS | SEARCH pill of the player ----------------------------- */
+.theme-retro .ui-tablist {
+  background-color: var(--retro-screen);
+  border: 1.5px solid var(--retro-edge);
+  border-radius: 16px;
+}
+.theme-retro .ui-tab {
+  background: var(--retro-clear);
+  background-color: rgba(0, 0, 0, 0);
+  border-color: rgba(0, 0, 0, 0);
+  border-radius: 13px;
+  color: var(--retro-ink);
+  font-weight: 700;
+}
+.theme-retro .ui-tab:hover { background-color: var(--retro-screen-3); }
+.theme-retro .ui-tab-state-active {
+  background: linear-gradient(180deg, var(--retro-play-a), var(--retro-play-b));
+  border-color: var(--retro-edge);
+  color: var(--retro-btn-ink);
+  shadow-color: var(--retro-glow); shadow-radius: 6px; shadow-offset-y: 0px;
+}
+.theme-retro .ui-tabpanel {
+  background-color: var(--retro-screen);
+  border-color: var(--retro-edge);
+  color: var(--retro-ink);
+}
+.theme-retro .ui-togglegroup-item { background: var(--retro-clear); color: var(--retro-ink); background-color: var(--retro-screen); border-color: var(--retro-edge); }
+.theme-retro .ui-togglegroup-item-state-on {
+  background: linear-gradient(180deg, var(--retro-play-a), var(--retro-play-b));
+  color: var(--retro-btn-ink);
+}
+
+/* --- switches, checks, radios, sliders, progress ----------------------------- */
+.theme-retro .ui-switch-track {
+  background: var(--retro-clear);
+  background-color: var(--retro-screen);
+  border: 1.5px solid var(--retro-edge);
+}
+.theme-retro .ui-switch-track-state-checked {
+  background: linear-gradient(180deg, var(--retro-play-a), var(--retro-play-b));
+  shadow-color: var(--retro-glow); shadow-radius: 8px; shadow-offset-y: 0px;
+}
+.theme-retro .ui-switch-thumb { background: linear-gradient(180deg, var(--retro-hot-a), var(--retro-btn-b)); border: 1px solid var(--retro-edge); }
+.theme-retro .ui-switch-label,
+.theme-retro .ui-checkbox-label { color: var(--retro-ink); }
+.theme-retro .ui-checkbox-box,
+.theme-retro .ui-radio { background: var(--retro-clear); background-color: var(--retro-screen); border: 1.5px solid var(--retro-rim); }
+.theme-retro .ui-checkbox-box-state-checked,
+.theme-retro .ui-radio-state-checked {
+  background: linear-gradient(180deg, var(--retro-play-a), var(--retro-play-b));
+  border-color: var(--retro-edge);
+}
+.theme-retro .ui-checkbox-mark { color: var(--retro-btn-ink); }
+.theme-retro .ui-slider-track,
+.theme-retro .ui-progress { background-color: var(--retro-screen-2); border: 1px solid var(--retro-edge); }
+.theme-retro .ui-slider-range,
+.theme-retro .ui-progress-indicator { background: linear-gradient(90deg, #e0ff7a, #6fcf1a); }
+.theme-retro .ui-slider-thumb { background: linear-gradient(180deg, var(--retro-btn-a), var(--retro-btn-b)); border: 1.5px solid var(--retro-edge); }
+
+/* --- windows: a lime shell around a dark display ------------------------------ */
+.theme-retro .ui-dialog-content,
+.theme-retro .ui-alertdialog-content,
+.theme-retro .ui-drawer-panel {
+  background: linear-gradient(180deg, var(--retro-screen-2), var(--retro-screen));
+  border: 3px solid var(--retro-shell-b);
+  border-radius: 18px;
+  shadow-color: var(--retro-glow); shadow-radius: 22px; shadow-offset-y: 0px;
+}
+.theme-retro .ui-dialog-title,
+.theme-retro .ui-alertdialog-title,
+.theme-retro .ui-drawer-title { color: var(--retro-ink); }
+.theme-retro .ui-alertdialog-description { color: var(--retro-ink-dim); }
+.theme-retro .ui-dialog-overlay,
+.theme-retro .ui-alertdialog-overlay { background-color: rgba(4, 16, 3, 0.6); }
+
+/* --- cards, rows, tables, toasts ----------------------------------------------- */
+.theme-retro .ui-card {
+  background: linear-gradient(180deg, var(--retro-screen-2), var(--retro-screen));
+  border: 1.5px solid var(--retro-edge);
+}
+.theme-retro .ui-card-title,
+.theme-retro .ui-row-sub,
+.theme-retro .ui-row-value,
+.theme-retro .ui-row-icon { color: var(--retro-ink-dim); }
+.theme-retro .ui-row-title { color: var(--retro-ink); }
+.theme-retro .ui-row-line { background-color: var(--retro-screen-3); }
+.theme-retro .ui-table-wrap { background-color: var(--retro-screen); border-color: var(--retro-edge); }
+.theme-retro .ui-table-headrow { background-color: var(--retro-screen-3); }
+.theme-retro .ui-table-col-label,
+.theme-retro .ui-table-cell { color: var(--retro-ink); }
+.theme-retro .ui-table-row-state-selected { background-color: var(--retro-screen-3); }
+.theme-retro .ui-toast-item {
+  background: linear-gradient(180deg, var(--retro-screen-2), var(--retro-screen));
+  border: 2px solid var(--retro-rim);
+}
+.theme-retro .ui-toast-title { color: var(--retro-ink); }
+.theme-retro .ui-toast-description { color: var(--retro-ink-dim); }
+.theme-retro .ui-tooltip-content { background-color: var(--retro-screen); color: var(--retro-ink); border: 1px solid var(--retro-rim); }
