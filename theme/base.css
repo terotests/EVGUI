@@ -1486,3 +1486,12 @@
   white-space: nowrap;
 }
 .theme-dark .ui-kbd { background-color: #27272a; color: #d4d4d8; }
+
+/* --- destructive rows -----------------------------------------------------------
+ * UiItem.variant "destructive": a row that deletes, red as shadcn's
+ * DropdownMenuItem variant="destructive", with a red wash under the pointer.
+ * Last in the file so it wins over the hover and focus rules above. */
+.ui-dropdownmenu-item-destructive, .ui-contextmenu-item-destructive { color: #dc2626; }
+.ui-dropdownmenu-item-destructive:hover, .ui-contextmenu-item-destructive:hover { background-color: #fef2f2; }
+.ui-dropdownmenu-item-destructive:focus, .ui-contextmenu-item-destructive:focus { background-color: #fee2e2; }
+.theme-dark .ui-dropdownmenu-item-destructive, .theme-dark .ui-contextmenu-item-destructive { color: #f87171; }

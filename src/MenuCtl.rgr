@@ -172,6 +172,19 @@ class MenuCtl extends UiCtl {
         }
     }
 
+    ; The variant of a row of the root menu, by value ("destructive" draws it
+    ; red). A submenu's rows are set directly, as their shortcut is.
+    fn setVariant:void (itemValue:string variantName:string) {
+        def i:int 0
+        while (i < (array_length items)) {
+            def it:UiItem (itemAt items i)
+            if (it.value == itemValue) {
+                it.variant = variantName
+            }
+            i = (i + 1)
+        }
+    }
+
     ; One key of an aria-keyshortcuts chord as its cap reads: the modifiers as
     ; their symbols, the named keys short, everything else as it is.
     sfn keyCap:string (k:string) {
@@ -443,6 +456,9 @@ class MenuCtl extends UiCtl {
             }
             if it.disabled {
                 UiTree.addClass(el (base + "-item-disabled"))
+            }
+            if ((strlen it.variant) > 0) {
+                UiTree.addClass(el ((base + "-item-") + it.variant))
             }
             def isSep:boolean (it.kind == "separator")
             if isSep {

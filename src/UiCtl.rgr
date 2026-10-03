@@ -231,6 +231,10 @@ class UiItem {
     ; publishes it as the row's aria-keyshortcuts. Drawing it is all it does:
     ; the app still listens for the keys itself. Empty for no shortcut.
     def shortcut:string ""
+    ; How the row reads: "" as every row, "destructive" in red (shadcn's
+    ; DropdownMenuItem variant="destructive"), for a row that deletes or
+    ; cannot be undone. Only the class changes; asking first is the app's.
+    def variant:string ""
 
     Constructor () {
         el = (EVGElement.createDiv())
