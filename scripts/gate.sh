@@ -66,6 +66,8 @@ SUITES=(
   ui:semantics:check
   ui:input:bench
   ui:layout:check
+  # The z-order model: which surface is on top (src/UiLayers.rgr).
+  ui:layers:check
   evg:flexgrow:check
   evg:pctflex:check
   evg:inspect:test

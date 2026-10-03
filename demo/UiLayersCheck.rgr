@@ -1,0 +1,136 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; The z-order model on Node: `ui:layers:check`.
+Import "../src/UiLayers.rgr"
+
+class UiLayersCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    fn order:string (z:UiLayers) {
+        return (z.paintOrderText())
+    }
+
+    ; The bug this was written for: a popover opened while a docked panel
+    ; is showing is drawn over it, and a press there is the popover's.
+    fn dockedUnderWindow:void () {
+        def z (new UiLayers())
+        z.add("style" "window")
+        z.add("files" "docked")
+        z.open("style")
+        z.open("files")
+        this.ok(((this.order(z)) == "files,style") ("a window over a docked panel opened after it: " + (this.order(z))))
+        this.ok(((z.top()) == "style") "the window is on top")
+        def hit:[string] (z.hitOrder())
+        this.ok(((itemAt hit 0) == "style") "a press goes to the window first")
+        this.ok((z.below("files" "style")) "files below style")
+        this.ok(((z.below("style" "files")) == false) "style not below files")
+        ; raising the docked panel does not lift it out of its band
+        z.raise("files")
+        this.ok(((this.order(z)) == "files,style") ("a raised docked panel stays under: " + (this.order(z))))
+    }
+
+    ; Inside a band, the one opened or touched last is on top.
+    fn windowsRaise:void () {
+        def z (new UiLayers())
+        z.add("a" "window")
+        z.add("b" "window")
+        z.add("c" "window")
+        z.open("a")
+        z.open("b")
+        z.open("c")
+        this.ok(((this.order(z)) == "a,b,c") ("opened in order: " + (this.order(z))))
+        z.raise("a")
+        this.ok(((this.order(z)) == "b,c,a") ("a pressed comes to the front: " + (this.order(z))))
+        z.close("c")
+        this.ok(((this.order(z)) == "b,a") ("a closed one is not painted: " + (this.order(z))))
+        z.open("c")
+        this.ok(((this.order(z)) == "b,a,c") ("opened again, on top: " + (this.order(z))))
+        this.ok(((z.isOpen("c")) == true) "c is open")
+    }
+
+    ; setOpen: a host's own flag, read every frame; only a change raises.
+    fn setOpenRaisesOnce:void () {
+        def z (new UiLayers())
+        z.add("hint" "window")
+        z.add("chart" "window")
+        z.setOpen("chart" true)
+        z.setOpen("hint" true)
+        this.ok(((z.top()) == "hint") "the one opened last is on top")
+        z.raise("chart")
+        z.setOpen("chart" true)
+        z.setOpen("hint" true)
+        this.ok(((z.top()) == "chart") "staying open does not raise again")
+        z.setOpen("hint" false)
+        z.setOpen("hint" true)
+        this.ok(((z.top()) == "hint") "closed and opened again: on top")
+    }
+
+    ; The bands: modal over windows, a menu over a modal, a toast over all.
+    fn bands:void () {
+        def z (new UiLayers())
+        z.add("toast" "toast")
+        z.add("menu" "menu")
+        z.add("dialog" "modal")
+        z.add("win" "window")
+        z.add("panel" "docked")
+        z.add("page" "base")
+        z.open("toast")
+        z.open("menu")
+        z.open("dialog")
+        z.open("win")
+        z.open("panel")
+        z.open("page")
+        this.ok(((this.order(z)) == "page,panel,win,dialog,menu,toast") ("bands: " + (this.order(z))))
+        this.ok((z.blocked("win")) "a window under an open dialog is blocked")
+        this.ok((z.blocked("panel")) "a panel under an open dialog is blocked")
+        this.ok(((z.blocked("dialog")) == false) "the dialog itself is not")
+        this.ok(((z.blocked("menu")) == false) "a menu over the dialog is not")
+        z.close("dialog")
+        this.ok(((z.blocked("win")) == false) "dialog closed: nothing blocked")
+        ; a bar whose menu opened moves bands
+        z.add("bar" "docked")
+        z.open("bar")
+        this.ok(((z.bandOf("bar")) == "docked") "the bar is docked")
+        z.setBand("bar" "menu")
+        def hit:[string] (z.hitOrder())
+        this.ok(((itemAt hit 0) == "toast") "the toast is still the top")
+        this.ok(((itemAt hit 1) == "bar") ("the open bar menu is next: " + (itemAt hit 1)))
+        this.ok(((UiLayers.rankOf("odd")) == (UiLayers.rankOf("window"))) "an unknown band floats like a window")
+    }
+
+    fn edges:void () {
+        def z (new UiLayers())
+        this.ok(((z.top()) == "") "nothing open: no top")
+        this.ok(((array_length (z.paintOrder())) == 0) "nothing open: nothing painted")
+        z.raise("nope")
+        z.close("nope")
+        this.ok(((z.isOpen("nope")) == false) "an unknown layer is closed")
+        z.open("w")
+        this.ok(((z.bandOf("w")) == "window") "opened without add: a window")
+        z.add("w" "docked")
+        this.ok(((z.bandOf("w")) == "docked") "added again: takes the band")
+        this.ok(((array_length z.layers) == 1) "added again: not twice")
+    }
+
+    sfn main:void () {
+        def c (new UiLayersCheck())
+        c.dockedUnderWindow()
+        c.windowsRaise()
+        c.setOpenRaisesOnce()
+        c.bands()
+        c.edges()
+        print ((to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
+        if (c.fails > 0) {
+            print "RESULT FAIL"
+        }
+    }
+}
