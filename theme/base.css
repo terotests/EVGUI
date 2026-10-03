@@ -809,11 +809,18 @@
   color: #ffffff;
 }
 
+/* A menu is as wide as its widest row (UiHost.fitSurfaces), never under
+   160px; every row and separator fills the card, so the hover bands are one
+   width. A long label does not widen it without end: MenuCtl.maxLabelChars
+   cuts it with "…". */
+.ui-dropdownmenu-content, .ui-contextmenu-content { align-items: stretch; }
 .ui-dropdownmenu-item, .ui-contextmenu-item {
   padding: 6px 12px;
   border-radius: 4px;
   color: #0f172a;
-  width: 160px;
+  width: 100%;
+  min-width: 160px;
+  white-space: nowrap;
 }
 .ui-dropdownmenu-item-disabled, .ui-contextmenu-item-disabled { opacity: 0.45; }
 /* A sub-trigger: its name at the start, the chevron at the far edge. */

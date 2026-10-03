@@ -929,8 +929,62 @@ class UiHost {
         def lay (new EVGLayout())
         lay.setPageSize(pageWidth pageHeight)
         lay.layout(page)
+        if (UiHost.fitSurfaces(r lay)) {
+            lay.layout(page)
+        }
         lastPage = page
         return page
+    }
+
+    ; A floating surface that is `width: fit-content` — a menu card — is laid
+    ; out against the element it hangs off, and EVG's fit-content only ever
+    ; SHRINKS from that width. A submenu hangs off its row, so its card came
+    ; out as wide as the row's inside and a long label (or a row's min-width)
+    ; ran past the card's right edge. This widens each such surface to its
+    ; widest in-flow child — the child's max-content width, or its min-width
+    ; when that is more — and says whether anything changed, so the caller
+    ; lays the page out once more. The sheet writes `fit-content` back on the
+    ; next pass, so nothing sticks.
+    sfn fitSurfaces:boolean (el:EVGElement lay:EVGLayout) {
+        def changed@(mutable):boolean false
+        if ((el.isSurface()) && (el.width.unitType == 6)) {
+            def widest:double 0.0
+            def k:int 0
+            while (k < (el.getChildCount())) {
+                def kid:EVGElement (el.getChild(k))
+                if ((kid.isAbsolute == false) && ((kid.isHidden()) == false)) {
+                    def w:double (lay.intrinsicWidthOf(kid))
+                    if kid.minWidth.isSet {
+                        def mw:double ((kid.minWidth.pixels + kid.box.marginLeftPx) + kid.box.marginRightPx)
+                        if (w < mw) {
+                            w = mw
+                        }
+                    }
+                    if (w > widest) {
+                        widest = w
+                    }
+                }
+                k = (k + 1)
+            }
+            def need:double (widest + (el.box.getHorizontalChrome()))
+            if el.maxWidth.isSet {
+                if (need > el.maxWidth.pixels) {
+                    need = el.maxWidth.pixels
+                }
+            }
+            if (need > (el.calculatedWidth + 0.5)) {
+                el.width = (EVGUnit.px(need))
+                changed = true
+            }
+        }
+        def i:int 0
+        while (i < (el.getChildCount())) {
+            if (UiHost.fitSurfaces((el.getChild(i)) lay)) {
+                changed = true
+            }
+            i = (i + 1)
+        }
+        return changed
     }
 
     ; The laid-out kit as an EVG tree. A control is only ever LOOKED at in a

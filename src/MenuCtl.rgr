@@ -86,6 +86,12 @@ class MenuCtl extends UiCtl {
     ; closed and at 100ms it is open. A submenu that opens the instant the
     ; pointer touches its row flashes open and shut as you drag past it.
     def subOpenDelayMs:double 100.0
+    ; The longest label a row shows, in characters; a longer one is cut and
+    ; ends in "…". The menu grows to fit its rows (min-width in the theme), so
+    ; this is what keeps one long name — a file title in a Recent list — from
+    ; making the menu as wide as the page. The accessible name stays whole:
+    ; `rows()` reads `rowName`, which is never cut. 0 turns the cut off.
+    def maxLabelChars:int 48
     ; The sub-trigger the pointer is resting on, and for how long. "" when the
     ; pointer is not on one.
     def pendingTid:string ""
@@ -382,6 +388,17 @@ class MenuCtl extends UiCtl {
 
     ; --- building -------------------------------------------------------------
 
+    ; What a row paints: its name, or as much of it as `maxLabelChars` allows.
+    fn shownName:string (text:string) {
+        if (maxLabelChars <= 1) {
+            return text
+        }
+        if ((strlen text) <= maxLabelChars) {
+            return text
+        }
+        return ((trim (substring text 0 (maxLabelChars - 1))) + "…")
+    }
+
     fn build:void () {
         def word:string (this.stateWord())
         def base:string (this.baseClass())
@@ -479,7 +496,7 @@ class MenuCtl extends UiCtl {
                 UiTree.clearChildren(el)
                 el.textContent = ""
                 el.elementType = 0
-                el.addChild((UiTree.label("" (base + "-item-label") it.name)))
+                el.addChild((UiTree.label("" (base + "-item-label") (this.shownName(it.name)))))
                 el.addChild((UiTree.label("" (base + "-subtrigger-chevron") "▸")))
             } {
                 if ((strlen it.shortcut) > 0) {
@@ -489,10 +506,10 @@ class MenuCtl extends UiCtl {
                     UiTree.clearChildren(el)
                     el.textContent = ""
                     el.elementType = 0
-                    el.addChild((UiTree.label("" (base + "-item-label") it.name)))
+                    el.addChild((UiTree.label("" (base + "-item-label") (this.shownName(it.name)))))
                     el.addChild((MenuCtl.keyCaps(it.shortcut base)))
                 } {
-                    UiTree.leafText(el it.name)
+                    UiTree.leafText(el (this.shownName(it.name)))
                 }
             }
             surface.addChild(el)
