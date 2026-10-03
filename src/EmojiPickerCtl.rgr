@@ -1,0 +1,804 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; EmojiPickerCtl — the emojis EVG draws, in a grid, found by typing
+; =============================================================================
+; After the macOS Character Viewer's small popover (⌃⌘Space): a search line,
+; a row of group tabs, a grid of emojis and, under it, the one in focus with
+; its name. What it offers is UiEmojiData: the emojis EVG's emoji face draws
+; as one glyph (scripts/emoji-catalog.mjs), so what is picked here is what a
+; slide and its PDF can show.
+;
+; Two halves:
+;
+;   UiEmojiCatalog   the data and the search, no elements: the groups, the
+;                    emojis of a group, the emojis that match a query (every
+;                    word of it begins a word of the English or Finnish name or
+;                    of the search words; a name that begins with the whole
+;                    query first). Checked on its own in Node.
+;   EmojiPickerCtl   the state (query, group, focus, scroll, recent) and the
+;                    keys, and `build()` draws the window of rows on screen.
+;
+; KEYS (the host sends them while the picker is open): typing goes into the
+; search; Backspace takes the last character off it; the arrows move in the
+; grid (Left/Right wrap between rows); PageUp/PageDown move a screenful; Home
+; and End go to the first and the last; Tab / Shift+Tab change the group;
+; Enter picks. A pick leaves the emoji in `picked` for the host to take
+; (`takePicked`), and puts it first in the Recent group.
+;
+; POINTER: a tab is `<tid>-g-<group>`, a cell `<tid>-e-<n>` (n: the place in
+; the list shown). Hover puts the name under the grid, a press picks. The
+; wheel scrolls (`scrollBy`).
+;
+; TO A READER: the search is a text field holding the query; the tabs a tab
+; list; the grid a listbox whose options are named by the emoji's name, the
+; one in focus selected.
+; =============================================================================
+
+Import "UiCtl.rgr"
+Import "UiTree.rgr"
+Import "UiEmojiData.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+
+class UiEmoji {
+    def group:string ""
+    def text:string ""
+    def name:string ""
+    def nameFi:string ""
+    ; lower-case words of the names, and of the search words
+    def nameWords:[string]
+    def tagWords:[string]
+
+    Constructor () {
+    }
+}
+
+class UiEmojiCatalog {
+    def items:[UiEmoji]
+    def groups:[string]
+    def loaded:boolean false
+
+    Constructor () {
+    }
+
+    ; The data parsed, once.
+    fn load:void () {
+        if loaded {
+            return
+        }
+        loaded = true
+        def chunks:[string] (UiEmojiData.chunks())
+        def c:int 0
+        while (c < (array_length chunks)) {
+            def lines:[string] (strsplit (itemAt chunks c) "\n")
+            def i:int 0
+            while (i < (array_length lines)) {
+                def parts:[string] (strsplit (itemAt lines i) "\t")
+                if ((array_length parts) >= 4) {
+                    def e (new UiEmoji())
+                    e.group = (itemAt parts 0)
+                    e.text = (itemAt parts 1)
+                    e.name = (itemAt parts 2)
+                    e.nameFi = (itemAt parts 3)
+                    e.nameWords = (UiEmojiCatalog.words((e.name + " " + e.nameFi)))
+                    if ((array_length parts) >= 5) {
+                        e.tagWords = (UiEmojiCatalog.words((itemAt parts 4)))
+                    }
+                    if ((this.hasGroup(e.group)) == false) {
+                        push groups e.group
+                    }
+                    push items e
+                }
+                i = (i + 1)
+            }
+            c = (c + 1)
+        }
+    }
+
+    fn hasGroup:boolean (g:string) {
+        def i:int 0
+        while (i < (array_length groups)) {
+            if ((itemAt groups i) == g) {
+                return true
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    fn count:int () {
+        return (array_length items)
+    }
+
+    fn at:UiEmoji (i:int) {
+        return (itemAt items i)
+    }
+
+    ; The place of an emoji in the catalogue, -1 when it is not there.
+    fn find:int (text:string) {
+        def i:int 0
+        while (i < (array_length items)) {
+            def e:UiEmoji (itemAt items i)
+            if (e.text == text) {
+                return i
+            }
+            i = (i + 1)
+        }
+        return -1
+    }
+
+    fn inGroup:[int] (g:string) {
+        def out:[int]
+        def i:int 0
+        while (i < (array_length items)) {
+            def e:UiEmoji (itemAt items i)
+            if (e.group == g) {
+                push out i
+            }
+            i = (i + 1)
+        }
+        return out
+    }
+
+    ; Lower-case words: split at spaces and ASCII punctuation; letters beyond
+    ; ASCII (ä, ö, é) belong to the word.
+    sfn words:[string] (s0:string) {
+        def s:string (to_lowercase s0)
+        def out:[string]
+        def from:int 0
+        def i:int 0
+        def n:int (strlen s)
+        while (i <= n) {
+            def sep:boolean true
+            if (i < n) {
+                def c:int (charAt s i)
+                sep = ((c <= 47) || (((c >= 58) && (c <= 64)) || (((c >= 91) && (c <= 96)) || ((c >= 123) && (c <= 127)))))
+            }
+            if sep {
+                if (i > from) {
+                    push out (substring s from i)
+                }
+                from = (i + 1)
+            }
+            i = (i + 1)
+        }
+        return out
+    }
+
+    sfn anyBegins:boolean (ws:[string] w:string) {
+        def i:int 0
+        while (i < (array_length ws)) {
+            if ((indexOf (itemAt ws i) w) == 0) {
+                return true
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    ; How well an emoji answers the query: 0 its name begins with the whole
+    ; query, 1 every word begins a word of its names, 2 of its names or search
+    ; words, -1 not at all.
+    fn rank:int (e:UiEmoji q:string qw:[string]) {
+        def inNames:boolean true
+        def i:int 0
+        while (i < (array_length qw)) {
+            def w:string (itemAt qw i)
+            if ((UiEmojiCatalog.anyBegins(e.nameWords w)) == false) {
+                inNames = false
+                if ((UiEmojiCatalog.anyBegins(e.tagWords w)) == false) {
+                    return -1
+                }
+            }
+            i = (i + 1)
+        }
+        if inNames {
+            if (((indexOf (to_lowercase e.name) q) == 0) || ((indexOf (to_lowercase e.nameFi) q) == 0)) {
+                return 0
+            }
+            return 1
+        }
+        return 2
+    }
+
+    ; The emojis that match, best first, in the catalogue's order within a rank.
+    fn search:[int] (query:string) {
+        def q:string (to_lowercase (trim query))
+        def qw:[string] (UiEmojiCatalog.words(q))
+        def out:[int]
+        if ((array_length qw) == 0) {
+            return out
+        }
+        def r1:[int]
+        def r2:[int]
+        def i:int 0
+        while (i < (array_length items)) {
+            def r:int (this.rank((itemAt items i) q qw))
+            if (r == 0) {
+                push out i
+            }
+            if (r == 1) {
+                push r1 i
+            }
+            if (r == 2) {
+                push r2 i
+            }
+            i = (i + 1)
+        }
+        def k:int 0
+        while (k < (array_length r1)) {
+            push out (itemAt r1 k)
+            k = (k + 1)
+        }
+        k = 0
+        while (k < (array_length r2)) {
+            push out (itemAt r2 k)
+            k = (k + 1)
+        }
+        return out
+    }
+
+    ; What a tab shows and is called.
+    sfn groupIcon:string (g:string) {
+        if (g == "recent") { return "🕘" }
+        if (g == "smileys") { return "😀" }
+        if (g == "people") { return "👋" }
+        if (g == "nature") { return "🐻" }
+        if (g == "food") { return "🍔" }
+        if (g == "travel") { return "🚗" }
+        if (g == "activities") { return "⚽" }
+        if (g == "objects") { return "💡" }
+        if (g == "symbols") { return "🔣" }
+        if (g == "flags") { return "🏁" }
+        return "•"
+    }
+
+    sfn groupName:string (g:string lang:string) {
+        def fi:boolean (lang == "fi")
+        if (g == "recent") {
+            if fi { return "Viimeksi käytetyt" }
+            return "Recently used"
+        }
+        if (g == "smileys") {
+            if fi { return "Hymiöt ja tunteet" }
+            return "Smileys & emotion"
+        }
+        if (g == "people") {
+            if fi { return "Ihmiset" }
+            return "People & body"
+        }
+        if (g == "nature") {
+            if fi { return "Eläimet ja luonto" }
+            return "Animals & nature"
+        }
+        if (g == "food") {
+            if fi { return "Ruoka ja juoma" }
+            return "Food & drink"
+        }
+        if (g == "travel") {
+            if fi { return "Matkailu ja paikat" }
+            return "Travel & places"
+        }
+        if (g == "activities") {
+            if fi { return "Toiminta" }
+            return "Activities"
+        }
+        if (g == "objects") {
+            if fi { return "Esineet" }
+            return "Objects"
+        }
+        if (g == "symbols") {
+            if fi { return "Symbolit" }
+            return "Symbols"
+        }
+        if (g == "flags") {
+            if fi { return "Liput" }
+            return "Flags"
+        }
+        return g
+    }
+}
+
+class EmojiPickerCtl extends UiCtl {
+    def cat:UiEmojiCatalog (new UiEmojiCatalog())
+    ; "en" or "fi": the names shown and the tabs' names
+    def lang:string "en"
+    def placeholder:string "Search emoji"
+    def emptyText:string "No emoji found"
+    def query:string ""
+    def group:string "smileys"
+    ; most recent first
+    def recent:[string]
+    def recentMax:int 18
+    ; the list shown: places in the catalogue
+    def list:[int]
+    ; the one in focus and the one under the pointer, places in `list`
+    def sel:int 0
+    def hot:int -1
+    def cols:int 9
+    def rowsShown:int 6
+    ; the first row on screen
+    def top:int 0
+    def picked:string ""
+
+    Constructor () {
+    }
+
+    fn setup:void (id:string label:string) {
+        tid = id
+        name = label
+        cat.load()
+        if ((array_length recent) > 0) {
+            group = "recent"
+        }
+        this.refresh()
+    }
+
+    ; --- the list ---------------------------------------------------------------
+    fn searching:boolean () {
+        return ((strlen (trim query)) > 0)
+    }
+
+    ; The tabs in order: Recent while it has any, then the catalogue's groups.
+    fn tabs:[string] () {
+        def out:[string]
+        if ((array_length recent) > 0) {
+            push out "recent"
+        }
+        def i:int 0
+        while (i < (array_length cat.groups)) {
+            push out (itemAt cat.groups i)
+            i = (i + 1)
+        }
+        return out
+    }
+
+    fn refresh:void () {
+        if (this.searching()) {
+            list = (cat.search(query))
+        } {
+            if (group == "recent") {
+                def r:[int]
+                def i:int 0
+                while (i < (array_length recent)) {
+                    def at:int (cat.find((itemAt recent i)))
+                    if (at >= 0) {
+                        push r at
+                    }
+                    i = (i + 1)
+                }
+                list = r
+            } {
+                list = (cat.inGroup(group))
+            }
+        }
+        hot = -1
+        this.setSel(sel)
+    }
+
+    fn count:int () {
+        return (array_length list)
+    }
+
+    fn rowCount:int () {
+        return (idiv (((this.count()) + cols) - 1) cols)
+    }
+
+    ; Focus on place i (clamped), scrolled into view.
+    fn setSel:void (i:int) {
+        def n:int (this.count())
+        def v:int i
+        if (v >= n) {
+            v = (n - 1)
+        }
+        if (v < 0) {
+            v = 0
+        }
+        sel = v
+        def row:int (idiv sel cols)
+        if (row < top) {
+            top = row
+        }
+        if (row >= (top + rowsShown)) {
+            top = ((row - rowsShown) + 1)
+        }
+        this.clampTop()
+    }
+
+    fn clampTop:void () {
+        def most:int ((this.rowCount()) - rowsShown)
+        if (top > most) {
+            top = most
+        }
+        if (top < 0) {
+            top = 0
+        }
+    }
+
+    fn scrollBy:void (rows:int) {
+        top = (top + rows)
+        this.clampTop()
+    }
+
+    ; The emoji at place i of the list, "" outside it.
+    fn emojiAt:string (i:int) {
+        if ((i < 0) || (i >= (this.count()))) {
+            return ""
+        }
+        def e:UiEmoji (cat.at((itemAt list i)))
+        return e.text
+    }
+
+    fn nameAt:string (i:int) {
+        if ((i < 0) || (i >= (this.count()))) {
+            return ""
+        }
+        def e:UiEmoji (cat.at((itemAt list i)))
+        if ((lang == "fi") && ((strlen e.nameFi) > 0)) {
+            return e.nameFi
+        }
+        return e.name
+    }
+
+    fn selected:string () {
+        return (this.emojiAt(sel))
+    }
+
+    ; --- changing it ----------------------------------------------------------------
+    fn setGroup:void (g:string) {
+        query = ""
+        group = g
+        sel = 0
+        top = 0
+        this.refresh()
+    }
+
+    fn stepGroup:void (d:int) {
+        def ts:[string] (this.tabs())
+        def n:int (array_length ts)
+        if (n == 0) {
+            return
+        }
+        def at:int 0
+        def i:int 0
+        while (i < n) {
+            if ((itemAt ts i) == group) {
+                at = i
+            }
+            i = (i + 1)
+        }
+        this.setGroup((itemAt ts ((((at + d) % n) + n) % n)))
+    }
+
+    fn setQuery:void (q:string) {
+        query = q
+        sel = 0
+        top = 0
+        this.refresh()
+    }
+
+    ; The query without its last character (a surrogate pair is one).
+    fn backspace:void () {
+        def n:int (strlen query)
+        if (n == 0) {
+            return
+        }
+        def cut:int 1
+        if (n >= 2) {
+            def c:int (charAt query (n - 1))
+            if ((c >= 56320) && (c <= 57343)) {
+                cut = 2
+            }
+        }
+        this.setQuery((substring query 0 (n - cut)))
+    }
+
+    fn pick:void (i:int) {
+        def t:string (this.emojiAt(i))
+        if ((strlen t) == 0) {
+            return
+        }
+        picked = t
+        def r:[string]
+        push r t
+        def k:int 0
+        while ((k < (array_length recent)) && ((array_length r) < recentMax)) {
+            if ((itemAt recent k) != t) {
+                push r (itemAt recent k)
+            }
+            k = (k + 1)
+        }
+        recent = r
+    }
+
+    ; The emoji picked since the last call ("" none), and it is forgotten.
+    fn takePicked:string () {
+        def t:string picked
+        picked = ""
+        return t
+    }
+
+    ; Recent as one line of emojis separated by spaces, for the host to keep.
+    fn recentText:string () {
+        def out:string ""
+        def i:int 0
+        while (i < (array_length recent)) {
+            if (i > 0) {
+                out = (out + " ")
+            }
+            out = (out + (itemAt recent i))
+            i = (i + 1)
+        }
+        return out
+    }
+
+    fn setRecentText:void (s:string) {
+        cat.load()
+        def r:[string]
+        def parts:[string] (strsplit s " ")
+        def i:int 0
+        while ((i < (array_length parts)) && ((array_length r) < recentMax)) {
+            def t:string (trim (itemAt parts i))
+            if (((strlen t) > 0) && ((cat.find(t)) >= 0)) {
+                push r t
+            }
+            i = (i + 1)
+        }
+        recent = r
+    }
+
+    ; --- the keyboard ------------------------------------------------------------------
+    fn typeChar:boolean (target:string ch:string) {
+        this.setQuery((query + ch))
+        return true
+    }
+
+    fn keyDownWith:string (target:string key:string shift:boolean ctrl:boolean) {
+        if (key == "Tab") {
+            if shift {
+                this.stepGroup(-1)
+            } {
+                this.stepGroup(1)
+            }
+            return ""
+        }
+        return (this.keyDown(target key))
+    }
+
+    fn keyDown:string (target:string key:string) {
+        hot = -1
+        if (key == "ArrowRight") {
+            this.setSel((sel + 1))
+        }
+        if (key == "ArrowLeft") {
+            this.setSel((sel - 1))
+        }
+        if (key == "ArrowDown") {
+            if ((sel + cols) < (this.count())) {
+                this.setSel((sel + cols))
+            } {
+                ; the last row may be short: to its last emoji
+                if ((idiv sel cols) < ((this.rowCount()) - 1)) {
+                    this.setSel(((this.count()) - 1))
+                }
+            }
+        }
+        if (key == "ArrowUp") {
+            if (sel >= cols) {
+                this.setSel((sel - cols))
+            }
+        }
+        if (key == "PageDown") {
+            this.setSel((sel + (cols * rowsShown)))
+        }
+        if (key == "PageUp") {
+            this.setSel((sel - (cols * rowsShown)))
+        }
+        if (key == "Home") {
+            this.setSel(0)
+        }
+        if (key == "End") {
+            this.setSel(((this.count()) - 1))
+        }
+        if (key == "Backspace") {
+            this.backspace()
+        }
+        if (key == "Enter") {
+            this.pick(sel)
+        }
+        return ""
+    }
+
+    ; --- the pointer -------------------------------------------------------------------
+    fn tabTid:string (g:string) {
+        return (tid + "-g-" + g)
+    }
+
+    fn cellTid:string (i:int) {
+        return (tid + "-e-" + (to_string i))
+    }
+
+    ; The place in the list a cell's id names, -1 for anything else.
+    fn cellOf:int (target:string) {
+        def pre:string (tid + "-e-")
+        if ((indexOf target pre) != 0) {
+            return -1
+        }
+        return (?? (str2int (substring target (strlen pre) (strlen target))) -1)
+    }
+
+    fn groupOf:string (target:string) {
+        def pre:string (tid + "-g-")
+        if ((indexOf target pre) != 0) {
+            return ""
+        }
+        return (substring target (strlen pre) (strlen target))
+    }
+
+    fn activate:string (target:string) {
+        def g:string (this.groupOf(target))
+        if ((strlen g) > 0) {
+            this.setGroup(g)
+            return target
+        }
+        def i:int (this.cellOf(target))
+        if (i >= 0) {
+            this.setSel(i)
+            this.pick(i)
+            return target
+        }
+        return ""
+    }
+
+    fn hover:string (target:string) {
+        hot = (this.cellOf(target))
+        return ""
+    }
+
+    fn unhover:string () {
+        hot = -1
+        return ""
+    }
+
+    ; --- drawing --------------------------------------------------------------------------
+    fn build:void () {
+        def root:EVGElement (UiTree.div(tid "emoji-picker"))
+        def search:EVGElement (UiTree.div((tid + "-search") "emoji-search"))
+        if ((strlen query) > 0) {
+            search.addChild((UiTree.label((tid + "-query") "emoji-query" query)))
+        }
+        search.addChild((UiTree.div((tid + "-caret") "emoji-caret")))
+        if ((strlen query) == 0) {
+            search.addChild((UiTree.label((tid + "-ph") "emoji-placeholder" placeholder)))
+        }
+        root.addChild(search)
+        def tabRow:EVGElement (UiTree.div((tid + "-tabs") "emoji-tabs"))
+        def ts:[string] (this.tabs())
+        def i:int 0
+        while (i < (array_length ts)) {
+            def g:string (itemAt ts i)
+            def cls:string "emoji-tab"
+            if (((this.searching()) == false) && (g == group)) {
+                cls = "emoji-tab emoji-tab-on"
+            }
+            tabRow.addChild((UiTree.label((this.tabTid(g)) cls (UiEmojiCatalog.groupIcon(g)))))
+            i = (i + 1)
+        }
+        root.addChild(tabRow)
+        def grid:EVGElement (UiTree.div((tid + "-grid") "emoji-grid"))
+        if ((this.count()) == 0) {
+            grid.addChild((UiTree.label((tid + "-empty") "emoji-empty" emptyText)))
+        }
+        def r:int top
+        while ((r < (top + rowsShown)) && (r < (this.rowCount()))) {
+            def row:EVGElement (UiTree.div((tid + "-r-" + (to_string r)) "emoji-row"))
+            def c:int 0
+            while (c < cols) {
+                def k:int ((r * cols) + c)
+                if (k < (this.count())) {
+                    def ccls:string "emoji-cell"
+                    if (k == sel) {
+                        ccls = "emoji-cell emoji-cell-on"
+                    } {
+                        if (k == hot) {
+                            ccls = "emoji-cell emoji-cell-hot"
+                        }
+                    }
+                    row.addChild((UiTree.label((this.cellTid(k)) ccls (this.emojiAt(k)))))
+                }
+                c = (c + 1)
+            }
+            grid.addChild(row)
+            r = (r + 1)
+        }
+        root.addChild(grid)
+        def foot:EVGElement (UiTree.div((tid + "-foot") "emoji-foot"))
+        def shown:int sel
+        if (hot >= 0) {
+            shown = hot
+        }
+        def big:string (this.emojiAt(shown))
+        def label:string (this.nameAt(shown))
+        if (((this.searching()) == false) && ((strlen big) == 0)) {
+            label = (UiEmojiCatalog.groupName(group lang))
+        }
+        if ((strlen big) > 0) {
+            foot.addChild((UiTree.label((tid + "-big") "emoji-big" big)))
+        }
+        foot.addChild((UiTree.label((tid + "-name") "emoji-name" label)))
+        root.addChild(foot)
+        rootEl = root
+    }
+
+    ; --- what it is, to a reader ------------------------------------------------------------
+    fn tids:[string] () {
+        def a:[string]
+        push a tid
+        push a (tid + "-search")
+        def ts:[string] (this.tabs())
+        def i:int 0
+        while (i < (array_length ts)) {
+            push a (this.tabTid((itemAt ts i)))
+            i = (i + 1)
+        }
+        push a (tid + "-grid")
+        def k:int (top * cols)
+        while ((k < ((top + rowsShown) * cols)) && (k < (this.count()))) {
+            push a (this.cellTid(k))
+            k = (k + 1)
+        }
+        return a
+    }
+
+    fn isFocusable:boolean (target:string) {
+        return (target == (tid + "-search"))
+    }
+
+    fn rows:[UiRow] () {
+        def out:[UiRow]
+        def root:UiRow (UiRow.of(tid (EVGA11yRole.group()) name))
+        push out root
+        def s:UiRow (UiRow.of((tid + "-search") (EVGA11yRole.textField()) placeholder))
+        s.parentTid = tid
+        s.hasText = true
+        s.text = query
+        s.placeholder = placeholder
+        s.focusable = true
+        s.tabStop = true
+        push out s
+        def tl:UiRow (UiRow.of((tid + "-tabs") (EVGA11yRole.tabList()) name))
+        tl.parentTid = tid
+        push out tl
+        def ts:[string] (this.tabs())
+        def i:int 0
+        while (i < (array_length ts)) {
+            def g:string (itemAt ts i)
+            def t:UiRow (UiRow.of((this.tabTid(g)) (EVGA11yRole.tab()) (UiEmojiCatalog.groupName(g lang))))
+            t.parentTid = (tid + "-tabs")
+            if (((this.searching()) == false) && (g == group)) {
+                t.selected = 2
+            } {
+                t.selected = 1
+            }
+            push out t
+            i = (i + 1)
+        }
+        def lb:UiRow (UiRow.of((tid + "-grid") (EVGA11yRole.listBox()) name))
+        lb.parentTid = tid
+        push out lb
+        def k:int (top * cols)
+        while ((k < ((top + rowsShown) * cols)) && (k < (this.count()))) {
+            def o:UiRow (UiRow.of((this.cellTid(k)) (EVGA11yRole.option()) (this.nameAt(k))))
+            o.parentTid = (tid + "-grid")
+            if (k == sel) {
+                o.selected = 2
+            } {
+                o.selected = 1
+            }
+            push out o
+            k = (k + 1)
+        }
+        return out
+    }
+}

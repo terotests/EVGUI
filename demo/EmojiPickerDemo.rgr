@@ -1,0 +1,80 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; EmojiPickerDemo — EmojiPickerCtl in a UiHost, for emoji-picker-check.mjs
+; =============================================================================
+; The picker alone on a page: built, styled by the kit's theme, laid out, and
+; driven by the pointer (pressAt / hoverAt) and the keys (key / type) the way
+; a host drives it.
+; =============================================================================
+
+Import "../src/EmojiPickerCtl.rgr"
+Import "../src/UiHost.rgr"
+Import "pkg:evg/EVGElement.rgr"
+
+class EmojiPickerDemo {
+    def host:UiHost (new UiHost())
+    def picker:EmojiPickerCtl (new EmojiPickerCtl())
+    def css:string ""
+    def theme:string ""
+
+    Constructor () {
+    }
+
+    fn init:void (sheet:string themeName:string) {
+        css = sheet
+        theme = themeName
+        picker.setup("ep" "Emoji")
+        this.rebuild()
+    }
+
+    fn rebuild:void () {
+        def h (new UiHost())
+        host = h
+        host.addStyleSheet(css)
+        host.setTheme(theme)
+        host.setPageSize(360.0 420.0)
+        picker.build()
+        host.add(picker)
+        host.layout()
+    }
+
+    fn pressAt:string (x:double y:double) {
+        def t:string (host.hitTest(x y))
+        picker.activate(t)
+        this.rebuild()
+        return t
+    }
+
+    fn hoverAt:void (x:double y:double) {
+        picker.hover((host.hitTest(x y)))
+        this.rebuild()
+    }
+
+    fn key:void (k:string shift:boolean) {
+        picker.keyDownWith(picker.tid k shift false)
+        this.rebuild()
+    }
+
+    fn type:void (s:string) {
+        picker.typeChar(picker.tid s)
+        this.rebuild()
+    }
+
+    fn displayListJson:string () {
+        return (host.displayListJson())
+    }
+
+    ; Where an element was laid out: "x y w h", "" when it is not on the page.
+    fn rectOf:string (id:string) {
+        if (null? host.lastPage) {
+            return ""
+        }
+        def found@(optional):EVGElement (UiTree.findById((unwrap host.lastPage) id))
+        if (null? found) {
+            return ""
+        }
+        def el:EVGElement (unwrap found)
+        return ((to_string el.calculatedX) + " " + (to_string el.calculatedY) + " " + (to_string el.calculatedWidth) + " " + (to_string el.calculatedHeight))
+    }
+}

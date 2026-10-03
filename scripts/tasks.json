@@ -7,6 +7,7 @@
   "ui:accordion:check": "npm run ui:demo:build --silent && node gallery/evgui/demo/accordion-check.mjs",
   "ui:autocomplete:check": "npm run ui:demo:build --silent && node gallery/evgui/demo/build.mjs && node gallery/evgui/demo/autocomplete-check.mjs",
   "ui:select:check": "npm run ui:demo:build --silent && node gallery/evgui/demo/build.mjs && node gallery/evgui/demo/select-check.mjs",
+  "ui:emoji:check": "node dist/rgrc.js -es6 -nodemodule ./gallery/evgui/demo/EmojiPickerDemo.rgr -d=./gallery/evgui/bin -o=EmojiPickerDemo.cjs && node gallery/evgui/demo/emoji-picker-check.mjs",
   "ui:colorpicker:check": "npm run ui:demo:build --silent && node gallery/evgui/demo/build.mjs && node gallery/evgui/demo/colorpicker-check.mjs",
   "ui:window:check": "npm run ui:demo:build --silent && node gallery/evgui/demo/build.mjs && node gallery/evgui/demo/window-check.mjs",
   "ui:combobox:demo": "npm run ui:demo:build --silent && node gallery/evgui/demo/build.mjs && node gallery/evgui/demo/combobox-demo-check.mjs",

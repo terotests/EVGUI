@@ -1502,3 +1502,83 @@
 .ui-dropdownmenu-item-destructive:hover, .ui-contextmenu-item-destructive:hover { background-color: #fef2f2; }
 .ui-dropdownmenu-item-destructive:focus, .ui-contextmenu-item-destructive:focus { background-color: #fee2e2; }
 .theme-dark .ui-dropdownmenu-item-destructive, .theme-dark .ui-contextmenu-item-destructive { color: #f87171; }
+
+/* --- emoji picker ----------------------------------------------------------------
+ * EmojiPickerCtl: the search line, the group tabs, a grid of rows of cells and
+ * the one in focus with its name under it. The cells are fixed squares, so
+ * nine of them make the picker's width whatever the emoji are. */
+.emoji-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 316px;
+}
+.emoji-search {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background-color: #ffffff;
+}
+.emoji-query { color: #0f172a; font-size: 13px; }
+.emoji-caret { width: 2px; height: 16px; background-color: #2563eb; }
+.emoji-placeholder { color: #64748b; font-size: 13px; margin-left: 4px; }
+.emoji-tabs {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 2px;
+}
+.emoji-tab {
+  width: 28px;
+  height: 26px;
+  line-height: 26px;
+  font-size: 15px;
+  text-align: center;
+  border-radius: 5px;
+}
+.emoji-tab:hover { background-color: #f1f5f9; }
+.emoji-tab-on { background-color: #dbeafe; }
+.emoji-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  height: 214px;
+}
+.emoji-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 2px;
+}
+.emoji-cell {
+  width: 33px;
+  height: 34px;
+  line-height: 34px;
+  font-size: 22px;
+  text-align: center;
+  border-radius: 6px;
+}
+.emoji-cell-hot { background-color: #f1f5f9; }
+.emoji-cell-on { background-color: #2563eb; }
+.emoji-empty { color: #64748b; font-size: 13px; padding: 12px 4px; }
+.emoji-foot {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 4px;
+}
+.emoji-big { font-size: 24px; height: 30px; line-height: 30px; }
+.emoji-name { color: #334155; font-size: 13px; }
+.theme-dark .emoji-search { background-color: #0f172a; border-color: #334155; }
+.theme-dark .emoji-query { color: #e2e8f0; }
+.theme-dark .emoji-tab:hover, .theme-dark .emoji-cell-hot { background-color: #1e293b; }
+.theme-dark .emoji-tab-on { background-color: #1e3a8a; }
+.theme-dark .emoji-foot { border-color: #334155; }
+.theme-dark .emoji-name { color: #cbd5e1; }
