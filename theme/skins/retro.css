@@ -2,6 +2,7 @@
  *
  * "retro": a glossy lime skin in the spirit of the late-90s media player
  * skins (and of terotests/EVGMusicPlayer's `lime`, whose palette this is).
+ * The whole palette follows one variable, `--retro-hue`.
  * Chrome is a shell of lime gradients with a dark edge; anything that holds
  * content (menus, lists, inputs, dialogs) is a dark inset display with pale
  * lime ink; buttons are round glossy caps, the primary one lit.
@@ -19,27 +20,34 @@
  */
 
 @vars retro {
-  --retro-shell-a: #c8f76e;
-  --retro-shell-b: #4f8f1a;
-  --retro-crest-a: #eeffc0;
-  --retro-crest-b: #86c932;
-  --retro-chin-a: #3a6b14;
-  --retro-chin-b: #142807;
-  --retro-edge: #1f3d08;
-  --retro-rim: #e6ff9a;
-  --retro-screen: #041003;
-  --retro-screen-2: #0c1f04;
-  --retro-screen-3: #1b3509;
-  --retro-ink: #e6ffb8;
-  --retro-ink-dim: #8fc24e;
-  --retro-btn-a: #f4ffd8;
-  --retro-btn-b: #8cc63f;
-  --retro-btn-ink: #1c3a06;
+  /* THE BASE COLOUR. Every colour below is this hue at its own saturation
+     and lightness, so one number re-colours the skin: 88 lime (the
+     default), 200 ice, 25 ember, 275 violet, 335 rose. An app sets it with
+     a later `@vars retro { --retro-hue: 200; }`. */
+  --retro-hue: 88;
+  --retro-shell-a: hsl(var(--retro-hue) 90% 70%);
+  --retro-shell-b: hsl(var(--retro-hue) 69% 33%);
+  --retro-crest-a: hsl(var(--retro-hue) 100% 88%);
+  --retro-crest-b: hsl(var(--retro-hue) 60% 49%);
+  --retro-chin-a: hsl(var(--retro-hue) 68% 25%);
+  --retro-chin-b: hsl(var(--retro-hue) 70% 9%);
+  --retro-edge: hsl(var(--retro-hue) 77% 13%);
+  --retro-rim: hsl(var(--retro-hue) 100% 80%);
+  --retro-screen: hsl(var(--retro-hue) 68% 4%);
+  --retro-screen-2: hsl(var(--retro-hue) 77% 7%);
+  --retro-screen-3: hsl(var(--retro-hue) 71% 12%);
+  --retro-ink: hsl(var(--retro-hue) 100% 86%);
+  --retro-ink-dim: hsl(var(--retro-hue) 49% 53%);
+  --retro-btn-a: hsl(var(--retro-hue) 100% 92%);
+  --retro-btn-b: hsl(var(--retro-hue) 54% 51%);
+  --retro-btn-ink: hsl(var(--retro-hue) 81% 12%);
   --retro-hot-a: #ffffff;
-  --retro-hot-b: #c6ff5a;
-  --retro-play-a: #d6ff6a;
-  --retro-play-b: #4b8f12;
-  --retro-glow: rgba(170, 255, 60, 0.55);
+  --retro-hot-b: hsl(var(--retro-hue) 100% 68%);
+  --retro-play-a: hsl(var(--retro-hue) 100% 71%);
+  --retro-play-b: hsl(var(--retro-hue) 78% 32%);
+  --retro-fill-a: hsl(var(--retro-hue) 100% 74%);
+  --retro-fill-b: hsl(var(--retro-hue) 78% 46%);
+  --retro-glow: hsla(var(--retro-hue), 100%, 62%, 0.55);
   --retro-danger: #ff8a6a;
   /* A gradient that paints nothing. A state rule that lays a gradient on
      (hover, open, checked) needs the base rule to lay one too: `background`
@@ -248,7 +256,7 @@
 .theme-retro .ui-slider-track,
 .theme-retro .ui-progress { background-color: var(--retro-screen-2); border: 1px solid var(--retro-edge); }
 .theme-retro .ui-slider-range,
-.theme-retro .ui-progress-indicator { background: linear-gradient(90deg, #e0ff7a, #6fcf1a); }
+.theme-retro .ui-progress-indicator { background: linear-gradient(90deg, var(--retro-fill-a), var(--retro-fill-b)); }
 .theme-retro .ui-slider-thumb { background: linear-gradient(180deg, var(--retro-btn-a), var(--retro-btn-b)); border: 1.5px solid var(--retro-edge); }
 
 /* --- windows: a lime shell around a dark display ------------------------------ */
