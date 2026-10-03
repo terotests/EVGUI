@@ -1,0 +1,266 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; UiLayers — which surface is on top: the order a host paints its layers in
+; and the order it hands a press to them
+; =============================================================================
+; A host that draws more than one surface over its page (a docked panel, a
+; popover, a window, a dialog, an open menu, a toast) paints each as its own
+; display list. Without a model, that order is the order the paint code was
+; written in, and the hit test is a second list written somewhere else: the
+; two drift, and a window opened over a docked panel is drawn behind it while
+; a press there still goes to the window.
+;
+; This class is the one order both read. It knows nothing about pixels: a
+; layer is a name, a BAND and whether it is open.
+;
+;   base     0   the page itself, under everything
+;   docked  10   panels fixed to an edge (a files list, a help panel, a bar)
+;   window  20   things that float: popovers, editors, movable windows
+;   modal   30   a dialog that takes the page
+;   menu    40   an open menu or list, over a dialog that opened it
+;   toast   50   a short note, over everything
+;
+; Inside a band the layer opened or raised last is on top: `open` (and
+; `setOpen` turning one on) raises, and a host calls `raise` when a press
+; lands in a window, so the window you touch comes to the front. Between
+; bands the band decides: a window always floats over a docked panel,
+; however long ago it was opened.
+;
+;   paintOrder()  open layers, bottom first — draw them in this order
+;   hitOrder()    open layers, top first — offer a press in this order
+;   top()         the topmost open layer, "" for none
+;   blocked(id)   an open modal is above it: it takes no press
+;
+; Checked by demo/UiLayersCheck.rgr (`ui:layers:check`).
+; =============================================================================
+
+class UiLayer {
+    def id:string ""
+    def band:string "window"
+    def open:boolean false
+    ; when it was last raised: the larger is the higher in its band
+    def stamp:int 0
+}
+
+class UiLayers {
+    def layers:[UiLayer]
+    def clock:int 0
+
+    Constructor () {
+    }
+
+    ; The rank of a band; a name it does not know floats like a window.
+    sfn rankOf:int (band:string) {
+        if (band == "base") { return 0 }
+        if (band == "docked") { return 10 }
+        if (band == "window") { return 20 }
+        if (band == "modal") { return 30 }
+        if (band == "menu") { return 40 }
+        if (band == "toast") { return 50 }
+        return 20
+    }
+
+    fn find@(optional):UiLayer (id:string) {
+        def i:int 0
+        while (i < (array_length layers)) {
+            def l:UiLayer (itemAt layers i)
+            if (l.id == id) {
+                def hit@(optional):UiLayer l
+                return hit
+            }
+            i = (i + 1)
+        }
+        def miss@(optional):UiLayer
+        return miss
+    }
+
+    ; A layer, closed. Added again it keeps its place and takes the band.
+    ; Layers added in the same band stack in the order they were added.
+    fn add:void (id:string band:string) {
+        def had@(optional):UiLayer (this.find(id))
+        if (!null? had) {
+            had.band = band
+            return
+        }
+        def l (new UiLayer())
+        l.id = id
+        l.band = band
+        clock = (clock + 1)
+        l.stamp = clock
+        push layers l
+    }
+
+    fn has:boolean (id:string) {
+        def l@(optional):UiLayer (this.find(id))
+        return (!null? l)
+    }
+
+    ; Moving a layer to another band (a bar whose menu opened goes to "menu").
+    fn setBand:void (id:string band:string) {
+        def l@(optional):UiLayer (this.find(id))
+        if (null? l) {
+            return
+        }
+        l.band = band
+    }
+
+    fn bandOf:string (id:string) {
+        def l@(optional):UiLayer (this.find(id))
+        if (null? l) {
+            return ""
+        }
+        return l.band
+    }
+
+    ; Opened: shown, and on top of its band. A layer not added yet is added
+    ; as a window.
+    fn open:void (id:string) {
+        if ((this.has(id)) == false) {
+            this.add(id "window")
+        }
+        def l@(optional):UiLayer (this.find(id))
+        if (null? l) {
+            return
+        }
+        l.open = true
+        this.raise(id)
+    }
+
+    fn close:void (id:string) {
+        def l@(optional):UiLayer (this.find(id))
+        if (null? l) {
+            return
+        }
+        l.open = false
+    }
+
+    ; For a host whose surfaces keep their own open flag: called with that
+    ; flag, it raises a layer only as it opens, so one opened since the last
+    ; call comes to the front and one that stayed open keeps its place.
+    fn setOpen:void (id:string on:boolean) {
+        if on {
+            if ((this.isOpen(id)) == false) {
+                this.open(id)
+            }
+            return
+        }
+        this.close(id)
+    }
+
+    fn isOpen:boolean (id:string) {
+        def l@(optional):UiLayer (this.find(id))
+        if (null? l) {
+            return false
+        }
+        return l.open
+    }
+
+    ; To the front of its band: a press in it, a focus moved into it.
+    fn raise:void (id:string) {
+        def l@(optional):UiLayer (this.find(id))
+        if (null? l) {
+            return
+        }
+        clock = (clock + 1)
+        l.stamp = clock
+    }
+
+    ; Whether `a` is drawn under `b` (whether open or not).
+    fn below:boolean (a:string b:string) {
+        def la@(optional):UiLayer (this.find(a))
+        def lb@(optional):UiLayer (this.find(b))
+        if (null? la) {
+            return false
+        }
+        if (null? lb) {
+            return false
+        }
+        return (UiLayers.under((unwrap la) (unwrap lb)))
+    }
+
+    sfn under:boolean (a:UiLayer b:UiLayer) {
+        def ra:int (UiLayers.rankOf(a.band))
+        def rb:int (UiLayers.rankOf(b.band))
+        if (ra != rb) {
+            return (ra < rb)
+        }
+        return (a.stamp < b.stamp)
+    }
+
+    ; The open layers, bottom first.
+    fn paintOrder:[string] () {
+        def open:[UiLayer]
+        def i:int 0
+        while (i < (array_length layers)) {
+            def l:UiLayer (itemAt layers i)
+            if l.open {
+                ; insertion: past every one already placed that is under it
+                def at:int (array_length open)
+                while (at > 0) {
+                    def prev:UiLayer (itemAt open (at - 1))
+                    if (UiLayers.under(prev l)) {
+                        break
+                    }
+                    at = (at - 1)
+                }
+                insert open at l
+            }
+            i = (i + 1)
+        }
+        def out:[string]
+        def k:int 0
+        while (k < (array_length open)) {
+            def o:UiLayer (itemAt open k)
+            push out o.id
+            k = (k + 1)
+        }
+        return out
+    }
+
+    ; The open layers, top first: the order a press is offered in.
+    fn hitOrder:[string] () {
+        def up:[string] (this.paintOrder())
+        def out:[string]
+        def i:int ((array_length up) - 1)
+        while (i >= 0) {
+            push out (itemAt up i)
+            i = (i - 1)
+        }
+        return out
+    }
+
+    fn top:string () {
+        def up:[string] (this.paintOrder())
+        def n:int (array_length up)
+        if (n == 0) {
+            return ""
+        }
+        return (itemAt up (n - 1))
+    }
+
+    ; An open modal layer above `id`: what is under a dialog takes no press.
+    fn blocked:boolean (id:string) {
+        def me@(optional):UiLayer (this.find(id))
+        if (null? me) {
+            return false
+        }
+        def i:int 0
+        while (i < (array_length layers)) {
+            def l:UiLayer (itemAt layers i)
+            if ((l.open && (l.band == "modal")) && (l.id != id)) {
+                if (UiLayers.under((unwrap me) l)) {
+                    return true
+                }
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    ; "a,b,c": the paint order, for a host that hands it to a page.
+    fn paintOrderText:string () {
+        def up:[string] (this.paintOrder())
+        return (join up ",")
+    }
+}
