@@ -298,3 +298,14 @@
 .theme-retro .ui-toast-title { color: var(--retro-ink); }
 .theme-retro .ui-toast-description { color: var(--retro-ink-dim); }
 .theme-retro .ui-tooltip-content { background-color: var(--retro-screen); color: var(--retro-ink); border: 1px solid var(--retro-rim); }
+
+/* the emoji picker */
+.theme-retro .emoji-search { background-color: var(--retro-screen); border-color: var(--retro-edge); }
+.theme-retro .emoji-query { color: var(--retro-ink); }
+.theme-retro .emoji-placeholder { color: var(--retro-ink-dim); }
+.theme-retro .emoji-caret { background-color: var(--retro-ink); }
+.theme-retro .emoji-tab:hover, .theme-retro .emoji-cell-hot { background-color: var(--retro-screen-3); }
+.theme-retro .emoji-tab-on { background: linear-gradient(180deg, var(--retro-play-a), var(--retro-play-b)); }
+.theme-retro .emoji-cell-on { background: linear-gradient(180deg, var(--retro-fill-a), var(--retro-fill-b)); }
+.theme-retro .emoji-foot { border-color: var(--retro-edge); }
+.theme-retro .emoji-name { color: var(--retro-ink); }
