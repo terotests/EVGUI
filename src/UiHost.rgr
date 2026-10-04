@@ -44,6 +44,7 @@ Import "PopoverCtl.rgr"
 Import "MenuCtl.rgr"
 Import "HoverCtl.rgr"
 Import "InputCtl.rgr"
+Import "TextCtl.rgr"
 Import "ComboboxCtl.rgr"
 Import "VirtualCtl.rgr"
 Import "SliderCtl.rgr"
@@ -90,6 +91,10 @@ class UiHost {
     def pressTidValue:string ""
     ; The text field a press landed in, while the button is down.
     def textDrag:string ""
+    ; The y of the last press, for the x-only text calls.
+    def lastPressY:double 0.0
+    ; The control the last text press went to (copyText).
+    def textOwner:string ""
     def transitions:EVGTransition (new EVGTransition())
     def pageWidth:double 480.0
     def pageHeight:double 320.0
@@ -376,6 +381,15 @@ class UiHost {
         def c (new ResizeCtl())
         c.tid = tid
         c.orientation = orientation
+        this.add(c)
+        return c
+    }
+
+    ; Text a reader can select and copy (TextCtl, `selectable` on).
+    fn addText:TextCtl (tid:string text:string textClass:string) {
+        def c:TextCtl (TextCtl.make(tid text textClass))
+        c.selectable = true
+        c.build()
         this.add(c)
         return c
     }
@@ -793,7 +807,7 @@ class UiHost {
         def bounds:string (this.dragBoundsFor(target))
         if ((strlen bounds) == 0) {
             this.click(target)
-            this.textPress(target px clicks shift)
+            this.textPressAt(target px py clicks shift)
             return target
         }
         this.pressTid(target (this.fractionIn(bounds px)))
@@ -804,21 +818,74 @@ class UiHost {
     ; For a host that hit-tests and focuses itself and only wants the field's
     ; part of the press.
     fn textPress:boolean (target:string px:double clicks:int shift:boolean) {
+        return (this.textPressAt(target px lastPressY clicks shift))
+    }
+
+    ; The same with the page's y, which text over several lines needs
+    ; (TextCtl). Every other control's selection that is not a field's goes,
+    ; as a click elsewhere on a page lets a selection go.
+    fn textPressAt:boolean (target:string px:double py:double clicks:int shift:boolean) {
         textDrag = ""
+        textOwner = ""
+        lastPressY = py
         def maybe@(optional):UiCtl (this.ctlFor(target))
+        this.dropSelections(target)
         if (null? maybe) {
             return false
         }
         def c:UiCtl (unwrap maybe)
-        if (c.textPointerDown(target px clicks shift)) {
+        if (c.textPointerDownAt(target px py clicks shift)) {
             textDrag = target
+            textOwner = c.tid
             return true
         }
         return false
     }
 
+    ; Every control's selection but the one `target` is in.
+    fn dropSelections:void (target:string) {
+        def i:int 0
+        while (i < (array_length ctls)) {
+            def c:UiCtl (itemAt ctls i)
+            if ((c.owns(target)) == false) {
+                c.dropSelection()
+            }
+            i = (i + 1)
+        }
+    }
+
+    ; What Ctrl+C copies: the focused control's selected text, else what was
+    ; selected in the control the pointer last pressed text in (a TextCtl, a
+    ; read-only field the host does not focus). "" when nothing is selected;
+    ; the host owns the clipboard.
+    fn copyText:string () {
+        if ((strlen focusId) > 0) {
+            def f@(optional):UiCtl (this.ctlFor(focusId))
+            if (!null? f) {
+                def fc:UiCtl (unwrap f)
+                def t:string (fc.selectedText())
+                if ((strlen t) > 0) {
+                    return t
+                }
+            }
+        }
+        if ((strlen textOwner) == 0) {
+            return ""
+        }
+        def o@(optional):UiCtl (this.ctlFor(textOwner))
+        if (null? o) {
+            return ""
+        }
+        def oc:UiCtl (unwrap o)
+        return (oc.selectedText())
+    }
+
     ; The text field pressed last follows the pointer (the drag selects).
     fn textDragTo:boolean (px:double) {
+        return (this.textDragToAt(px lastPressY))
+    }
+
+    fn textDragToAt:boolean (px:double py:double) {
         if ((strlen textDrag) == 0) {
             return false
         }
@@ -828,7 +895,7 @@ class UiHost {
             return false
         }
         def c:UiCtl (unwrap maybe)
-        return (c.textPointerDrag(px))
+        return (c.textPointerDragAt(px py))
     }
 
     fn textRelease:void () {
@@ -843,7 +910,7 @@ class UiHost {
     }
 
     fn pointerMove:void (px:double py:double) {
-        if (this.textDragTo(px)) {
+        if (this.textDragToAt(px py)) {
             return
         }
         if ((strlen dragBounds) == 0) {

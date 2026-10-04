@@ -384,6 +384,31 @@ class UiCtl {
     fn textPointerUp:void () {
     }
 
+    ; The same press and drag with the page's y as well, for text that runs
+    ; over lines (TextCtl). A one-line field needs only x, so by default
+    ; these are the x-only calls.
+    fn textPointerDownAt:boolean (target:string px:double py:double clicks:int shift:boolean) {
+        return (this.textPointerDown(target px clicks shift))
+    }
+
+    fn textPointerDragAt:boolean (px:double py:double) {
+        return (this.textPointerDrag(px))
+    }
+
+    ; --- copying ----------------------------------------------------------------
+    ; The text a reader selected in this control, for the host to put on the
+    ; clipboard (Ctrl+C, a Copy command); "" when nothing is selected or the
+    ; control's text is not to be copied. A press somewhere else lets a
+    ; selection that is not a field's go (`dropSelection`), as a click
+    ; elsewhere on a page does.
+
+    fn selectedText:string () {
+        return ""
+    }
+
+    fn dropSelection:void () {
+    }
+
     ; --- the clock -------------------------------------------------------------
     ; Almost nothing needs one. A submenu does: it opens 100ms after the pointer
     ; lands on its parent row, so that dragging down a menu does not flash every

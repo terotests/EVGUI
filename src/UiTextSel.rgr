@@ -1,0 +1,444 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; UiTextSel — selecting text that is read, not edited
+; =============================================================================
+; Two halves, kept apart so the rules can be tested without a page:
+;
+;   UiTextSel     the selection over a string, in indices: an anchor and a
+;                 caret, what a press, a double click (a word), a triple
+;                 click (the paragraph), Shift and a drag do to them, and
+;                 the text that is selected. No engine, no element.
+;   UiTextLines   where that string sits on a laid-out page: the lines the
+;                 element was broken into, each as [start, end) in the
+;                 string and where it was drawn. Maps a pointer to an index
+;                 and a selection to the rectangles a band covers.
+;
+; TextCtl puts the two together; the word and cluster rules are UiWords',
+; the same ones a text field (InputCtl) uses.
+; =============================================================================
+
+Import "UiWords.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGTextEngine.rgr"
+
+class UiTextSel {
+    def text:string ""
+    def anchor:int 0
+    def caret:int 0
+    ; A drag after a press: 0 by characters, 1 by words (after a double
+    ; click), 2 by paragraphs (after a triple click). The run the press took
+    ; is [dragFrom, dragTo), and a drag never lets go of it.
+    def dragging:boolean false
+    def dragUnit:int 0
+    def dragFrom:int 0
+    def dragTo:int 0
+
+    Constructor () {
+    }
+
+    ; New text drops the selection: indices into the old string mean nothing
+    ; in the new one. The same text keeps it, so a host that sets the text
+    ; on every build does not lose what was selected.
+    fn setText:void (t:string) {
+        if (t == text) {
+            return
+        }
+        text = t
+        anchor = 0
+        caret = 0
+        dragging = false
+    }
+
+    fn selStart:int () {
+        if (anchor < caret) {
+            return anchor
+        }
+        return caret
+    }
+
+    fn selEnd:int () {
+        if (anchor < caret) {
+            return caret
+        }
+        return anchor
+    }
+
+    fn hasSelection:boolean () {
+        return (anchor != caret)
+    }
+
+    ; What Ctrl+C copies: the selected characters, line breaks included.
+    fn selectedText:string () {
+        if ((this.hasSelection()) == false) {
+            return ""
+        }
+        return (substring text (this.selStart()) (this.selEnd()))
+    }
+
+    fn clear:void () {
+        anchor = caret
+        dragging = false
+    }
+
+    fn selectAll:void () {
+        anchor = 0
+        caret = (strlen text)
+    }
+
+    fn selectWordAt:void (i:int) {
+        anchor = (UiWords.wordFrom(text i))
+        caret = (UiWords.wordTo(text i))
+    }
+
+    fn selectParagraphAt:void (i:int) {
+        anchor = (UiWords.paragraphFrom(text i))
+        caret = (UiWords.paragraphTo(text i))
+    }
+
+    ; A press at index `at` (already snapped to a character's start): 1 click
+    ; puts the caret there (Shift extends from the anchor), 2 take the word,
+    ; 3 the paragraph. A drag follows until `pointerUp`.
+    fn pointerDown:void (at:int clicks:int shift:boolean) {
+        def i:int (UiWords.clamp(text at))
+        dragging = true
+        if (clicks >= 3) {
+            this.selectParagraphAt(i)
+            dragUnit = 2
+            dragFrom = (this.selStart())
+            dragTo = (this.selEnd())
+            return
+        }
+        if ((clicks == 2) && (shift == false)) {
+            this.selectWordAt(i)
+            dragUnit = 1
+            dragFrom = (this.selStart())
+            dragTo = (this.selEnd())
+            return
+        }
+        dragUnit = 0
+        caret = i
+        if (shift == false) {
+            anchor = i
+        }
+    }
+
+    ; The pointer moved with the button down to index `at`: the caret
+    ; follows, the anchor stays. After a double or a triple click the
+    ; selection grows by whole words or paragraphs and always keeps the one
+    ; that was clicked.
+    fn pointerDrag:void (at:int) {
+        if (dragging == false) {
+            return
+        }
+        def i:int (UiWords.clamp(text at))
+        if (dragUnit == 0) {
+            caret = i
+            return
+        }
+        def a:int 0
+        def b:int 0
+        if (dragUnit == 1) {
+            a = (UiWords.wordFrom(text i))
+            b = (UiWords.wordTo(text i))
+        } {
+            a = (UiWords.paragraphFrom(text i))
+            b = (UiWords.paragraphTo(text i))
+        }
+        if (a < dragFrom) {
+            anchor = dragTo
+            caret = a
+            return
+        }
+        anchor = dragFrom
+        caret = b
+        if (caret < dragTo) {
+            caret = dragTo
+        }
+    }
+
+    fn pointerUp:void () {
+        dragging = false
+    }
+}
+
+; One line of a laid-out text: [start, end) of the string, and the box it was
+; drawn in on the page (x where its first glyph starts, after `text-align`).
+class UiTextLine {
+    def start:int 0
+    def end:int 0
+    def x:double 0.0
+    def y:double 0.0
+    def h:double 0.0
+
+    Constructor () {
+    }
+}
+
+; One rectangle of a selection band, in page coordinates.
+class UiTextRect {
+    def x:double 0.0
+    def y:double 0.0
+    def w:double 0.0
+    def h:double 0.0
+
+    Constructor () {
+    }
+}
+
+class UiTextLines {
+    def text:string ""
+    def lines:[UiTextLine]
+    def family:string "Arial"
+    def size:double 14.0
+    def spacing:double 0.0
+    ; The content box the lines were broken into: a band that runs on to the
+    ; next line runs to its right edge, as a selection does in a browser.
+    def left:double 0.0
+    def right:double 0.0
+    def eng@(optional):EVGTextEngine
+
+    Constructor () {
+    }
+
+    ; Which part of `text` each broken line is. EVGTextEngine breaks each
+    ; paragraph (split at "\n") at single spaces and joins a line's words
+    ; back with the spaces between them, so a line IS the substring that
+    ; starts where the last one stopped, and one character — the space the
+    ; break took or the newline — lies between two lines. Checked rather
+    ; than trusted: a line that is not the text at the cursor is looked for
+    ; from there, so a breaker that changes cannot make every later line
+    ; wrong.
+    sfn offsetsOf:[int] (text:string broken:[string]) {
+        def out:[int]
+        def at:int 0
+        def n:int (strlen text)
+        def i:int 0
+        while (i < (array_length broken)) {
+            def ln:string (itemAt broken i)
+            def len:int (strlen ln)
+            if (at > n) {
+                at = n
+            }
+            def here:boolean false
+            if ((at + len) <= n) {
+                here = ((substring text at (at + len)) == ln)
+            }
+            if ((here == false) && (len > 0)) {
+                def found:int (indexOf (substring text at n) ln)
+                if (found >= 0) {
+                    at = (at + found)
+                }
+            }
+            push out at
+            at = ((at + len) + 1)
+            i = (i + 1)
+        }
+        return out
+    }
+
+    ; The lines of `el` as the display list draws them: the same engine
+    ; call, the same line box, the same paragraph gap, the same `text-align`
+    ; indent and the same border and padding inset (EVGDisplayList, the
+    ; text command). `evg:textlines` in TextCheck compares the two.
+    sfn of:UiTextLines (e:EVGTextEngine el:EVGElement) {
+        def out (new UiTextLines())
+        out.eng = e
+        out.text = el.textContent
+        def face:string (el.effectiveFontFamily())
+        def fs:double el.inheritedFontSize
+        if el.fontSize.isSet {
+            fs = el.fontSize.pixels
+        }
+        if (fs <= 0.0) {
+            fs = 14.0
+        }
+        out.family = face
+        out.size = fs
+        out.spacing = el.letterSpacing
+        def lineBox:double (el.lineBoxFor(fs (e.lineHeightFor(face fs))))
+        if (lineBox <= 0.0) {
+            lineBox = (fs * 1.2)
+        }
+        def avail:double (el.box.getInnerWidth(el.calculatedWidth))
+        def bw:double el.box.borderWidthPx
+        def x0:double ((el.calculatedX + bw) + el.box.paddingLeftPx)
+        def y0:double (((el.calculatedY + bw) + el.box.paddingTopPx) + el.textShiftY)
+        out.left = x0
+        out.right = (x0 + avail)
+        def broken:[EVGTextLine] (e.breakLinesSpaced(el.textContent face fs (el.wrapWidth(avail)) el.letterSpacing))
+        def strs:[string]
+        def k:int 0
+        while (k < (array_length broken)) {
+            def bl:EVGTextLine (itemAt broken k)
+            push strs bl.text
+            k = (k + 1)
+        }
+        def starts:[int] (UiTextLines.offsetsOf(el.textContent strs))
+        def paraShift:double 0.0
+        def li:int 0
+        while (li < (array_length broken)) {
+            def bl:EVGTextLine (itemAt broken li)
+            if bl.startsParagraph {
+                paraShift = (paraShift + el.paragraphSpacing)
+            }
+            def indent:double 0.0
+            if ((el.textAlign == "center") || (el.textAlign == "right")) {
+                def m:EVGTextMetrics (e.measureRunSpaced(bl.text face fs el.letterSpacing))
+                def slack:double (avail - m.width)
+                if (slack > 0.0) {
+                    if (el.textAlign == "center") {
+                        indent = (slack / 2.0)
+                    } {
+                        indent = slack
+                    }
+                }
+            }
+            def ln (new UiTextLine())
+            ln.start = (itemAt starts li)
+            ln.end = (ln.start + (strlen bl.text))
+            ln.x = (x0 + indent)
+            ln.y = ((y0 + ((to_double li) * lineBox)) + paraShift)
+            ln.h = lineBox
+            push out.lines ln
+            li = (li + 1)
+        }
+        return out
+    }
+
+    fn count:int () {
+        return (array_length lines)
+    }
+
+    ; The line index `i` is on: the last line that starts at or before it.
+    fn lineOf:int (i:int) {
+        def best:int 0
+        def k:int 0
+        while (k < (array_length lines)) {
+            def ln:UiTextLine (itemAt lines k)
+            if (ln.start <= i) {
+                best = k
+            }
+            k = (k + 1)
+        }
+        return best
+    }
+
+    ; How wide the first `k` characters of line `li` are.
+    fn widthIn:double (li:int k:int) {
+        if (null? eng) {
+            return 0.0
+        }
+        def e:EVGTextEngine (unwrap eng)
+        def ln:UiTextLine (itemAt lines li)
+        def len:int (ln.end - ln.start)
+        def kk:int k
+        if (kk > len) {
+            kk = len
+        }
+        if (kk <= 0) {
+            return 0.0
+        }
+        def head:string (substring text ln.start (ln.start + kk))
+        def m:EVGTextMetrics (e.measureRunSpaced(head family size spacing))
+        return m.width
+    }
+
+    ; The page x of the edge before index `i`, on its own line.
+    fn xAt:double (i:int) {
+        if ((array_length lines) == 0) {
+            return left
+        }
+        def li:int (this.lineOf(i))
+        def ln:UiTextLine (itemAt lines li)
+        return (ln.x + (this.widthIn(li (i - ln.start))))
+    }
+
+    ; The index a pointer at (px, py) lands on: the line it is level with
+    ; (the first above the text, the last below it), then the nearer edge of
+    ; the character under it, never inside a cluster.
+    fn indexAt:int (px:double py:double) {
+        def n:int (array_length lines)
+        if (n == 0) {
+            return 0
+        }
+        def li:int 0
+        def k:int 0
+        while (k < n) {
+            def ln:UiTextLine (itemAt lines k)
+            if (py >= ln.y) {
+                li = k
+            }
+            k = (k + 1)
+        }
+        def ln:UiTextLine (itemAt lines li)
+        def x:double (px - ln.x)
+        def len:int (ln.end - ln.start)
+        if ((len == 0) || (x <= 0.0)) {
+            return ln.start
+        }
+        def lo:int 0
+        def hi:int len
+        while (lo < hi) {
+            def mid:int (idiv ((lo + hi) + 1) 2)
+            if ((this.widthIn(li mid)) <= x) {
+                lo = mid
+            } {
+                hi = (mid - 1)
+            }
+        }
+        def at:int lo
+        if (lo < len) {
+            def here:double (this.widthIn(li lo))
+            def next:double (this.widthIn(li (lo + 1)))
+            if ((x - here) > (next - x)) {
+                at = (lo + 1)
+            }
+        }
+        def i:int (ln.start + at)
+        def snapped:int (UiWords.snapStop(text i))
+        ; past the last cluster of a line is its end, not inside it
+        if ((snapped < i) && (at == len)) {
+            return i
+        }
+        return snapped
+    }
+
+    ; The band over [a, b): one rectangle per line it touches. A line the
+    ; selection runs on from is covered to the box's right edge, and the
+    ; lines after the first from their own start.
+    fn rects:[UiTextRect] (a:int b:int) {
+        def out:[UiTextRect]
+        if (b <= a) {
+            return out
+        }
+        def first:int (this.lineOf(a))
+        def last:int (this.lineOf(b))
+        def li:int first
+        while (li <= last) {
+            def ln:UiTextLine (itemAt lines li)
+            def sx:double ln.x
+            if (li == first) {
+                sx = (this.xAt(a))
+            }
+            def ex:double (ln.x + (this.widthIn(li (ln.end - ln.start))))
+            if (li == last) {
+                ex = (ln.x + (this.widthIn(li (b - ln.start))))
+            } {
+                if (right > ex) {
+                    ex = right
+                }
+            }
+            if (ex > sx) {
+                def r (new UiTextRect())
+                r.x = sx
+                r.y = ln.y
+                r.w = (ex - sx)
+                r.h = ln.h
+                push out r
+            }
+            li = (li + 1)
+        }
+        return out
+    }
+}
