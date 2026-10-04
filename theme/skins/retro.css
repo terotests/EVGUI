@@ -309,3 +309,31 @@
 .theme-retro .emoji-cell-on { background: linear-gradient(180deg, var(--retro-fill-a), var(--retro-fill-b)); }
 .theme-retro .emoji-foot { border-color: var(--retro-edge); }
 .theme-retro .emoji-name { color: var(--retro-ink); }
+
+/* the chat: the player's screen, one's own messages lit */
+.theme-retro .chat-panel {
+  background: linear-gradient(180deg, var(--retro-screen-2), var(--retro-screen));
+  border: 1.5px solid var(--retro-edge);
+}
+.theme-retro .chat-head { border-color: var(--retro-screen-3); }
+.theme-retro .chat-title { color: var(--retro-ink); }
+.theme-retro .chat-close { color: var(--retro-ink-dim); }
+.theme-retro .chat-close:hover { background-color: var(--retro-screen-3); }
+.theme-retro .chat-empty,
+.theme-retro .chat-time { color: var(--retro-ink-dim); }
+.theme-retro .chat-msg { background-color: var(--retro-screen-3); }
+.theme-retro .chat-msg-mine { background: linear-gradient(180deg, var(--retro-chin-a), var(--retro-screen-3)); }
+.theme-retro .chat-text { color: var(--retro-ink); }
+.theme-retro .chat-jump { background: linear-gradient(180deg, var(--retro-play-a), var(--retro-play-b)); color: var(--retro-btn-ink); }
+.theme-retro .chat-composer { border-color: var(--retro-screen-3); }
+.theme-retro .chat-field { background-color: var(--retro-screen); border-color: var(--retro-edge); }
+.theme-retro .chat-draft { color: var(--retro-ink); }
+.theme-retro .chat-caret { background-color: var(--retro-ink); }
+.theme-retro .chat-placeholder { color: var(--retro-ink-dim); }
+.theme-retro .chat-send {
+  background: linear-gradient(180deg, var(--retro-play-a), var(--retro-play-b));
+  border: 1.5px solid var(--retro-edge);
+  border-radius: 18px;
+  color: var(--retro-btn-ink);
+}
+.theme-retro .chat-send-off { background: linear-gradient(180deg, var(--retro-screen-3), var(--retro-screen-2)); color: var(--retro-ink-dim); }
