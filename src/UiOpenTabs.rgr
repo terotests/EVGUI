@@ -1,0 +1,219 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; UiOpenTabs — the files a person has open, as an editor's tabs (VS Code's
+; row of open editors)
+; =============================================================================
+; Opening a file adds its tab at the end, or goes to the one it already has.
+; Closing the tab in front goes to the tab used before it, as VS Code does,
+; not simply to a neighbour. There are at most `most` tabs: opening one more
+; closes the one used longest ago (never the one in front).
+;
+; Keys only, no pixels: a key is a path (or anything that names what a tab
+; shows). `label(k)` is what the tab says: the file's name, and when two open
+; files share a name, the folder that tells them apart ("cars.json · data").
+;
+;   open(k)        add or go to; the tab in front is `active`
+;   close(k)       → the tab now in front ("" when none is left)
+;   rename(a b)    a file moved: its tab follows it
+;   retain(keys)   the files there still are: tabs of the others close
+; =============================================================================
+
+class UiOpenTabs {
+    def tabs:[string]
+    def active:string ""
+    ; most recently used last
+    def used:[string]
+    def most:int 8
+
+    Constructor () {
+        def t:[string]
+        tabs = t
+        def u:[string]
+        used = u
+    }
+
+    fn count:int () {
+        return (array_length tabs)
+    }
+
+    fn at:string (i:int) {
+        if ((i < 0) || (i >= (array_length tabs))) {
+            return ""
+        }
+        return (itemAt tabs i)
+    }
+
+    sfn without:[string] (list:[string] k:string) {
+        def out:[string]
+        def i:int 0
+        while (i < (array_length list)) {
+            def v:string (itemAt list i)
+            if (v != k) {
+                push out v
+            }
+            i = (i + 1)
+        }
+        return out
+    }
+
+    fn has:boolean (k:string) {
+        def i:int 0
+        while (i < (array_length tabs)) {
+            if ((itemAt tabs i) == k) {
+                return true
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    fn touch:void (k:string) {
+        def u:[string] (UiOpenTabs.without(used k))
+        push u k
+        used = u
+    }
+
+    fn open:void (k:string) {
+        if ((strlen k) == 0) {
+            return
+        }
+        if ((this.has(k)) == false) {
+            push tabs k
+        }
+        active = k
+        this.touch(k)
+        ; too many: the one used longest ago goes (the list of uses is never
+        ; shorter than the tabs, and its last is `k`)
+        while (((array_length tabs) > most) && (most > 0)) {
+            def old:string (itemAt used 0)
+            tabs = (UiOpenTabs.without(tabs old))
+            used = (UiOpenTabs.without(used old))
+        }
+    }
+
+    fn close:string (k:string) {
+        if ((this.has(k)) == false) {
+            return active
+        }
+        tabs = (UiOpenTabs.without(tabs k))
+        used = (UiOpenTabs.without(used k))
+        if (active == k) {
+            active = ""
+            def n:int (array_length used)
+            if (n > 0) {
+                active = (itemAt used (n - 1))
+            }
+        }
+        return active
+    }
+
+    fn rename:void (from:string to:string) {
+        if (((this.has(from)) == false) || (from == to)) {
+            return
+        }
+        if (this.has(to)) {
+            this.close(from)
+            return
+        }
+        def t:[string]
+        def i:int 0
+        while (i < (array_length tabs)) {
+            def v:string (itemAt tabs i)
+            if (v == from) {
+                push t to
+            } {
+                push t v
+            }
+            i = (i + 1)
+        }
+        tabs = t
+        def u:[string]
+        def j:int 0
+        while (j < (array_length used)) {
+            def v2:string (itemAt used j)
+            if (v2 == from) {
+                push u to
+            } {
+                push u v2
+            }
+            j = (j + 1)
+        }
+        used = u
+        if (active == from) {
+            active = to
+        }
+    }
+
+    ; The files that still exist: the tabs of the rest close.
+    fn retain:void (keys:[string]) {
+        def gone:[string]
+        def i:int 0
+        while (i < (array_length tabs)) {
+            def v:string (itemAt tabs i)
+            def found:boolean false
+            def j:int 0
+            while (j < (array_length keys)) {
+                if ((itemAt keys j) == v) {
+                    found = true
+                }
+                j = (j + 1)
+            }
+            if (found == false) {
+                push gone v
+            }
+            i = (i + 1)
+        }
+        def g:int 0
+        while (g < (array_length gone)) {
+            this.close((itemAt gone g))
+            g = (g + 1)
+        }
+    }
+
+    sfn lastSlash:int (k:string) {
+        def at:int -1
+        def i:int 0
+        while (i < (strlen k)) {
+            if ((charAt k i) == 47) {
+                at = i
+            }
+            i = (i + 1)
+        }
+        return at
+    }
+
+    sfn nameOf:string (k:string) {
+        def s:int (UiOpenTabs.lastSlash(k))
+        return (substring k (s + 1) (strlen k))
+    }
+
+    ; the folder a key is in, without the slash ("" at the top)
+    sfn folderOf:string (k:string) {
+        def s:int (UiOpenTabs.lastSlash(k))
+        if (s <= 0) {
+            return ""
+        }
+        return (substring k 0 s)
+    }
+
+    fn label:string (k:string) {
+        def name:string (UiOpenTabs.nameOf(k))
+        def twin:boolean false
+        def i:int 0
+        while (i < (array_length tabs)) {
+            def v:string (itemAt tabs i)
+            if ((v != k) && ((UiOpenTabs.nameOf(v)) == name)) {
+                twin = true
+            }
+            i = (i + 1)
+        }
+        if twin {
+            def dir:string (UiOpenTabs.folderOf(k))
+            if ((strlen dir) > 0) {
+                return (name + " · " + dir)
+            }
+        }
+        return name
+    }
+}

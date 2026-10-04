@@ -17,6 +17,12 @@
 ;             group ignores the other pair
 ;   Home/End  the first / last enabled tab, activated with focus
 ;
+; A tab added with `addClosable` is an editor's tab (VS Code's open files):
+; its name and a close mark, `<tid>-close-<value>` (class ui-tab-close), a
+; button of its own named "Close <name>". `closeAt(x y)` says whose mark is
+; under a point as the last layout placed it; what closing means is the
+; host's (UiOpenTabs keeps which tab comes to the front).
+;
 ; Only the active panel is in the display tree; the inactive one is still
 ; reported, so the trace can say it exists and cannot be reached.
 ; =============================================================================
@@ -34,12 +40,56 @@ class TabsCtl extends UiCtl {
     ; "horizontal" (the default, and Radix's) or "vertical". Decides which
     ; arrow pair moves and what the list reports as `aria-orientation`.
     def orientation:string "horizontal"
+    ; the values whose tabs carry a close mark (`addClosable`)
+    def closable:[string]
+    ; the close marks as the last build made them, in `closable`'s order
+    def closeEls:[EVGElement]
+    ; what a close mark is called: "Close " + the tab's name
+    def closeWord:string "Close "
 
     Constructor () {
         rootEl = (EVGElement.createDiv())
         listEl = (EVGElement.createDiv())
         def empty:[UiItem]
         items = empty
+        def c:[string]
+        closable = c
+        def ce:[EVGElement]
+        closeEls = ce
+    }
+
+    ; A tab with a close mark: an open file's.
+    fn addClosable:void (itemValue:string itemName:string) {
+        this.addItem(itemValue itemName "" false)
+        push closable itemValue
+    }
+
+    fn isClosable:boolean (itemValue:string) {
+        def i:int 0
+        while (i < (array_length closable)) {
+            if ((itemAt closable i) == itemValue) {
+                return true
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    fn closeTid:string (itemValue:string) {
+        return (tid + "-close-" + itemValue)
+    }
+
+    ; The tab whose close mark is under (x, y), "" for none.
+    fn closeAt:string (x:double y:double) {
+        def i:int 0
+        while (i < (array_length closeEls)) {
+            def el:EVGElement (itemAt closeEls i)
+            if ((((x >= el.calculatedX) && (x <= (el.calculatedX + el.calculatedWidth))) && (y >= el.calculatedY)) && (y <= (el.calculatedY + el.calculatedHeight))) {
+                return (itemAt closable i)
+            }
+            i = (i + 1)
+        }
+        return ""
     }
 
     fn addItem:void (itemValue:string itemName:string itemBody:string itemDisabled:boolean) {
@@ -85,6 +135,7 @@ class TabsCtl extends UiCtl {
         list.className = "ui-tablist"
         UiTree.clearChildren(list)
 
+        def marks:[EVGElement]
         def i:int 0
         while (i < (array_length items)) {
             def it:UiItem (itemAt items i)
@@ -99,10 +150,38 @@ class TabsCtl extends UiCtl {
                 word = "active"
             }
             UiTree.setState(el "ui-tab" word)
-            UiTree.leafText(el it.name)
+            if (this.isClosable(it.value)) {
+                ; the name and the close mark side by side, each a leaf
+                UiTree.clearChildren(el)
+                el.textContent = ""
+                el.elementType = 0
+                UiTree.addClass(el "ui-tab-closable")
+                el.addChild((UiTree.label((el.id + "__name") "ui-tab-name" it.name)))
+                def x:EVGElement (UiTree.label((this.closeTid(it.value)) "ui-tab-close" "×"))
+                el.addChild(x)
+                push marks x
+            } {
+                UiTree.leafText(el it.name)
+            }
             list.addChild(el)
             i = (i + 1)
         }
+        ; in `closable`'s order, for closeAt
+        def ordered:[EVGElement]
+        def c:int 0
+        while (c < (array_length closable)) {
+            def want:string (this.closeTid((itemAt closable c)))
+            def m:int 0
+            while (m < (array_length marks)) {
+                def mk:EVGElement (itemAt marks m)
+                if (mk.id == want) {
+                    push ordered mk
+                }
+                m = (m + 1)
+            }
+            c = (c + 1)
+        }
+        closeEls = ordered
         root.addChild(list)
 
         ; Only the active panel joins the display tree.
@@ -223,6 +302,9 @@ class TabsCtl extends UiCtl {
         while (i < (array_length items)) {
             def it:UiItem (itemAt items i)
             push a (this.tabTid(it.value))
+            if (this.isClosable(it.value)) {
+                push a (this.closeTid(it.value))
+            }
             i = (i + 1)
         }
         def j:int 0
@@ -298,6 +380,12 @@ class TabsCtl extends UiCtl {
                 row.focusable = true
             }
             push out row
+            if (this.isClosable(it.value)) {
+                def xrow:UiRow (UiRow.of((this.closeTid(it.value)) (EVGA11yRole.button()) (closeWord + it.name)))
+                xrow.parentTid = (this.tabTid(it.value))
+                xrow.focusable = true
+                push out xrow
+            }
             i = (i + 1)
         }
 

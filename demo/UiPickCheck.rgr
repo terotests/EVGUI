@@ -1,0 +1,182 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; A data table's ticks (UiPick), an editor's open tabs (UiOpenTabs) and
+; TabsCtl's close marks, on Node: `ui:pick:check`.
+Import "../src/UiPick.rgr"
+Import "../src/UiOpenTabs.rgr"
+Import "../src/TabsCtl.rgr"
+Import "../src/CheckboxCtl.rgr"
+
+class UiPickCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    sfn joined:string (a:[string]) {
+        def s:string ""
+        def i:int 0
+        while (i < (array_length a)) {
+            if (i > 0) {
+                s = (s + ",")
+            }
+            s = (s + (itemAt a i))
+            i = (i + 1)
+        }
+        return s
+    }
+
+    fn tabsText:string (t:UiOpenTabs) {
+        return (UiPickCheck.joined(t.tabs))
+    }
+
+    fn pick:void () {
+        def p (new UiPick())
+        this.ok(((p.state()) == "none") "an empty list has nothing ticked")
+        p.setKeys(([] _:string ("a" "b" "c" "d")))
+        p.toggle("c")
+        p.toggle("a")
+        this.ok(((UiPickCheck.joined((p.selected()))) == "a,c") ("ticks in the rows' order: " + (UiPickCheck.joined((p.selected())))))
+        this.ok(((p.state()) == "some") "two of four is some")
+        this.ok(((p.checkState()) == 2) "some is the mixed box")
+        p.toggleAll()
+        this.ok(((p.state()) == "all") "the header's box ticks all")
+        this.ok(((p.checkState()) == 1) "all is the ticked box")
+        p.toggleAll()
+        this.ok(((p.count()) == 0) "and again clears all")
+        p.toggle("zz")
+        this.ok(((p.count()) == 0) "a key that is not a row is ignored")
+        ; shift-click: from the row last toggled
+        p.toggle("b")
+        p.extendTo("d")
+        this.ok(((UiPickCheck.joined((p.selected()))) == "b,c,d") ("a range from the anchor: " + (UiPickCheck.joined((p.selected())))))
+        p.none()
+        p.toggle("d")
+        p.extendTo("b")
+        this.ok(((UiPickCheck.joined((p.selected()))) == "b,c,d") "a range upwards too")
+        ; a row deleted under the selection, a new one added
+        p.setKeys(([] _:string ("a" "c" "d" "e")))
+        this.ok(((UiPickCheck.joined((p.selected()))) == "c,d") ("the gone row's tick is dropped: " + (UiPickCheck.joined((p.selected())))))
+        this.ok(((p.state()) == "some") "the new row is not ticked")
+        p.setKeys(([] _:string ("c" "d")))
+        this.ok(((p.state()) == "all") "what is left all ticked")
+        def q (new UiPick())
+        q.setKeys(([] _:string ("x" "y")))
+        q.extendTo("y")
+        this.ok(((UiPickCheck.joined((q.selected()))) == "y") "a range with no anchor ticks one")
+    }
+
+    fn openTabs:void () {
+        def t (new UiOpenTabs())
+        t.open("data/cars.json")
+        t.open("data/ohlc.json")
+        t.open("charts/a.vl.json")
+        this.ok(((this.tabsText(t)) == "data/cars.json,data/ohlc.json,charts/a.vl.json") ("opened in order: " + (this.tabsText(t))))
+        this.ok((t.active == "charts/a.vl.json") "the last opened is in front")
+        t.open("data/cars.json")
+        this.ok(((t.count()) == 3) "opening an open file adds no tab")
+        this.ok((t.active == "data/cars.json") "it goes to that tab")
+        ; closing the front tab goes to the one used before it, not a neighbour
+        def front:string (t.close("data/cars.json"))
+        this.ok((front == "charts/a.vl.json") ("the tab used before comes to the front: " + front))
+        def same:string (t.close("data/ohlc.json"))
+        this.ok((same == "charts/a.vl.json") "closing a tab behind keeps the front one")
+        def none:string (t.close("charts/a.vl.json"))
+        this.ok(((none == "") && ((t.count()) == 0)) "the last tab closed leaves none")
+        ; the limit closes the one used longest ago
+        def m (new UiOpenTabs())
+        m.most = 3
+        m.open("a")
+        m.open("b")
+        m.open("c")
+        m.open("a")
+        m.open("d")
+        this.ok(((this.tabsText(m)) == "a,c,d") ("over the limit the least used goes: " + (this.tabsText(m))))
+        ; a file deleted or moved
+        m.rename("c" "media/c2")
+        this.ok(((this.tabsText(m)) == "a,media/c2,d") ("a moved file keeps its tab: " + (this.tabsText(m))))
+        m.retain(([] _:string ("a" "x")))
+        this.ok(((this.tabsText(m)) == "a") ("tabs of deleted files close: " + (this.tabsText(m))))
+        this.ok((m.active == "a") "and the front one is one that is left")
+        ; two files with one name: the folder tells them apart
+        def n (new UiOpenTabs())
+        n.open("data/weather.csv")
+        n.open("data/live/weather.csv")
+        n.open("stocks.csv")
+        this.ok(((n.label("data/weather.csv")) == "weather.csv · data") ("twins carry their folder: " + (n.label("data/weather.csv"))))
+        this.ok(((n.label("data/live/weather.csv")) == "weather.csv · data/live") "both of them")
+        this.ok(((n.label("stocks.csv")) == "stocks.csv") "a name of its own is just the name")
+    }
+
+    fn closeMarks:void () {
+        def tabs (new TabsCtl())
+        tabs.tid = "ed"
+        tabs.addItem("md" "Markdown" "" false)
+        tabs.addClosable("f:data/cars.json" "cars.json")
+        tabs.value = "f:data/cars.json"
+        tabs.build()
+        def ids:string (UiPickCheck.joined((tabs.tids())))
+        this.ok(((indexOf ids "ed-close-f:data/cars.json") >= 0) ("the close mark has an id: " + ids))
+        this.ok(((indexOf ids "ed-close-md") < 0) "a plain tab has no close mark")
+        def rows:[UiRow] (tabs.rows())
+        def named:boolean false
+        def i:int 0
+        while (i < (array_length rows)) {
+            def r:UiRow (itemAt rows i)
+            if ((r.tid == "ed-close-f:data/cars.json") && (r.name == "Close cars.json")) {
+                named = true
+            }
+            i = (i + 1)
+        }
+        this.ok(named "the close mark is a button named after its tab")
+        ; placed by hand where a layout would put it
+        def mark:EVGElement (itemAt tabs.closeEls 0)
+        mark.calculatedX = 100.0
+        mark.calculatedY = 10.0
+        mark.calculatedWidth = 16.0
+        mark.calculatedHeight = 16.0
+        this.ok(((tabs.closeAt(108.0 18.0)) == "f:data/cars.json") "a press on the mark is that tab's close")
+        this.ok(((tabs.closeAt(80.0 18.0)) == "") "a press beside it is not")
+    }
+
+    ; a row's box in a table: its name told, not drawn
+    fn quietBox:void () {
+        def c (new CheckboxCtl())
+        c.tid = "row-1"
+        c.name = "Select cars.json"
+        c.labelShown = false
+        c.build()
+        def el:EVGElement (unwrap c.rootEl)
+        this.ok(((el.getChildCount()) == 1) "a box with its label hidden draws only the box")
+        def r:UiRow (itemAt (c.rows()) 0)
+        this.ok((r.name == "Select cars.json") "and still tells its name")
+        def d (new CheckboxCtl())
+        d.tid = "row-2"
+        d.name = "Shown"
+        d.build()
+        def el2:EVGElement (unwrap d.rootEl)
+        this.ok(((el2.getChildCount()) == 2) "a box draws its label by default")
+    }
+
+    fn run:void () {
+        this.quietBox()
+        this.pick()
+        this.openTabs()
+        this.closeMarks()
+    }
+
+    sfn main:void () {
+        def c (new UiPickCheck())
+        c.run()
+        print ((to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
+        if (c.fails > 0) {
+            print "RESULT FAIL"
+        }
+    }
+}

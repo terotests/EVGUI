@@ -1,0 +1,191 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; UiPick — which rows of a list are ticked: a data table's checkboxes and its
+; "select all"
+; =============================================================================
+; A table with a checkbox on each row and one in its header needs the same
+; few answers wherever it is drawn: is this row ticked, what does the header's
+; box show (none, some, all), which rows does an action act on. Kept here, as
+; keys and no pixels, the table and the actions read one answer, and a list
+; that changes under the selection (a row deleted, a new one added) only
+; drops the keys that are gone.
+;
+;   setKeys(keys)   the rows there are now, in their order; ticks of rows
+;                   that are gone are dropped
+;   toggle(k)       one row's box; the row becomes the anchor
+;   extendTo(k)     shift-click: every row from the anchor to k ticked
+;   toggleAll()     the header's box: all, or none when all are ticked
+;   state()         "none" | "some" | "all" (an empty list is "none")
+;   checkState()    the same as CheckboxCtl's 0 / 2 / 1
+;   selected()      the ticked keys, in the rows' order
+; =============================================================================
+
+class UiPick {
+    def keys:[string]
+    def picked:[string]
+    ; where a shift-click range starts: the row last toggled
+    def anchor:string ""
+
+    Constructor () {
+        def k:[string]
+        keys = k
+        def p:[string]
+        picked = p
+    }
+
+    fn setKeys:void (ks:[string]) {
+        def kept:[string]
+        def i:int 0
+        while (i < (array_length ks)) {
+            def k:string (itemAt ks i)
+            if (this.has(k)) {
+                push kept k
+            }
+            i = (i + 1)
+        }
+        keys = ks
+        picked = kept
+        if ((this.indexOfKey(anchor)) < 0) {
+            anchor = ""
+        }
+    }
+
+    fn indexOfKey:int (k:string) {
+        def i:int 0
+        while (i < (array_length keys)) {
+            if ((itemAt keys i) == k) {
+                return i
+            }
+            i = (i + 1)
+        }
+        return -1
+    }
+
+    fn has:boolean (k:string) {
+        def i:int 0
+        while (i < (array_length picked)) {
+            if ((itemAt picked i) == k) {
+                return true
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    ; Ticks or clears one row; a key that is not a row is ignored. The ticks
+    ; are kept in the rows' order, whatever order they were made in.
+    fn set:void (k:string on:boolean) {
+        if ((this.indexOfKey(k)) < 0) {
+            return
+        }
+        def out:[string]
+        def i:int 0
+        while (i < (array_length keys)) {
+            def key:string (itemAt keys i)
+            def was:boolean (this.has(key))
+            if (key == k) {
+                was = on
+            }
+            if was {
+                push out key
+            }
+            i = (i + 1)
+        }
+        picked = out
+    }
+
+    fn toggle:void (k:string) {
+        if ((this.indexOfKey(k)) < 0) {
+            return
+        }
+        this.set(k ((this.has(k)) == false))
+        anchor = k
+    }
+
+    ; From the anchor to `k`, both ends, ticked; the rest stay as they are.
+    ; With no anchor this is a toggle.
+    fn extendTo:void (k:string) {
+        def to:int (this.indexOfKey(k))
+        if (to < 0) {
+            return
+        }
+        def from:int (this.indexOfKey(anchor))
+        if (from < 0) {
+            this.toggle(k)
+            return
+        }
+        def lo:int from
+        def hi:int to
+        if (to < from) {
+            lo = to
+            hi = from
+        }
+        def i:int lo
+        while (i <= hi) {
+            this.set((itemAt keys i) true)
+            i = (i + 1)
+        }
+    }
+
+    fn all:void () {
+        def out:[string]
+        def i:int 0
+        while (i < (array_length keys)) {
+            push out (itemAt keys i)
+            i = (i + 1)
+        }
+        picked = out
+    }
+
+    fn none:void () {
+        def out:[string]
+        picked = out
+        anchor = ""
+    }
+
+    fn toggleAll:void () {
+        if ((this.state()) == "all") {
+            this.none()
+        } {
+            this.all()
+        }
+    }
+
+    fn count:int () {
+        return (array_length picked)
+    }
+
+    fn state:string () {
+        def n:int (array_length picked)
+        if (n == 0) {
+            return "none"
+        }
+        if (n == (array_length keys)) {
+            return "all"
+        }
+        return "some"
+    }
+
+    ; CheckboxCtl.checkState for the header's box: 0 none, 1 all, 2 some
+    fn checkState:int () {
+        def s:string (this.state())
+        if (s == "all") {
+            return 1
+        }
+        if (s == "some") {
+            return 2
+        }
+        return 0
+    }
+
+    fn selected:[string] () {
+        def out:[string]
+        def i:int 0
+        while (i < (array_length picked)) {
+            push out (itemAt picked i)
+            i = (i + 1)
+        }
+        return out
+    }
+}
