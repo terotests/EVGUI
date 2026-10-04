@@ -58,6 +58,7 @@ SUITES=(
   ui:combobox:demo
   ui:colorpicker:check
   ui:emoji:check
+  ui:chat:check
   ui:questionnaire:check
   ui:select:check
   ui:window:check

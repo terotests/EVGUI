@@ -1,0 +1,426 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; ChatCtl — a conversation beside the work: messages, who wrote them, a line
+; to write the next one, and how many came while it was closed
+; =============================================================================
+; After MessageDemo's transcript, made a control a host keeps open or hidden
+; beside a document (Sliqtly's chat on a presentation): each message has the
+; writer's name in their colour and the time, the person's own on the right,
+; and the panel can be closed — while it is, every message from someone else
+; counts, and `badge()` is "(4)" for the button that opens it again.
+;
+; STATE: `messages` (oldest first, at most `keep`), `open`, `unread`,
+; `draft`. The host adds messages as they arrive (`add`, which ignores an id
+; it has); opening the panel reads them all. What the person sends is left in
+; `sent` for the host to take (`takeSent`) and post; it comes back through
+; `add` like everyone else's.
+;
+; WINDOW: `shown` messages from `top`; the newest stay in view while the
+; reader is at the end (`follow`), and a reader who scrolled up is left where
+; they are with a "N new" button that jumps to the end.
+;
+; KEYS (the host sends them while the composer has focus): typing goes into
+; the draft, Backspace takes a character (a surrogate pair whole) off it,
+; Enter sends, Escape closes. POINTER: `<tid>-close`, `<tid>-send`,
+; `<tid>-jump`.
+;
+; TO A READER: a region named by the title; the messages a log (a live
+; region), each one text "name, time: message"; the draft a text field; the
+; buttons buttons.
+; =============================================================================
+
+Import "UiCtl.rgr"
+Import "UiTree.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+
+class UiChatMessage {
+    def id:string ""
+    ; who wrote it: an id the host keeps for a person
+    def who:string ""
+    def name:string ""
+    ; the writer's colour, "#rrggbb"
+    def color:string "#64748b"
+    def text:string ""
+    ; as the host shows it ("14:05")
+    def time:string ""
+    def mine:boolean false
+
+    Constructor () {
+    }
+}
+
+class ChatCtl extends UiCtl {
+    def title:string "Chat"
+    def placeholder:string "Write a message…"
+    def emptyText:string "No messages yet."
+    def sendText:string "Send"
+    def closeText:string "Close"
+    ; "N new": the jump button, with the count in front
+    def newText:string "new"
+    def messages:[UiChatMessage]
+    def keep:int 500
+    def open:boolean false
+    def unread:int 0
+    def draft:string ""
+    def sent:string ""
+    def maxLength:int 2000
+    ; the window of messages on screen
+    def top:int 0
+    def shown:int 6
+    def follow:boolean true
+    ; the panel's height in px when the host gives it one (0: the sheet's);
+    ; the messages get what the title bar and the composer leave (84 px)
+    def height:double 0.0
+    ; arrived while the reader was scrolled up
+    def unseenBelow:int 0
+
+    Constructor () {
+    }
+
+    fn setup:void (id:string label:string) {
+        tid = id
+        name = label
+        title = label
+    }
+
+    ; --- messages ---------------------------------------------------------------
+
+    fn has:boolean (id:string) {
+        for messages m:UiChatMessage i {
+            if (m.id == id) {
+                return true
+            }
+        }
+        return false
+    }
+
+    ; -> false when a message with that id is here already
+    fn add:boolean (id:string who:string writer:string color:string text:string time:string mine:boolean) {
+        if (((strlen id) > 0) && (this.has(id))) {
+            return false
+        }
+        def m (new UiChatMessage())
+        m.id = id
+        m.who = who
+        m.name = writer
+        m.color = color
+        m.text = text
+        m.time = time
+        m.mine = mine
+        push messages m
+        while ((array_length messages) > keep) {
+            remove_index messages 0
+            if (top > 0) {
+                top = (top - 1)
+            }
+        }
+        if ((open == false) && (mine == false)) {
+            unread = (unread + 1)
+        }
+        if follow {
+            this.toEnd()
+        } {
+            if (mine == false) {
+                unseenBelow = (unseenBelow + 1)
+            }
+        }
+        return true
+    }
+
+    ; a person's new name on what they wrote
+    fn rename:void (who:string writer:string color:string) {
+        for messages m:UiChatMessage i {
+            if (m.who == who) {
+                m.name = writer
+                m.color = color
+            }
+        }
+    }
+
+    fn count:int () {
+        return (array_length messages)
+    }
+
+    fn at:UiChatMessage (i:int) {
+        return (itemAt messages i)
+    }
+
+    ; --- open / closed -----------------------------------------------------------
+
+    fn setOpen:void (o:boolean) {
+        open = o
+        if open {
+            unread = 0
+            this.toEnd()
+        }
+    }
+
+    fn toggle:void () {
+        this.setOpen((open == false))
+    }
+
+    ; "(4)", "(99+)", or "" with nothing unread
+    fn badge:string () {
+        if (unread <= 0) {
+            return ""
+        }
+        if (unread > 99) {
+            return "(99+)"
+        }
+        return (("(" + (to_string unread)) + ")")
+    }
+
+    ; the button's text: "Chat (4)"
+    fn buttonLabel:string (base:string) {
+        def b:string (this.badge())
+        if ((strlen b) == 0) {
+            return base
+        }
+        return ((base + " ") + b)
+    }
+
+    ; --- the window ----------------------------------------------------------------
+
+    fn maxTop:int () {
+        def m:int ((array_length messages) - shown)
+        if (m < 0) {
+            return 0
+        }
+        return m
+    }
+
+    fn toEnd:void () {
+        top = (this.maxTop())
+        follow = true
+        unseenBelow = 0
+    }
+
+    fn scrollBy:void (n:int) {
+        top = (top + n)
+        if (top < 0) {
+            top = 0
+        }
+        if (top >= (this.maxTop())) {
+            this.toEnd()
+        } {
+            follow = false
+        }
+    }
+
+    ; --- the draft -------------------------------------------------------------------
+
+    fn typeChar:boolean (target:string ch:string) {
+        if (((strlen draft) + (strlen ch)) > maxLength) {
+            return true
+        }
+        draft = (draft + ch)
+        return true
+    }
+
+    fn backspace:void () {
+        def n:int (strlen draft)
+        if (n == 0) {
+            return
+        }
+        def cut:int (n - 1)
+        if (cut > 0) {
+            def c:int (charAt draft cut)
+            if ((c >= 56320) && (c <= 57343)) {
+                cut = (cut - 1)
+            }
+        }
+        draft = (substring draft 0 cut)
+    }
+
+    ; the draft goes to `sent` (the host posts it); "" sends nothing
+    fn send:boolean () {
+        def t:string (trim draft)
+        if ((strlen t) == 0) {
+            return false
+        }
+        sent = t
+        draft = ""
+        return true
+    }
+
+    fn takeSent:string () {
+        def s:string sent
+        sent = ""
+        return s
+    }
+
+    fn keyDown:string (target:string key:string) {
+        if (key == "Backspace") {
+            this.backspace()
+        }
+        if (key == "Enter") {
+            this.send()
+        }
+        if (key == "Escape") {
+            this.setOpen(false)
+        }
+        if (key == "PageUp") {
+            this.scrollBy((0 - shown))
+        }
+        if (key == "PageDown") {
+            this.scrollBy(shown)
+        }
+        return ""
+    }
+
+    ; --- the pointer ----------------------------------------------------------------------
+
+    fn activate:string (target:string) {
+        if (target == (tid + "-close")) {
+            this.setOpen(false)
+            return target
+        }
+        if (target == (tid + "-send")) {
+            this.send()
+            return target
+        }
+        if (target == (tid + "-jump")) {
+            this.toEnd()
+            return target
+        }
+        return ""
+    }
+
+    fn msgTid:string (i:int) {
+        return (tid + "-m-" + (to_string i))
+    }
+
+    ; --- drawing ----------------------------------------------------------------------------
+
+    fn build:void () {
+        def root:EVGElement (UiTree.div(tid "chat-panel"))
+        def head:EVGElement (UiTree.div((tid + "-head") "chat-head"))
+        head.addChild((UiTree.label((tid + "-title") "chat-title" title)))
+        head.addChild((UiTree.label((tid + "-close") "chat-close" "×")))
+        root.addChild(head)
+        def list:EVGElement (UiTree.div((tid + "-log") "chat-log"))
+        if (height > 0.0) {
+            UiTree.inline(root "height" ((to_string height) + "px"))
+            def lh:double (height - 84.0)
+            if (lh < 40.0) {
+                lh = 40.0
+            }
+            UiTree.inline(list "height" ((to_string lh) + "px"))
+        }
+        if ((array_length messages) == 0) {
+            list.addChild((UiTree.label((tid + "-empty") "chat-empty" emptyText)))
+        }
+        def i:int top
+        while ((i < (top + shown)) && (i < (array_length messages))) {
+            def m:UiChatMessage (itemAt messages i)
+            def cls:string "chat-msg"
+            if m.mine {
+                cls = "chat-msg chat-msg-mine"
+            }
+            def box:EVGElement (UiTree.div((this.msgTid(i)) cls))
+            def meta:EVGElement (UiTree.div(((this.msgTid(i)) + "-meta") "chat-meta"))
+            def who:EVGElement (UiTree.label(((this.msgTid(i)) + "-name") "chat-name" m.name))
+            UiTree.inline(who "color" m.color)
+            meta.addChild(who)
+            if ((strlen m.time) > 0) {
+                meta.addChild((UiTree.label(((this.msgTid(i)) + "-time") "chat-time" m.time)))
+            }
+            box.addChild(meta)
+            def body:EVGElement (UiTree.label(((this.msgTid(i)) + "-text") "chat-text" m.text))
+            box.addChild(body)
+            list.addChild(box)
+            i = (i + 1)
+        }
+        root.addChild(list)
+        if (unseenBelow > 0) {
+            root.addChild((UiTree.label((tid + "-jump") "chat-jump" (((to_string unseenBelow) + " ") + newText))))
+        }
+        def composer:EVGElement (UiTree.div((tid + "-composer") "chat-composer"))
+        def field:EVGElement (UiTree.div((tid + "-field") "chat-field"))
+        if ((strlen draft) > 0) {
+            field.addChild((UiTree.label((tid + "-draft") "chat-draft" draft)))
+        }
+        field.addChild((UiTree.div((tid + "-caret") "chat-caret")))
+        if ((strlen draft) == 0) {
+            field.addChild((UiTree.label((tid + "-ph") "chat-placeholder" placeholder)))
+        }
+        composer.addChild(field)
+        def sendCls:string "chat-send"
+        if ((strlen (trim draft)) == 0) {
+            sendCls = "chat-send chat-send-off"
+        }
+        composer.addChild((UiTree.label((tid + "-send") sendCls sendText)))
+        root.addChild(composer)
+        rootEl = root
+    }
+
+    ; --- what it is, to a reader ----------------------------------------------------------------
+
+    fn tids:[string] () {
+        def a:[string]
+        push a tid
+        push a (tid + "-close")
+        push a (tid + "-log")
+        def i:int top
+        while ((i < (top + shown)) && (i < (array_length messages))) {
+            push a (this.msgTid(i))
+            i = (i + 1)
+        }
+        if (unseenBelow > 0) {
+            push a (tid + "-jump")
+        }
+        push a (tid + "-field")
+        push a (tid + "-send")
+        return a
+    }
+
+    fn isFocusable:boolean (target:string) {
+        return (((target == (tid + "-field")) || (target == (tid + "-send"))) || (target == (tid + "-close")))
+    }
+
+    fn rows:[UiRow] () {
+        def out:[UiRow]
+        push out (UiRow.of(tid (EVGA11yRole.region()) title))
+        def close:UiRow (UiRow.of((tid + "-close") (EVGA11yRole.button()) closeText))
+        close.parentTid = tid
+        close.focusable = true
+        close.tabStop = true
+        push out close
+        def log:UiRow (UiRow.of((tid + "-log") (EVGA11yRole.log()) title))
+        log.parentTid = tid
+        push out log
+        def i:int top
+        while ((i < (top + shown)) && (i < (array_length messages))) {
+            def m:UiChatMessage (itemAt messages i)
+            def said:string m.name
+            if ((strlen m.time) > 0) {
+                said = ((said + ", ") + m.time)
+            }
+            def r:UiRow (UiRow.of((this.msgTid(i)) (EVGA11yRole.text()) ((said + ": ") + m.text)))
+            r.parentTid = (tid + "-log")
+            push out r
+            i = (i + 1)
+        }
+        if (unseenBelow > 0) {
+            def j:UiRow (UiRow.of((tid + "-jump") (EVGA11yRole.button()) (((to_string unseenBelow) + " ") + newText)))
+            j.parentTid = tid
+            push out j
+        }
+        def f:UiRow (UiRow.of((tid + "-field") (EVGA11yRole.textField()) placeholder))
+        f.parentTid = tid
+        f.hasText = true
+        f.text = draft
+        f.placeholder = placeholder
+        f.focusable = true
+        f.tabStop = true
+        push out f
+        def s:UiRow (UiRow.of((tid + "-send") (EVGA11yRole.button()) sendText))
+        s.parentTid = tid
+        s.disabled = ((strlen (trim draft)) == 0)
+        s.focusable = true
+        push out s
+        return out
+    }
+}

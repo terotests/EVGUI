@@ -1,0 +1,75 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; ChatDemo — ChatCtl in a UiHost, for chat-check.mjs
+; =============================================================================
+; The chat alone on a page: built, styled by the kit's theme, laid out, and
+; driven by the pointer (pressAt) and the keys (key / type) the way
+; a host drives it.
+; =============================================================================
+
+Import "../src/ChatCtl.rgr"
+Import "../src/UiHost.rgr"
+Import "pkg:evg/EVGElement.rgr"
+
+class ChatDemo {
+    def host:UiHost (new UiHost())
+    def chat:ChatCtl (new ChatCtl())
+    def css:string ""
+    def theme:string ""
+
+    Constructor () {
+    }
+
+    fn init:void (sheet:string themeName:string) {
+        css = sheet
+        theme = themeName
+        chat.setup("ch" "Chat")
+        this.rebuild()
+    }
+
+    fn rebuild:void () {
+        def h (new UiHost())
+        host = h
+        host.addStyleSheet(css)
+        host.setTheme(theme)
+        host.setPageSize(320.0 440.0)
+        chat.build()
+        host.add(chat)
+        host.layout()
+    }
+
+    fn pressAt:string (x:double y:double) {
+        def t:string (host.hitTest(x y))
+        chat.activate(t)
+        this.rebuild()
+        return t
+    }
+
+    fn key:void (k:string shift:boolean) {
+        chat.keyDownWith(chat.tid k shift false)
+        this.rebuild()
+    }
+
+    fn type:void (s:string) {
+        chat.typeChar(chat.tid s)
+        this.rebuild()
+    }
+
+    fn displayListJson:string () {
+        return (host.displayListJson())
+    }
+
+    ; Where an element was laid out: "x y w h", "" when it is not on the page.
+    fn rectOf:string (id:string) {
+        if (null? host.lastPage) {
+            return ""
+        }
+        def found@(optional):EVGElement (UiTree.findById((unwrap host.lastPage) id))
+        if (null? found) {
+            return ""
+        }
+        def el:EVGElement (unwrap found)
+        return ((to_string el.calculatedX) + " " + (to_string el.calculatedY) + " " + (to_string el.calculatedWidth) + " " + (to_string el.calculatedHeight))
+    }
+}
