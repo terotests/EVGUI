@@ -132,6 +132,7 @@
 .theme-retro .ui-input-placeholder { color: var(--retro-ink-dim); }
 .theme-retro .ui-input-caret { background-color: var(--retro-hot-b); }
 .theme-retro .ui-input-selection { background-color: var(--retro-screen-3); }
+.theme-retro .ui-text-selection { background-color: var(--retro-screen-3); }
 .theme-retro .ui-input-invalid { border-color: var(--retro-danger); }
 .theme-retro .ui-field-label,
 .theme-retro .ui-label { color: var(--retro-ink); }

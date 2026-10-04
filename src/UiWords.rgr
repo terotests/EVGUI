@@ -1,0 +1,408 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; UiWords — where characters, words and numbers start and end in a string
+; =============================================================================
+; The index rules a text field and a selectable text share: the caret never
+; lands inside an emoji or a letter with its marks (`stops`), Ctrl+Arrow
+; motion (`wordLeft`, `wordRight`) and what a double click takes
+; (`wordFrom`/`wordTo`). They used to be InputCtl's own methods over its
+; `value`; TextCtl needs the same answers over its text, and two copies of a
+; rule measured against Chromium would be two places for it to drift. Pure
+; functions of the string and an index: no engine, no element, no state.
+;
+; Indexes are UTF-16 code units on the JS backend; see InputCtl's header for
+; what that means on the others.
+; =============================================================================
+
+Import "pkg:evg/EVGGrapheme.rgr"
+Import "pkg:evg/EVGCodepoint.rgr"
+
+class UiWords {
+
+    Constructor () {
+    }
+
+    sfn clamp:int (text:string i:int) {
+        if (i < 0) {
+            return 0
+        }
+        def n:int (strlen text)
+        if (i > n) {
+            return n
+        }
+        return i
+    }
+
+    ; --- characters as a reader counts them ------------------------------------
+    ; One emoji (👍🏽, 🇫🇮, 👨‍👩‍👧) or a letter with its marks is one step for
+    ; Backspace, Delete, the arrows and the pointer: the caret never lands
+    ; inside one, where the next key would split it into pieces that are not
+    ; characters. EVGGrapheme decides where the clusters end.
+
+    ; Where each cluster of the text starts, as offsets, ending with its
+    ; length.
+    sfn stops:[int] (text:string) {
+        def n:int (strlen text)
+        def cps:[int]
+        def offs:[int]
+        def u:int 0
+        while (u < n) {
+            push cps (EVGCodepoint.codeAt(text u))
+            push offs u
+            def w:int (EVGCodepoint.unitsAt(text u))
+            if (w < 1) {
+                w = 1
+            }
+            u = (u + w)
+        }
+        def out:[int]
+        def m:int (array_length cps)
+        def i:int 0
+        while (i < m) {
+            push out (itemAt offs i)
+            def nx:int (EVGGrapheme.clusterEnd(cps i))
+            if (nx <= i) {
+                nx = (i + 1)
+            }
+            i = nx
+        }
+        push out n
+        return out
+    }
+
+    ; The stop one cluster before `i`.
+    sfn prevStop:int (text:string i:int) {
+        def st:[int] (UiWords.stops(text))
+        def best:int 0
+        def k:int 0
+        while (k < (array_length st)) {
+            def at:int (itemAt st k)
+            if (at >= i) {
+                return best
+            }
+            best = at
+            k = (k + 1)
+        }
+        return best
+    }
+
+    ; The stop one cluster after `i`.
+    sfn nextStop:int (text:string i:int) {
+        def st:[int] (UiWords.stops(text))
+        def k:int 0
+        while (k < (array_length st)) {
+            def at:int (itemAt st k)
+            if (at > i) {
+                return at
+            }
+            k = (k + 1)
+        }
+        return (strlen text)
+    }
+
+    ; `i`, or the start of the cluster it is inside.
+    sfn snapStop:int (text:string i:int) {
+        def st:[int] (UiWords.stops(text))
+        def best:int 0
+        def k:int 0
+        while (k < (array_length st)) {
+            def at:int (itemAt st k)
+            if (at > i) {
+                return best
+            }
+            best = at
+            k = (k + 1)
+        }
+        return best
+    }
+
+    ; --- words ----------------------------------------------------------------
+    ;
+    ; A rule that is easy to invent and easy to get wrong, so it is written to
+    ; be MEASURED: `input_word_motion` drives Ctrl+Arrow across a string with
+    ; runs of spaces and punctuation, and the diff reports `selstart` after
+    ; every press. Whatever the browser does is what this has to do.
+    ;
+    ; A browser does not split text into "space" and "not space". It puts every
+    ; character into one of THREE classes, and a word is a maximal run of one
+    ; class:
+    ;
+    ;   0  whitespace
+    ;   1  word characters — letters, digits, underscore
+    ;   2  everything else, i.e. punctuation
+    ;
+    ; Measured, in `conformance/oracle/pointer.json`, over
+    ; "alpha  beta,gamma delta":
+    ;
+    ;   Ctrl+ArrowRight from 0 stops at 5, 11, 12, 17, 23 — so it stops BEFORE
+    ;   the comma and then crosses it alone.
+    ;   Double-clicking the comma selects [11,12] — the comma by itself.
+    ;   Double-clicking a space selects the whole RUN of spaces, [5,7].
+    ;
+    ; An earlier version asked only "is this a space", which makes
+    ; "beta,gamma" one word: Ctrl+ArrowRight from 5 gave 17 where Chromium
+    ; gives 11. Nothing caught it because the nine keyboard specs all use
+    ; "alpha  beta gamma", which has no punctuation in it — a corpus cannot
+    ; find a rule it contains no instance of.
+    ;
+    ; Everything at or above 128 is called a word character. That is an
+    ; approximation, not a measurement: real word breaking is UAX #29 and needs
+    ; tables. It is right for accented Latin, wrong for CJK — where a browser
+    ; breaks on script boundaries — and it is written down here rather than
+    ; discovered later.
+
+    sfn classOf:int (c:int) {
+        if (c == 32) { return 0 }
+        if (c == 9)  { return 0 }
+        if (c == 10) { return 0 }
+        if (c == 13) { return 0 }
+        if ((c >= 48) && (c <= 57)) { return 1 }
+        if ((c >= 65) && (c <= 90)) { return 1 }
+        if ((c >= 97) && (c <= 122)) { return 1 }
+        if (c == 95) { return 1 }
+        if (c >= 128) { return 1 }
+        return 2
+    }
+
+    ; The class of the character at `i`, or whitespace outside the string —
+    ; which makes both ends behave like a boundary with no special case.
+    sfn classAt:int (text:string i:int) {
+        if (i < 0) {
+            return 0
+        }
+        if (i >= (strlen text)) {
+            return 0
+        }
+        return (UiWords.classOf((charAt text i)))
+    }
+
+    ; Backwards: over any run of whitespace first, then over the run that ends
+    ; at `i`, landing on that run's start.
+    sfn wordLeft:int (text:string from:int) {
+        def i:int (UiWords.clamp(text from))
+        while (i > 0) {
+            if ((UiWords.classAt(text (i - 1))) != 0) {
+                break
+            }
+            i = (i - 1)
+        }
+        if (i == 0) {
+            return 0
+        }
+        def cls:int (UiWords.classAt(text (i - 1)))
+        while (i > 0) {
+            if ((UiWords.classAt(text (i - 1))) != cls) {
+                break
+            }
+            i = (i - 1)
+        }
+        return i
+    }
+
+    ; Forwards: over any run of whitespace FIRST, then over the run that starts
+    ; there, landing on the character after its last.
+    ;
+    ; Not the mirror image of `wordLeft`, and that asymmetry is measured rather
+    ; than chosen. The first version skipped the word and then the spaces —
+    ; landing on the NEXT word's first character, which is the rule that reads
+    ; naturally and is not the one the platform implements. On
+    ; "alpha  beta gamma" from 0 it gave 7 where Chromium gives 5, and from
+    ; there 12 where Chromium gives 11. Both directions land on a run's own
+    ; edge: backwards on its start, forwards on its end.
+    sfn wordRight:int (text:string from:int) {
+        def i:int (UiWords.clamp(text from))
+        def n:int (strlen text)
+        while (i < n) {
+            if ((UiWords.classAt(text i)) != 0) {
+                break
+            }
+            i = (i + 1)
+        }
+        if (i >= n) {
+            return n
+        }
+        def cls:int (UiWords.classAt(text i))
+        while (i < n) {
+            if ((UiWords.classAt(text i)) != cls) {
+                break
+            }
+            i = (i + 1)
+        }
+        return i
+    }
+
+    ; The run a double-click takes: the maximal run of ONE class containing
+    ; `i`. Whitespace included — double-clicking the two spaces in
+    ; "alpha  beta" selects both of them, measured.
+    ;
+    ; This is deliberately not `wordLeft(i)`..`wordRight(i)`: those two skip
+    ; over whitespace before they start, so on a space they would reach out to
+    ; the words either side and select across.
+    sfn wordStartAt:int (text:string i:int) {
+        def at:int (UiWords.clamp(text i))
+        def n:int (strlen text)
+        if (at >= n) {
+            at = (n - 1)
+        }
+        if (at < 0) {
+            return 0
+        }
+        def cls:int (UiWords.classAt(text at))
+        def a:int at
+        while (a > 0) {
+            if ((UiWords.classAt(text (a - 1))) != cls) {
+                break
+            }
+            a = (a - 1)
+        }
+        return a
+    }
+
+    sfn wordEndAt:int (text:string i:int) {
+        def at:int (UiWords.clamp(text i))
+        def n:int (strlen text)
+        if (at >= n) {
+            at = (n - 1)
+        }
+        if (at < 0) {
+            return 0
+        }
+        def cls:int (UiWords.classAt(text at))
+        def b:int at
+        while (b < n) {
+            if ((UiWords.classAt(text b)) != cls) {
+                break
+            }
+            b = (b + 1)
+        }
+        return b
+    }
+
+    ; A number with a point in it is ONE run to a double-click — and not to
+    ; Ctrl+Arrow. Measured on the invoice's Amount, "1250.00", and the profile's
+    ; "17.30": double-clicking either half selects the whole number, [0,7] and
+    ; [0,5], while Ctrl+ArrowRight still stops at the point. Chromium's two
+    ; iterators disagree about MidNum (UAX #29's WB11/WB12: a "." or "," BETWEEN
+    ; digits does not break a word) and the double-click is the one that
+    ; follows the rule, so the join lives here and not in `classAt`. Letters
+    ; are not joined: "ada.example.com" double-clicks as "ada", measured too.
+    sfn isDigitAt:boolean (text:string i:int) {
+        if ((i < 0) || (i >= (strlen text))) {
+            return false
+        }
+        def c:int (charAt text i)
+        return ((c >= 48) && (c <= 57))
+    }
+
+    sfn isMidNumAt:boolean (text:string i:int) {
+        if ((i < 0) || (i >= (strlen text))) {
+            return false
+        }
+        def c:int (charAt text i)
+        if ((c != 46) && (c != 44)) {
+            return false
+        }
+        if ((UiWords.isDigitAt(text (i - 1))) == false) {
+            return false
+        }
+        return (UiWords.isDigitAt(text (i + 1)))
+    }
+
+    ; [start, end) of the number run containing `i`, joining digit runs across
+    ; a mid-number separator in both directions.
+    sfn numberRunStart:int (text:string i:int) {
+        def a:int i
+        while (a > 0) {
+            if (UiWords.isDigitAt(text (a - 1))) {
+                a = (a - 1)
+            } {
+                if ((UiWords.isMidNumAt(text (a - 1))) == false) {
+                    break
+                }
+                a = (a - 1)
+            }
+        }
+        return a
+    }
+
+    sfn numberRunEnd:int (text:string i:int) {
+        def n:int (strlen text)
+        def b:int i
+        while (b < n) {
+            if (UiWords.isDigitAt(text b)) {
+                b = (b + 1)
+            } {
+                if ((UiWords.isMidNumAt(text b)) == false) {
+                    break
+                }
+                b = (b + 1)
+            }
+        }
+        return b
+    }
+
+    sfn inNumberAt:boolean (text:string i:int) {
+        if (UiWords.isDigitAt(text i)) {
+            return true
+        }
+        return (UiWords.isMidNumAt(text i))
+    }
+
+    ; What a double click at `i` takes: [wordFrom, wordTo). The run of one
+    ; class, and a number with a point in it whole — together with the word
+    ; characters on either side of it. The number join only ever ADDS: it
+    ; used to replace the word, so a double click on a digit in a build hash
+    ; ("e22e565d1e") took "22" alone where a browser takes the whole hash.
+    sfn wordFrom:int (text:string i:int) {
+        def at:int (UiWords.clamp(text i))
+        def n:int (strlen text)
+        if (at >= n) {
+            at = (n - 1)
+        }
+        if ((at >= 0) && (UiWords.inNumberAt(text at))) {
+            return (UiWords.wordStartAt(text (UiWords.numberRunStart(text at))))
+        }
+        return (UiWords.wordStartAt(text i))
+    }
+
+    sfn wordTo:int (text:string i:int) {
+        def at:int (UiWords.clamp(text i))
+        def n:int (strlen text)
+        if (at >= n) {
+            at = (n - 1)
+        }
+        if ((at >= 0) && (UiWords.inNumberAt(text at))) {
+            return (UiWords.wordEndAt(text ((UiWords.numberRunEnd(text (at + 1))) - 1)))
+        }
+        return (UiWords.wordEndAt(text i))
+    }
+
+    ; --- paragraphs -----------------------------------------------------------
+    ; What a triple click takes in text that has line breaks in it: the
+    ; paragraph, from the newline before `i` to the newline after it (which
+    ; is left out). One line of text is one paragraph, so in a field a
+    ; triple click is all of it, as it is in an <input>.
+    sfn paragraphFrom:int (text:string i:int) {
+        def a:int (UiWords.clamp(text i))
+        while (a > 0) {
+            if ((charAt text (a - 1)) == 10) {
+                break
+            }
+            a = (a - 1)
+        }
+        return a
+    }
+
+    sfn paragraphTo:int (text:string i:int) {
+        def n:int (strlen text)
+        def b:int (UiWords.clamp(text i))
+        while (b < n) {
+            if ((charAt text b) == 10) {
+                break
+            }
+            b = (b + 1)
+        }
+        return b
+    }
+}

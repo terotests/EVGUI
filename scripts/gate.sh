@@ -71,6 +71,7 @@ SUITES=(
   # The z-order model: which surface is on top (src/UiLayers.rgr).
   ui:layers:check
   ui:input:field
+  ui:text:select
   evg:flexgrow:check
   evg:pctflex:check
   evg:inspect:test

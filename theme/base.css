@@ -152,6 +152,7 @@
  * laid-out run; the sheet gives their colours (and the caret a width). */
 .ui-input-caret { width: 2px; background-color: #2563eb; }
 .ui-input-selection { background-color: #bfdbfe; }
+.ui-text-selection { background-color: #bfdbfe; }
 /* InputCtl.clearable: the × at the end while the field holds text; the
  * field's view takes the room before it. */
 .ui-input-clear {
