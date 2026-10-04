@@ -61,6 +61,21 @@
 ;   keys      printable characters insert; Backspace and Delete remove;
 ;             Arrows move; Shift+Arrow extends; Home/End; Ctrl+A selects all;
 ;             Ctrl+Arrow moves by word.
+;   pointer   a press puts the caret where it lands, Shift+press extends,
+;             a drag selects, a double-click takes a word (and a drag after
+;             it extends by words), a triple-click takes all of it.
+;
+; THE FIELD DRAWS ITS OWN CARET AND SELECTION. `build` makes the whole field:
+; a clipping view with the selection band, the text and the caret in it, and
+; the clear button beside the view. After the page is laid out the host calls
+; `placeText(eng)` (UiHost does it for every control), and the field reads
+; what layout and the stylesheet decided — the view's width, the run's own
+; font, size and letter spacing, where the run starts — and places the band
+; and the caret from that, scrolled so the caret is in view. Nothing about the
+; geometry is the host's to supply or to get wrong: a host used to set the
+; font and the box width by hand and draw the caret itself, and every one of
+; them drifted from what was painted in a different way (a caret with no
+; width, a band 16px short of the text because the "box width" was 80).
 ;
 ; Explicitly NOT in scope, each a real thing being declined: IME composition,
 ; RTL and bidi caret movement, the clipboard, an undo stack, spellcheck,
@@ -72,6 +87,8 @@ Import "UiTree.rgr"
 Import "pkg:evg/EVGElement.rgr"
 Import "pkg:evg/EVGA11yTree.rgr"
 Import "pkg:evg/EVGTextEngine.rgr"
+Import "pkg:evg/EVGGrapheme.rgr"
+Import "pkg:evg/EVGCodepoint.rgr"
 
 class InputCtl extends UiCtl {
     ; What the field holds. For a password this is the TEXT, never the bullets.
@@ -90,8 +107,9 @@ class InputCtl extends UiCtl {
     def maxLength:int 0
     ; A clear button (×) at the end of the box while it holds text, as a
     ; search field has. Off unless asked for: the conformance specs compare
-    ; against a plain <input type="text">, which has none. A press on it is
-    ; the host's to route (`isClearHit`, then `clearValue`). It is not a tab
+    ; against a plain <input type="text">, which has none. A press on it
+    ; empties the field (`textPointerDown`, or `isClearHit` then
+    ; `clearValue` for a host that routes presses itself). It is not a tab
     ; stop and not a row of its own, like the clear button of a native
     ; search field: Ctrl+A and Backspace empty the field from the keyboard.
     def clearable:boolean false
@@ -114,17 +132,49 @@ class InputCtl extends UiCtl {
     ; text sits depends on where the caret has BEEN, not only where it is.
     def scrollX:double 0.0
 
+    def letterSpacing:double 0.0
+
+    ; Whether the field has the keyboard: only then are the caret and the
+    ; selection drawn. UiHost keeps it through onFocus/onBlur; a host that
+    ; owns focus itself sets it.
+    def focused:boolean false
+    ; The host's own classes for the box (space-separated), kept by every
+    ; build: a field rebuilds itself on each key, and a class added to the
+    ; root from outside would be gone after the first one.
+    def boxClass:string ""
+    ; A class of the host's on the text run as well as `ui-input-text`, so a
+    ; theme can colour this field's text (a dark search line) on its own.
+    def textClass:string ""
+    ; The caret's width when the stylesheet gives `.ui-input-caret` none.
+    def caretWidth:double 2.0
+
+    ; What the last `placeText` found: the engine the page was measured with
+    ; and the page x where the text run starts unscrolled. The pointer maps
+    ; through both, so a press measures against the run that is on screen.
+    def measuredBy@(optional):EVGTextEngine
+    def textX:double 0.0
+
+    ; A drag after a press: 0 by characters, 1 by words (after a double
+    ; click), 2 the whole text (after a triple click). The word the double
+    ; click took is [dragFrom, dragTo).
+    def dragging:boolean false
+    def dragUnit:int 0
+    def dragFrom:int 0
+    def dragTo:int 0
+
+    def viewEl:EVGElement
+    def selEl:EVGElement
     def textEl:EVGElement
     def caretEl:EVGElement
     def clearEl:EVGElement
-    def growEl:EVGElement
 
     Constructor () {
         rootEl = (EVGElement.createDiv())
+        viewEl = (EVGElement.createDiv())
+        selEl = (EVGElement.createDiv())
         textEl = (EVGElement.createDiv())
         caretEl = (EVGElement.createDiv())
         clearEl = (EVGElement.createDiv())
-        growEl = (EVGElement.createDiv())
     }
 
     ; --- names ----------------------------------------------------------------
@@ -141,8 +191,12 @@ class InputCtl extends UiCtl {
         return (tid + "-clear")
     }
 
-    fn growTid:string () {
-        return (tid + "-grow")
+    fn viewTid:string () {
+        return (tid + "-view")
+    }
+
+    fn selTid:string () {
+        return (tid + "-sel")
     }
 
     ; --- the clear button -----------------------------------------------------
@@ -473,7 +527,7 @@ class InputCtl extends UiCtl {
             return
         }
         if (caret > 0) {
-            this.deleteRange((caret - 1) caret)
+            this.deleteRange((this.prevStop(caret)) caret)
         }
     }
 
@@ -482,7 +536,90 @@ class InputCtl extends UiCtl {
             this.deleteRange((this.selStart()) (this.selEnd()))
             return
         }
-        this.deleteRange(caret (caret + 1))
+        this.deleteRange(caret (this.nextStop(caret)))
+    }
+
+    ; --- characters as a reader counts them ------------------------------------
+    ; One emoji (👍🏽, 🇫🇮, 👨‍👩‍👧) or a letter with its marks is one step for
+    ; Backspace, Delete, the arrows and the pointer: the caret never lands
+    ; inside one, where the next key would split it into pieces that are not
+    ; characters. EVGGrapheme decides where the clusters end.
+
+    ; Where each cluster of the value starts, as offsets, ending with its
+    ; length.
+    fn stops:[int] () {
+        def n:int (strlen value)
+        def cps:[int]
+        def offs:[int]
+        def u:int 0
+        while (u < n) {
+            push cps (EVGCodepoint.codeAt(value u))
+            push offs u
+            def w:int (EVGCodepoint.unitsAt(value u))
+            if (w < 1) {
+                w = 1
+            }
+            u = (u + w)
+        }
+        def out:[int]
+        def m:int (array_length cps)
+        def i:int 0
+        while (i < m) {
+            push out (itemAt offs i)
+            def nx:int (EVGGrapheme.clusterEnd(cps i))
+            if (nx <= i) {
+                nx = (i + 1)
+            }
+            i = nx
+        }
+        push out n
+        return out
+    }
+
+    ; The stop one cluster before `i`.
+    fn prevStop:int (i:int) {
+        def st:[int] (this.stops())
+        def best:int 0
+        def k:int 0
+        while (k < (array_length st)) {
+            def at:int (itemAt st k)
+            if (at >= i) {
+                return best
+            }
+            best = at
+            k = (k + 1)
+        }
+        return best
+    }
+
+    ; The stop one cluster after `i`.
+    fn nextStop:int (i:int) {
+        def st:[int] (this.stops())
+        def k:int 0
+        while (k < (array_length st)) {
+            def at:int (itemAt st k)
+            if (at > i) {
+                return at
+            }
+            k = (k + 1)
+        }
+        return (strlen value)
+    }
+
+    ; `i`, or the start of the cluster it is inside.
+    fn snapStop:int (i:int) {
+        def st:[int] (this.stops())
+        def best:int 0
+        def k:int 0
+        while (k < (array_length st)) {
+            def at:int (itemAt st k)
+            if (at > i) {
+                return best
+            }
+            best = at
+            k = (k + 1)
+        }
+        return best
     }
 
     ; --- word motion ----------------------------------------------------------
@@ -787,7 +924,7 @@ class InputCtl extends UiCtl {
             return 0.0
         }
         def head:string (substring g 0 k)
-        def m:EVGTextMetrics (eng.measureRun(head fontFamily fontSize))
+        def m:EVGTextMetrics (eng.measureRunSpaced(head fontFamily fontSize letterSpacing))
         return m.width
     }
 
@@ -927,7 +1064,7 @@ class InputCtl extends UiCtl {
                 if ((shift == false) && (this.hasSelection())) {
                     this.moveTo((this.selStart()) false)
                 } {
-                    this.moveTo((caret - 1) shift)
+                    this.moveTo((this.prevStop(caret)) shift)
                 }
             }
             this.build()
@@ -940,7 +1077,7 @@ class InputCtl extends UiCtl {
                 if ((shift == false) && (this.hasSelection())) {
                     this.moveTo((this.selEnd()) false)
                 } {
-                    this.moveTo((caret + 1) shift)
+                    this.moveTo((this.nextStop(caret)) shift)
                 }
             }
             this.build()
@@ -1001,8 +1138,188 @@ class InputCtl extends UiCtl {
         this.build()
     }
 
+    ; --- the pointer, on the page ---------------------------------------------
+    ; What a host with a real pointer calls: page x, the click count the page
+    ; counted (1, 2, 3) and Shift. Measured against the run as `placeText`
+    ; last placed it.
+
+    ; The character a page x lands on.
+    fn indexAtPage:int (px:double) {
+        if (null? measuredBy) {
+            return caret
+        }
+        def e:EVGTextEngine (unwrap measuredBy)
+        def at:int (this.indexAtX(e ((px - textX) + scrollX)))
+        ; never inside an emoji or a letter with its marks
+        return (this.snapStop(at))
+    }
+
+    fn pointerDown:void (px:double clicks:int shift:boolean) {
+        if disabled {
+            return
+        }
+        def at:int (this.indexAtPage(px))
+        dragging = true
+        if (clicks >= 3) {
+            this.selectAll()
+            dragUnit = 2
+            return
+        }
+        if ((clicks == 2) && (shift == false)) {
+            this.selectWordAt(at)
+            dragUnit = 1
+            dragFrom = (this.selStart())
+            dragTo = (this.selEnd())
+            return
+        }
+        dragUnit = 0
+        this.placeCaret(at shift)
+    }
+
+    ; The pointer moved with the button down: the caret follows it and the
+    ; anchor stays. After a double click the selection grows by whole words,
+    ; always keeping the word that was clicked.
+    fn pointerDrag:void (px:double) {
+        if (dragging == false) {
+            return
+        }
+        if (dragUnit == 2) {
+            return
+        }
+        def at:int (this.indexAtPage(px))
+        if (dragUnit == 0) {
+            this.placeCaret(at true)
+            return
+        }
+        this.selectWordAt(at)
+        def a:int (this.selStart())
+        def b:int (this.selEnd())
+        if (a < dragFrom) {
+            anchor = dragTo
+            caret = a
+        } {
+            anchor = dragFrom
+            caret = b
+            if (caret < dragTo) {
+                caret = dragTo
+            }
+        }
+    }
+
+    fn pointerUp:void () {
+        dragging = false
+    }
+
+    ; --- placing it on the page -----------------------------------------------
+
+    ; Called after the page holding the field has been laid out, with the
+    ; engine it was measured with. Reads the run's font from the element the
+    ; stylesheet styled (the same values the painter uses), takes the box
+    ; width from the view, scrolls the caret into view and places the text,
+    ; the band and the caret. Safe to call again on the same layout: every
+    ; position is set from the view, not moved from where it was.
+    fn placeText:void (e:EVGTextEngine) {
+        measuredBy = e
+        def view:EVGElement (unwrap viewEl)
+        def txt:EVGElement (unwrap textEl)
+        def car:EVGElement (unwrap caretEl)
+        def sel:EVGElement (unwrap selEl)
+        fontFamily = (txt.effectiveFontFamily())
+        def fs:double txt.inheritedFontSize
+        if txt.fontSize.isSet {
+            fs = txt.fontSize.pixels
+        }
+        if (fs <= 0.0) {
+            fs = 14.0
+        }
+        fontSize = fs
+        letterSpacing = txt.letterSpacing
+        def cw:double caretWidth
+        if car.width.isSet {
+            if (car.width.pixels > 0.0) {
+                cw = car.width.pixels
+            }
+        }
+        def inset:double (view.box.borderWidthPx + view.box.paddingLeftPx)
+        textX = ((view.calculatedX + inset) + txt.box.marginLeftPx)
+        def inner:double (((view.calculatedWidth - (inset * 2.0)) - txt.box.marginLeftPx) - cw)
+        if (inner < 0.0) {
+            inner = 0.0
+        }
+        boxWidth = inner
+        this.ensureCaretVisible(e)
+        txt.calculatedX = (textX - scrollX)
+        def y:double txt.calculatedY
+        def h:double txt.calculatedHeight
+        car.calculatedY = y
+        car.calculatedHeight = h
+        car.calculatedWidth = 0.0
+        car.calculatedX = textX
+        sel.calculatedY = y
+        sel.calculatedHeight = h
+        sel.calculatedWidth = 0.0
+        sel.calculatedX = textX
+        if ((focused == false) || disabled) {
+            return
+        }
+        if (this.hasSelection()) {
+            def sx:double (this.caretXAt(e (this.selStart())))
+            def ex:double (this.caretXAt(e (this.selEnd())))
+            sel.calculatedX = ((textX + sx) - scrollX)
+            sel.calculatedWidth = (ex - sx)
+            return
+        }
+        car.calculatedX = ((textX + (this.caretXAt(e caret))) - scrollX)
+        car.calculatedWidth = cw
+    }
+
+    ; --- what the host routes here (see UiCtl) --------------------------------
+
+    fn onFocus:void (target:string) {
+        focused = true
+    }
+
+    fn onBlur:void (target:string) {
+        focused = false
+        dragging = false
+    }
+
+    fn textPointerDown:boolean (target:string px:double clicks:int shift:boolean) {
+        if ((this.owns(target)) == false) {
+            return false
+        }
+        if disabled {
+            return false
+        }
+        focused = true
+        ; the clear button: emptied, and no drag follows
+        if (this.isClearHit(target)) {
+            this.clearValue()
+            return true
+        }
+        this.pointerDown(px clicks shift)
+        return true
+    }
+
+    fn textPointerDrag:boolean (px:double) {
+        if (dragging == false) {
+            return false
+        }
+        this.pointerDrag(px)
+        return true
+    }
+
+    fn textPointerUp:void () {
+        this.pointerUp()
+    }
+
     ; --- the tree -------------------------------------------------------------
 
+    ; The field: [view [band, text, caret], clear?]. The view takes the room
+    ; the clear button leaves and clips what is scrolled out of it; the band
+    ; and the caret are absolute, placed by `placeText`. Those structural
+    ; properties are inline, so no stylesheet can leave them out; the colours
+    ; are the theme's (.ui-input-selection, .ui-input-caret, .ui-input-text).
     fn build:void () {
         def root:EVGElement (unwrap rootEl)
         root.id = tid
@@ -1016,11 +1333,41 @@ class InputCtl extends UiCtl {
         if clearable {
             UiTree.addClass(root "ui-input-clearable")
         }
+        if focused {
+            UiTree.addClass(root "ui-input-focused")
+        }
+        if ((strlen boxClass) > 0) {
+            root.className = ((root.className + " ") + boxClass)
+        }
         UiTree.clearChildren(root)
+
+        def view:EVGElement (unwrap viewEl)
+        view.id = (this.viewTid())
+        view.className = "ui-input-view"
+        UiTree.clearChildren(view)
+        UiTree.inline(view "position" "relative")
+        UiTree.inline(view "overflow" "hidden")
+        UiTree.inline(view "flex-grow" "1")
+        UiTree.inline(view "flex-shrink" "1")
+        UiTree.inline(view "min-width" "0px")
+        UiTree.inline(view "display" "flex")
+        UiTree.inline(view "flex-direction" "row")
+        UiTree.inline(view "align-items" "center")
+        root.addChild(view)
+
+        def sel:EVGElement (unwrap selEl)
+        sel.id = (this.selTid())
+        sel.className = "ui-input-selection"
+        UiTree.clearChildren(sel)
+        UiTree.inline(sel "position" "absolute")
+        view.addChild(sel)
 
         def txt:EVGElement (unwrap textEl)
         txt.id = (this.textTid())
         txt.className = "ui-input-text"
+        if ((strlen textClass) > 0) {
+            UiTree.addClass(txt textClass)
+        }
         if (this.showsPlaceholder()) {
             UiTree.addClass(txt "ui-input-placeholder")
             txt.textContent = placeholder
@@ -1028,22 +1375,18 @@ class InputCtl extends UiCtl {
             txt.textContent = (this.glyphText())
         }
         UiTree.clearChildren(txt)
-        root.addChild(txt)
+        UiTree.inline(txt "white-space" "nowrap")
+        UiTree.inline(txt "flex-shrink" "0")
+        view.addChild(txt)
 
         def car:EVGElement (unwrap caretEl)
         car.id = (this.caretTid())
         car.className = "ui-input-caret"
         UiTree.clearChildren(car)
-        root.addChild(car)
+        UiTree.inline(car "position" "absolute")
+        view.addChild(car)
 
         if (this.showsClear()) {
-            ; the room between the text and the button, so the button sits
-            ; at the box's right edge
-            def gr:EVGElement (unwrap growEl)
-            gr.id = (this.growTid())
-            gr.className = "ui-input-grow"
-            UiTree.clearChildren(gr)
-            root.addChild(gr)
             def clr:EVGElement (unwrap clearEl)
             clr.id = (this.clearTid())
             clr.className = "ui-input-clear"
@@ -1057,10 +1400,11 @@ class InputCtl extends UiCtl {
     fn tids:[string] () {
         def a:[string]
         push a tid
+        push a (this.viewTid())
+        push a (this.selTid())
         push a (this.textTid())
         push a (this.caretTid())
         if clearable {
-            push a (this.growTid())
             push a (this.clearTid())
         }
         return a

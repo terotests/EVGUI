@@ -1166,12 +1166,45 @@ class ComboboxCtl extends UiCtl {
         } {
             chipFocus = ""
         }
+        input.focused = (target == (this.inputTid()))
         this.build()
     }
 
     fn onBlur:void (target:string) {
         chipFocus = ""
+        input.focused = false
+        input.pointerUp()
         this.commitBlur()
+    }
+
+    ; The text box draws its own caret and selection and takes presses in it
+    ; (see InputCtl.placeText).
+    fn placeText:void (eng:EVGTextEngine) {
+        input.placeText(eng)
+    }
+
+    fn textPointerDown:boolean (target:string px:double clicks:int shift:boolean) {
+        if ((input.owns(target)) == false) {
+            return false
+        }
+        if disabled {
+            return false
+        }
+        input.focused = true
+        input.pointerDown(px clicks shift)
+        return true
+    }
+
+    fn textPointerDrag:boolean (px:double) {
+        if (input.dragging == false) {
+            return false
+        }
+        input.pointerDrag(px)
+        return true
+    }
+
+    fn textPointerUp:void () {
+        input.pointerUp()
     }
 
     ; --- the tree -----------------------------------------------------------------

@@ -148,10 +148,12 @@
 .ui-input-invalid { border-color: #dc2626; }
 .ui-input-text { color: #0f172a; font-size: 13px; height: 18px; }
 .ui-input-placeholder { color: #64748b; }
-.ui-input-caret { width: 2px; height: 18px; background-color: #2563eb; }
-/* InputCtl.clearable: the × at the end while the field holds text, the
- * room in between taken by an empty grower. */
-.ui-input-grow { flex-grow: 1; height: 1px; }
+/* The caret and the selection band are placed by InputCtl.placeText from the
+ * laid-out run; the sheet gives their colours (and the caret a width). */
+.ui-input-caret { width: 2px; background-color: #2563eb; }
+.ui-input-selection { background-color: #bfdbfe; }
+/* InputCtl.clearable: the × at the end while the field holds text; the
+ * field's view takes the room before it. */
 .ui-input-clear {
   width: 18px;
   height: 18px;
@@ -1522,10 +1524,9 @@
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   background-color: #ffffff;
+  width: auto;
 }
 .emoji-query { color: #0f172a; font-size: 13px; }
-.emoji-caret { width: 2px; height: 16px; background-color: #2563eb; }
-.emoji-placeholder { color: #64748b; font-size: 13px; margin-left: 4px; }
 .emoji-tabs {
   display: flex;
   flex-direction: row;
@@ -1659,14 +1660,13 @@
   flex-direction: row;
   align-items: center;
   flex-grow: 1;
+  flex-shrink: 1;
+  width: 0px;
+  min-width: 0px;
   height: 30px;
   padding: 0 8px;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
-  overflow: hidden;
 }
-.chat-draft { color: #0f172a; font-size: 13px; }
-.chat-caret { width: 2px; height: 16px; background-color: #2563eb; }
-.chat-placeholder { color: #64748b; font-size: 13px; margin-left: 4px; }
 .chat-send { height: 30px; line-height: 30px; padding: 0 12px; font-size: 13px; color: #ffffff; background-color: #2563eb; border-radius: 6px; }
 .chat-send-off { background-color: #93c5fd; }

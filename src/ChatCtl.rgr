@@ -10,8 +10,8 @@
 ; and the panel can be closed — while it is, every message from someone else
 ; counts, and `badge()` is "(4)" for the button that opens it again.
 ;
-; STATE: `messages` (oldest first, at most `keep`), `open`, `unread`,
-; `draft`. The host adds messages as they arrive (`add`, which ignores an id
+; STATE: `messages` (oldest first, at most `keep`), `open`, `unread`, and
+; the message being written in `input` (an InputCtl; `draft()` is its text). The host adds messages as they arrive (`add`, which ignores an id
 ; it has); opening the panel reads them all. What the person sends is left in
 ; `sent` for the host to take (`takeSent`) and post; it comes back through
 ; `add` like everyone else's.
@@ -20,10 +20,12 @@
 ; reader is at the end (`follow`), and a reader who scrolled up is left where
 ; they are with a "N new" button that jumps to the end.
 ;
-; KEYS (the host sends them while the composer has focus): typing goes into
-; the draft, Backspace takes a character (a surrogate pair whole) off it,
-; Enter sends, Escape closes. POINTER: `<tid>-close`, `<tid>-send`,
-; `<tid>-jump`.
+; KEYS (the host sends them while the composer has focus): Enter sends,
+; Escape closes, PageUp/PageDown scroll; typing and every other key are the
+; text field's (caret, selection, Ctrl+A, Backspace a whole emoji). POINTER:
+; `<tid>-close`, `<tid>-send`, `<tid>-jump`, and presses in the field
+; (UiCtl.textPointerDown). A host that keeps focus itself sets
+; `input.focused` while the composer has the keyboard.
 ;
 ; TO A READER: a region named by the title; the messages a log (a live
 ; region), each one text "name, time: message"; the draft a text field; the
@@ -31,6 +33,7 @@
 ; =============================================================================
 
 Import "UiCtl.rgr"
+Import "InputCtl.rgr"
 Import "UiTree.rgr"
 Import "pkg:evg/EVGElement.rgr"
 Import "pkg:evg/EVGA11yTree.rgr"
@@ -63,7 +66,9 @@ class ChatCtl extends UiCtl {
     def keep:int 500
     def open:boolean false
     def unread:int 0
-    def draft:string ""
+    ; the message being written: an ordinary text field, so its caret,
+    ; selection, word moves and pointer are InputCtl's
+    def input:InputCtl (new InputCtl())
     def sent:string ""
     def maxLength:int 2000
     ; the window of messages on screen
@@ -83,6 +88,15 @@ class ChatCtl extends UiCtl {
         tid = id
         name = label
         title = label
+    }
+
+    fn fieldTid:string () {
+        return (tid + "-field")
+    }
+
+    ; what is written so far
+    fn draft:string () {
+        return input.value
     }
 
     ; --- messages ---------------------------------------------------------------
@@ -212,36 +226,25 @@ class ChatCtl extends UiCtl {
     ; --- the draft -------------------------------------------------------------------
 
     fn typeChar:boolean (target:string ch:string) {
-        if (((strlen draft) + (strlen ch)) > maxLength) {
-            return true
-        }
-        draft = (draft + ch)
+        input.maxLength = maxLength
+        input.insertText(ch)
         return true
     }
 
     fn backspace:void () {
-        def n:int (strlen draft)
-        if (n == 0) {
-            return
-        }
-        def cut:int (n - 1)
-        if (cut > 0) {
-            def c:int (charAt draft cut)
-            if ((c >= 56320) && (c <= 57343)) {
-                cut = (cut - 1)
-            }
-        }
-        draft = (substring draft 0 cut)
+        input.backspace()
     }
 
     ; the draft goes to `sent` (the host posts it); "" sends nothing
     fn send:boolean () {
-        def t:string (trim draft)
+        def t:string (trim input.value)
         if ((strlen t) == 0) {
             return false
         }
         sent = t
-        draft = ""
+        input.setValue("")
+        input.moveTo(0 false)
+        input.scrollX = 0.0
         return true
     }
 
@@ -252,8 +255,16 @@ class ChatCtl extends UiCtl {
     }
 
     fn keyDown:string (target:string key:string) {
-        if (key == "Backspace") {
-            this.backspace()
+        return (this.keyDownWith(target key false false))
+    }
+
+    ; Enter sends, Escape closes, PageUp/PageDown scroll the messages; every
+    ; other key is the text field's (arrows, Home/End, Ctrl+A, Backspace…).
+    fn keyDownWith:string (target:string key:string shift:boolean ctrl:boolean) {
+        def mine:boolean ((((key == "Enter") || (key == "Escape")) || (key == "PageUp")) || (key == "PageDown"))
+        if (mine == false) {
+            input.keyDownWith(input.tid key shift ctrl)
+            return ""
         }
         if (key == "Enter") {
             this.send()
@@ -286,6 +297,31 @@ class ChatCtl extends UiCtl {
             return target
         }
         return ""
+    }
+
+    fn onFocus:void (target:string) {
+        input.focused = (target == (this.fieldTid()))
+    }
+
+    fn onBlur:void (target:string) {
+        input.focused = false
+        input.pointerUp()
+    }
+
+    fn placeText:void (eng:EVGTextEngine) {
+        input.placeText(eng)
+    }
+
+    fn textPointerDown:boolean (target:string px:double clicks:int shift:boolean) {
+        return (input.textPointerDown(target px clicks shift))
+    }
+
+    fn textPointerDrag:boolean (px:double) {
+        return (input.textPointerDrag(px))
+    }
+
+    fn textPointerUp:void () {
+        input.pointerUp()
     }
 
     fn msgTid:string (i:int) {
@@ -338,17 +374,16 @@ class ChatCtl extends UiCtl {
             root.addChild((UiTree.label((tid + "-jump") "chat-jump" (((to_string unseenBelow) + " ") + newText))))
         }
         def composer:EVGElement (UiTree.div((tid + "-composer") "chat-composer"))
-        def field:EVGElement (UiTree.div((tid + "-field") "chat-field"))
-        if ((strlen draft) > 0) {
-            field.addChild((UiTree.label((tid + "-draft") "chat-draft" draft)))
-        }
-        field.addChild((UiTree.div((tid + "-caret") "chat-caret")))
-        if ((strlen draft) == 0) {
-            field.addChild((UiTree.label((tid + "-ph") "chat-placeholder" placeholder)))
-        }
+        input.tid = (this.fieldTid())
+        input.name = placeholder
+        input.placeholder = placeholder
+        input.maxLength = maxLength
+        input.boxClass = "chat-field"
+        input.build()
+        def field:EVGElement (unwrap input.rootEl)
         composer.addChild(field)
         def sendCls:string "chat-send"
-        if ((strlen (trim draft)) == 0) {
+        if ((strlen (trim input.value)) == 0) {
             sendCls = "chat-send chat-send-off"
         }
         composer.addChild((UiTree.label((tid + "-send") sendCls sendText)))
@@ -371,7 +406,12 @@ class ChatCtl extends UiCtl {
         if (unseenBelow > 0) {
             push a (tid + "-jump")
         }
-        push a (tid + "-field")
+        def inner:[string] (input.tids())
+        def k:int 0
+        while (k < (array_length inner)) {
+            push a (itemAt inner k)
+            k = (k + 1)
+        }
         push a (tid + "-send")
         return a
     }
@@ -411,14 +451,17 @@ class ChatCtl extends UiCtl {
         def f:UiRow (UiRow.of((tid + "-field") (EVGA11yRole.textField()) placeholder))
         f.parentTid = tid
         f.hasText = true
-        f.text = draft
+        f.text = input.value
+        f.hasSelection = true
+        f.selStart = (input.selStart())
+        f.selEnd = (input.selEnd())
         f.placeholder = placeholder
         f.focusable = true
         f.tabStop = true
         push out f
         def s:UiRow (UiRow.of((tid + "-send") (EVGA11yRole.button()) sendText))
         s.parentTid = tid
-        s.disabled = ((strlen (trim draft)) == 0)
+        s.disabled = ((strlen (trim input.value)) == 0)
         s.focusable = true
         push out s
         return out
