@@ -1074,9 +1074,9 @@ class UiHost {
 
     ; A floating surface that is `width: fit-content` — a menu card — is laid
     ; out against the element it hangs off, and EVG's fit-content only ever
-    ; SHRINKS from that width. A submenu hangs off its row, so its card came
+    ; SHRINKS from that width, and only as far as its laid-out rows reach. A submenu hangs off its row, so its card came
     ; out as wide as the row's inside and a long label (or a row's min-width)
-    ; ran past the card's right edge. This widens each such surface to its
+    ; ran past the card's right edge. This sizes each such surface to its
     ; widest in-flow child — the child's max-content width, or its min-width
     ; when that is more — and says whether anything changed, so the caller
     ; lays the page out once more. The sheet writes `fit-content` back on the
@@ -1111,6 +1111,21 @@ class UiHost {
             if (need > (el.calculatedWidth + 0.5)) {
                 el.width = (EVGUnit.px(need))
                 changed = true
+            }
+            ; And NARROWED to it. EVG's fit-content shrinks to what the rows
+            ; OCCUPY once laid out, and a row that is `width: 100%` occupies
+            ; the whole box it was laid out in — so a card whose rows fill it
+            ; never shrinks at all. A dropdown hangs off its narrow trigger and
+            ; only ever needed widening; a context menu hangs off an empty
+            ; point whose box is as wide as the page, and its card came out
+            ; the width of the window. Only down a column, where the widest
+            ; row is the card's content width; a row of children side by side
+            ; is the sum of them, and that case keeps what the layout gave it.
+            if ((widest > 0.0) && ((need + 0.5) < el.calculatedWidth)) {
+                if ((el.flexDirection == "column") || (el.flexDirection == "column-reverse")) {
+                    el.width = (EVGUnit.px(need))
+                    changed = true
+                }
             }
         }
         def i:int 0

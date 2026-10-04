@@ -1,0 +1,119 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; Menu cards as wide as their widest row on Node: `ui:menufit:check`.
+; The bug this was written for: a context menu opened at a point on a wide
+; page drew its card as wide as the page, because its rows are `width: 100%`
+; and EVG's fit-content only shrinks to what the laid-out rows occupy.
+Import "../src/UiHost.rgr"
+
+class MenuFitCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    ; The theme's menu rules, as base.css and Sliqtly's bar write them.
+    fn sheet:string () {
+        return ".ui-root { width: 100%; height: 100%; } .ui-contextmenu { position: absolute; left: 900px; top: 300px; } .ui-contextmenu-trigger { width: 1px; height: 1px; } .ui-dropdownmenu-content, .ui-contextmenu-content { width: fit-content; display: flex; flex-direction: column; align-items: stretch; gap: 1px; padding: 4px; border: 1px solid #e4e4e7; } .ui-dropdownmenu-item, .ui-contextmenu-item { font-size: 13px; width: 100%; min-width: 210px; height: 32px; line-height: 32px; padding: 0 10px; white-space: nowrap; } .ui-contextmenu-separator, .ui-dropdownmenu-separator { height: 1px; margin: 4px 0; } .ui-dropdownmenu-trigger { width: 60px; height: 32px; }"
+    }
+
+    fn el:EVGElement (h:UiHost id:string) {
+        def page:EVGElement (unwrap h.lastPage)
+        def hit@(optional):EVGElement (h.findEl(page id))
+        if (null? hit) {
+            print ("[FAIL] no element " + id)
+            fails = (fails + 1)
+            return (EVGElement.createDiv())
+        }
+        return (unwrap hit)
+    }
+
+    fn rows:void (m:MenuCtl) {
+        m.addItem("new" "New slide" false)
+        m.addItem("dup" "Duplicate slide" false)
+        m.addSeparator()
+        m.addItem("left" "Move left" false)
+        m.addItem("right" "Move right" true)
+        m.addSeparator()
+        m.addItem("del" "Delete slide" false)
+        m.setShortcut("new" "Control+M")
+        m.setShortcut("dup" "Control+D")
+        m.setShortcut("left" "Control+ArrowLeft")
+        m.setShortcut("right" "Control+ArrowRight")
+        m.setShortcut("del" "Delete")
+    }
+
+    ; A context menu on a 1400px page: the card is its rows' width (the
+    ; 210px min-width and the chrome), not the page's.
+    fn contextCard:void () {
+        def h (new UiHost())
+        h.setPageSize(1400.0 800.0)
+        h.addStyleSheet((this.sheet()))
+        def m:MenuCtl (h.addContextMenu("ctx" "Slide"))
+        this.rows(m)
+        m.openMenu()
+        m.build()
+        h.layout()
+        def card:EVGElement (this.el(h "ctx-content"))
+        def w:double card.calculatedWidth
+        this.ok((w >= 220.0) ("the card holds its 210px rows: " + (to_string w)))
+        this.ok((w < 400.0) ("the card is not as wide as the page: " + (to_string w)))
+        def row:EVGElement (this.el(h "ctx-item-new"))
+        def del:EVGElement (this.el(h "ctx-item-del"))
+        this.ok((row.calculatedWidth == del.calculatedWidth) "every row is one width")
+        this.ok(((row.calculatedWidth + 12.0) > w) ("a row fills the card: " + (to_string row.calculatedWidth)))
+        this.ok(((card.calculatedX + w) <= 1400.0) "the card is on the page")
+    }
+
+    ; A long row widens the card past the min-width, and only to that row.
+    fn longRow:void () {
+        def h (new UiHost())
+        h.setPageSize(1400.0 800.0)
+        h.addStyleSheet((this.sheet()))
+        def m:MenuCtl (h.addContextMenu("ctx" "Slide"))
+        m.addItem("a" "Short" false)
+        m.addItem("b" "A rather longer row name that is wider than the minimum" false)
+        m.openMenu()
+        m.build()
+        h.layout()
+        def card:EVGElement (this.el(h "ctx-content"))
+        def b:EVGElement (this.el(h "ctx-item-b"))
+        def w:double card.calculatedWidth
+        this.ok((w > 240.0) ("a long row widens the card: " + (to_string w)))
+        this.ok((w < 700.0) ("…to that row, not the page: " + (to_string w)))
+        this.ok(((b.calculatedX + b.calculatedWidth) <= ((card.calculatedX + w) + 0.5)) "the long row stays inside the card")
+    }
+
+    ; A dropdown hangs off its 60px trigger: the card still grows to its rows.
+    fn dropdownCard:void () {
+        def h (new UiHost())
+        h.setPageSize(1400.0 800.0)
+        h.addStyleSheet((this.sheet()))
+        def m:MenuCtl (h.addDropdownMenu("dd" "Slide"))
+        this.rows(m)
+        m.openMenu()
+        m.build()
+        h.layout()
+        def card:EVGElement (this.el(h "dd-content"))
+        def w:double card.calculatedWidth
+        this.ok((w >= 220.0) ("a dropdown card is wider than its trigger: " + (to_string w)))
+        this.ok((w < 400.0) ("…and no wider than its rows: " + (to_string w)))
+    }
+
+    sfn main:void () {
+        def c (new MenuFitCheck())
+        c.contextCard()
+        c.longRow()
+        c.dropdownCard()
+        print ((to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
+        if (c.fails > 0) {
+            print "RESULT FAIL"
+        }
+    }
+}
