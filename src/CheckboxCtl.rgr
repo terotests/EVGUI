@@ -23,6 +23,9 @@ Import "pkg:evg/EVGA11yTree.rgr"
 class CheckboxCtl extends UiCtl {
     ; 0 = unchecked, 1 = checked, 2 = indeterminate
     def checkState:int 0
+    ; false: the name is only told to a reader, not drawn beside the box (a
+    ; data table's row box, whose row already says what it is)
+    def labelShown:boolean true
 
     Constructor () {
         rootEl = (EVGElement.createDiv())
@@ -142,7 +145,7 @@ class CheckboxCtl extends UiCtl {
         well.addChild(mark)
         el.addChild(well)
 
-        if ((strlen name) > 0) {
+        if (((strlen name) > 0) && labelShown) {
             def words:EVGElement (EVGElement.createSpan())
             words.className = (base + "-label")
             words.textContent = name
