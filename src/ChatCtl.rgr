@@ -379,6 +379,7 @@ class ChatCtl extends UiCtl {
         input.placeholder = placeholder
         input.maxLength = maxLength
         input.boxClass = "chat-field"
+        input.textClass = "chat-draft"
         input.build()
         def field:EVGElement (unwrap input.rootEl)
         composer.addChild(field)

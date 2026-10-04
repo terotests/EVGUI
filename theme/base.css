@@ -1668,5 +1668,6 @@
   border: 1px solid #cbd5e1;
   border-radius: 6px;
 }
+.chat-draft { color: #0f172a; font-size: 13px; }
 .chat-send { height: 30px; line-height: 30px; padding: 0 12px; font-size: 13px; color: #ffffff; background-color: #2563eb; border-radius: 6px; }
 .chat-send-off { background-color: #93c5fd; }
