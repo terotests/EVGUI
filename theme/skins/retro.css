@@ -131,6 +131,7 @@
 .theme-retro .ui-select-value { color: var(--retro-ink); }
 .theme-retro .ui-input-placeholder { color: var(--retro-ink-dim); }
 .theme-retro .ui-input-caret { background-color: var(--retro-hot-b); }
+.theme-retro .ui-input-selection { background-color: var(--retro-screen-3); }
 .theme-retro .ui-input-invalid { border-color: var(--retro-danger); }
 .theme-retro .ui-field-label,
 .theme-retro .ui-label { color: var(--retro-ink); }
@@ -302,8 +303,6 @@
 /* the emoji picker */
 .theme-retro .emoji-search { background-color: var(--retro-screen); border-color: var(--retro-edge); }
 .theme-retro .emoji-query { color: var(--retro-ink); }
-.theme-retro .emoji-placeholder { color: var(--retro-ink-dim); }
-.theme-retro .emoji-caret { background-color: var(--retro-ink); }
 .theme-retro .emoji-tab:hover, .theme-retro .emoji-cell-hot { background-color: var(--retro-screen-3); }
 .theme-retro .emoji-tab-on { background: linear-gradient(180deg, var(--retro-play-a), var(--retro-play-b)); }
 .theme-retro .emoji-cell-on { background: linear-gradient(180deg, var(--retro-fill-a), var(--retro-fill-b)); }
@@ -328,8 +327,6 @@
 .theme-retro .chat-composer { border-color: var(--retro-screen-3); }
 .theme-retro .chat-field { background-color: var(--retro-screen); border-color: var(--retro-edge); }
 .theme-retro .chat-draft { color: var(--retro-ink); }
-.theme-retro .chat-caret { background-color: var(--retro-ink); }
-.theme-retro .chat-placeholder { color: var(--retro-ink-dim); }
 .theme-retro .chat-send {
   background: linear-gradient(180deg, var(--retro-play-a), var(--retro-play-b));
   border: 1.5px solid var(--retro-edge);

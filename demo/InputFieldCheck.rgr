@@ -1,0 +1,242 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; A text field in a host, on Node: `ui:input:field`.
+;
+; What a person sees in a field: the caret where the text is (and visible),
+; the selection band over exactly the selected glyphs, a double click taking
+; a word, a triple click all of it, a drag selecting, Ctrl+A. InputCtl places
+; the caret and the band itself from the laid-out run (`placeText`), so these
+; hold for every host that puts an InputCtl in a UiHost.
+Import "../src/UiHost.rgr"
+Import "../src/ChatCtl.rgr"
+
+class InputFieldCheck {
+    def fails:int 0
+    def passes:int 0
+    ; the field the last hostWith made
+    def cur:InputCtl (new InputCtl())
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    sfn near:boolean (a:double b:double) {
+        def d:double (a - b)
+        if (d < 0.0) {
+            d = (0.0 - d)
+        }
+        return (d < 0.6)
+    }
+
+    ; A field styled by a sheet that differs from InputCtl's defaults on
+    ; purpose: 16px text (InputCtl starts at 14) and a 1px caret.
+    fn hostWith:UiHost (value:string clearable:boolean) {
+        def h (new UiHost())
+        h.setPageSize(400.0 200.0)
+        h.addStyleSheet(".ui-input { display: flex; flex-direction: row; align-items: center; width: 200px; height: 30px; padding: 0 10px; border: 1px solid #000000; } .ui-input-text { font-size: 16px; } .ui-input-caret { width: 1px; background-color: #000000; } .ui-input-selection { background-color: #bfdbfe; } .ui-input-clear { width: 18px; height: 18px; margin-left: 6px; }")
+        def c:InputCtl (h.addInput("f" "Field"))
+        c.clearable = clearable
+        c.setValue(value)
+        c.moveTo((strlen value) false)
+        c.build()
+        cur = c
+        return h
+    }
+
+    fn el:EVGElement (h:UiHost id:string) {
+        def page:EVGElement (unwrap h.lastPage)
+        def hit@(optional):EVGElement (h.findEl(page id))
+        if (null? hit) {
+            print ("[FAIL] no element " + id)
+            return (EVGElement.createDiv())
+        }
+        return (unwrap hit)
+    }
+
+    fn width:double (h:UiHost c:InputCtl s:string) {
+        def lay (new EVGLayout())
+        def eng:EVGTextEngine (lay.getTextEngine())
+        def m:EVGTextMetrics (eng.measureRun(s c.fontFamily c.fontSize))
+        return m.width
+    }
+
+    ; The font is the sheet's, and Ctrl+A puts the band over the whole run:
+    ; from where the text starts to where it ends. The bug: the band started
+    ; and ended 16px early because the host said the box was 80px wide.
+    fn bandOverText:void () {
+        def h:UiHost (this.hostWith("{page} / {pages}" true))
+        h.focus("f")
+        h.keyWith("a" false true)
+        h.layout()
+        def c:InputCtl cur
+        this.ok((c.fontSize == 16.0) ("the field measures in the sheet's size: " + (to_string c.fontSize)))
+        this.ok((((c.selStart()) == 0) && ((c.selEnd()) == 16)) "Ctrl+A selects all of it")
+        def txt:EVGElement (this.el(h "f-text"))
+        def band:EVGElement (this.el(h "f-sel"))
+        def car:EVGElement (this.el(h "f-caret"))
+        def w:double (this.width(h c c.value))
+        this.ok((InputFieldCheck.near(band.calculatedX txt.calculatedX)) ("the band starts at the text: " + (to_string band.calculatedX) + " vs " + (to_string txt.calculatedX)))
+        this.ok((InputFieldCheck.near(band.calculatedWidth w)) ("the band is as wide as the text: " + (to_string band.calculatedWidth) + " vs " + (to_string w)))
+        this.ok((band.calculatedHeight > 0.0) "the band has a height")
+        this.ok((car.calculatedWidth == 0.0) "no caret over a selection")
+        def v:EVGElement (this.el(h "f-view"))
+        this.ok((txt.calculatedX >= v.calculatedX) "a short text is not scrolled")
+    }
+
+    ; A collapsed caret is drawn, as wide as the sheet says, where the
+    ; text ends; and not drawn in a field without focus.
+    fn caretShows:void () {
+        def h:UiHost (this.hostWith("asdf" false))
+        h.focus("f")
+        h.layout()
+        def c:InputCtl cur
+        def txt:EVGElement (this.el(h "f-text"))
+        def car:EVGElement (this.el(h "f-caret"))
+        def w:double (this.width(h c "asdf"))
+        this.ok((car.calculatedWidth == 1.0) ("the caret has the sheet's width: " + (to_string car.calculatedWidth)))
+        this.ok((car.calculatedHeight > 0.0) "the caret has a height")
+        this.ok((InputFieldCheck.near(car.calculatedX (txt.calculatedX + w))) ("the caret is after the text: " + (to_string car.calculatedX) + " vs " + (to_string (txt.calculatedX + w))))
+        h.blur()
+        h.layout()
+        def car2:EVGElement (this.el(h "f-caret"))
+        this.ok((car2.calculatedWidth == 0.0) "no caret without focus")
+        ; laid out twice, placed twice: the same place
+        h.focus("f")
+        h.layout()
+        def lay (new EVGLayout())
+        c.placeText((lay.getTextEngine()))
+        def car3:EVGElement (this.el(h "f-caret"))
+        this.ok((InputFieldCheck.near(car3.calculatedX (txt.calculatedX + w))) "placing again does not move it")
+    }
+
+    ; Text wider than the field scrolls so the caret stays inside it, and
+    ; the text moves with it.
+    fn longTextScrolls:void () {
+        def h:UiHost (this.hostWith("The quick brown fox jumps over the lazy dog again and again" false))
+        h.focus("f")
+        h.layout()
+        def c:InputCtl cur
+        def v:EVGElement (this.el(h "f-view"))
+        def txt:EVGElement (this.el(h "f-text"))
+        def car:EVGElement (this.el(h "f-caret"))
+        this.ok((c.scrollX > 0.0) "the text is scrolled")
+        this.ok(((car.calculatedX >= v.calculatedX) && ((car.calculatedX + car.calculatedWidth) <= ((v.calculatedX + v.calculatedWidth) + 0.5))) ("the caret is inside the field: " + (to_string car.calculatedX)))
+        this.ok((txt.calculatedX < v.calculatedX) "the text moved left with the scroll")
+        h.keyWith("Home" false false)
+        h.layout()
+        def car2:EVGElement (this.el(h "f-caret"))
+        def txt2:EVGElement (this.el(h "f-text"))
+        this.ok((c.scrollX == 0.0) "Home scrolls back")
+        this.ok((InputFieldCheck.near(car2.calculatedX txt2.calculatedX)) "the caret at the start")
+    }
+
+    ; The pointer, through the host: a press puts the caret, a drag
+    ; selects, a double click takes a word, a drag after it grows by words,
+    ; a triple click takes all of it, Shift+press extends.
+    fn pointer:void () {
+        def h:UiHost (this.hostWith("alpha beta gamma" false))
+        h.layout()
+        def c:InputCtl cur
+        def txt:EVGElement (this.el(h "f-text"))
+        def y:double (txt.calculatedY + 4.0)
+        def x0:double txt.calculatedX
+        def inBeta:double (x0 + (this.width(h c "alpha be")))
+        def inGamma:double (x0 + (this.width(h c "alpha beta ga")))
+        h.pressAtWith(inBeta y 1 false)
+        this.ok((h.focusId == "f") "a press focuses the field")
+        this.ok(c.focused "…and the field knows")
+        this.ok(((c.caret == 8) && ((c.hasSelection()) == false)) ("a press puts the caret where it lands: " + (to_string c.caret)))
+        h.pointerMove(inGamma y)
+        this.ok((((c.selStart()) == 8) && ((c.selEnd()) == 13)) ("a drag selects: " + (to_string (c.selStart())) + "-" + (to_string (c.selEnd()))))
+        h.pointerUp()
+        h.pressAtWith(inBeta y 2 false)
+        this.ok((((c.selStart()) == 6) && ((c.selEnd()) == 10)) ("a double click takes the word: " + (to_string (c.selStart())) + "-" + (to_string (c.selEnd()))))
+        h.pointerMove(inGamma y)
+        this.ok((((c.selStart()) == 6) && ((c.selEnd()) == 16)) ("a drag after it grows by words: " + (to_string (c.selStart())) + "-" + (to_string (c.selEnd()))))
+        h.pointerMove((x0 + 2.0) y)
+        this.ok((((c.selStart()) == 0) && ((c.selEnd()) == 10)) ("…both ways, keeping the word: " + (to_string (c.selStart())) + "-" + (to_string (c.selEnd()))))
+        h.pointerUp()
+        h.pressAtWith(inBeta y 3 false)
+        this.ok((((c.selStart()) == 0) && ((c.selEnd()) == 16)) "a triple click takes all of it")
+        h.pointerUp()
+        h.pressAtWith((x0 + 2.0) y 1 false)
+        h.pointerUp()
+        h.pressAtWith(inGamma y 1 true)
+        this.ok((((c.selStart()) == 0) && ((c.selEnd()) == 13)) "Shift+press extends")
+        h.pointerUp()
+        ; a drag after the button is let go selects nothing
+        h.pressAtWith(inBeta y 1 false)
+        h.pointerUp()
+        h.pointerMove(inGamma y)
+        this.ok(((c.hasSelection()) == false) "moving without the button selects nothing")
+        h.layout()
+        def band:EVGElement (this.el(h "f-sel"))
+        this.ok((band.calculatedWidth == 0.0) "no band without a selection")
+    }
+
+    ; The clear button empties the field.
+    fn clears:void () {
+        def h:UiHost (this.hostWith("abc" true))
+        h.focus("f")
+        h.layout()
+        def clr:EVGElement (this.el(h "f-clear"))
+        h.pressAtWith((clr.calculatedX + 4.0) (clr.calculatedY + 4.0) 1 false)
+        def c:InputCtl cur
+        this.ok((c.value == "") ("the clear button empties it: " + c.value))
+    }
+
+    ; An emoji is one character to Backspace, Delete and the arrows.
+    fn emoji:void () {
+        def h:UiHost (this.hostWith("a👍🏽b" false))
+        def c:InputCtl cur
+        h.focus("f")
+        h.keyWith("ArrowLeft" false false)
+        h.keyWith("ArrowLeft" false false)
+        this.ok((c.caret == 1) ("ArrowLeft steps over the emoji: " + (to_string c.caret)))
+        h.keyWith("ArrowRight" false false)
+        this.ok((c.caret == 5) ("ArrowRight steps over it: " + (to_string c.caret)))
+        h.keyWith("Backspace" false false)
+        this.ok((c.value == "ab") ("Backspace takes it whole: " + c.value))
+        c.setValue("x🇫🇮")
+        c.moveTo(1 false)
+        h.keyWith("Delete" false false)
+        this.ok((c.value == "x") ("Delete takes a flag whole: " + c.value))
+    }
+
+    ; The chat's composer is an InputCtl: its caret is drawn too.
+    fn chatField:void () {
+        def h (new UiHost())
+        h.setPageSize(320.0 440.0)
+        h.addStyleSheet(".chat-field { display: flex; align-items: center; width: 200px; height: 30px; } .ui-input-text { font-size: 13px; }")
+        def ch (new ChatCtl())
+        ch.setup("ch" "Chat")
+        ch.typeChar("" "hello")
+        ch.build()
+        h.add(ch)
+        h.focus("ch-field")
+        h.layout()
+        def car:EVGElement (this.el(h "ch-field-caret"))
+        this.ok((car.calculatedWidth > 0.0) "the chat field draws its caret when focused")
+        h.keyWith("a" false true)
+        this.ok((((ch.input.selStart()) == 0) && ((ch.input.selEnd()) == 5)) "Ctrl+A in the chat field selects its text")
+    }
+
+    sfn main:void () {
+        def c (new InputFieldCheck())
+        c.bandOverText()
+        c.caretShows()
+        c.longTextScrolls()
+        c.pointer()
+        c.clears()
+        c.emoji()
+        c.chatField()
+        print ((to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
+        if (c.fails > 0) {
+            print "RESULT FAIL"
+        }
+    }
+}

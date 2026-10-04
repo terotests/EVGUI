@@ -88,6 +88,8 @@ class UiHost {
     ; writing a second class for a look it should not know about.
     def hoverTid:string ""
     def pressTidValue:string ""
+    ; The text field a press landed in, while the button is down.
+    def textDrag:string ""
     def transitions:EVGTransition (new EVGTransition())
     def pageWidth:double 480.0
     def pageHeight:double 320.0
@@ -780,17 +782,70 @@ class UiHost {
     ; The coordinate entry points, for a host that has a real pointer: the
     ; canvas in the playground, and eventually an SDL or browser window.
     fn pressAt:string (px:double py:double) {
+        return (this.pressAtWith(px py 1 false))
+    }
+
+    ; The same press with the page's click count (1, 2 a double click, 3 a
+    ; triple) and Shift. A press in a text field goes on to the field, which
+    ; places the caret, takes a word or all of it, and follows the drag.
+    fn pressAtWith:string (px:double py:double clicks:int shift:boolean) {
         def target:string (this.hitTest(px py))
         def bounds:string (this.dragBoundsFor(target))
         if ((strlen bounds) == 0) {
             this.click(target)
+            this.textPress(target px clicks shift)
             return target
         }
         this.pressTid(target (this.fractionIn(bounds px)))
         return target
     }
 
+    ; A press at `px` on `target`, for the text field that owns it (if any).
+    ; For a host that hit-tests and focuses itself and only wants the field's
+    ; part of the press.
+    fn textPress:boolean (target:string px:double clicks:int shift:boolean) {
+        textDrag = ""
+        def maybe@(optional):UiCtl (this.ctlFor(target))
+        if (null? maybe) {
+            return false
+        }
+        def c:UiCtl (unwrap maybe)
+        if (c.textPointerDown(target px clicks shift)) {
+            textDrag = target
+            return true
+        }
+        return false
+    }
+
+    ; The text field pressed last follows the pointer (the drag selects).
+    fn textDragTo:boolean (px:double) {
+        if ((strlen textDrag) == 0) {
+            return false
+        }
+        def maybe@(optional):UiCtl (this.ctlFor(textDrag))
+        if (null? maybe) {
+            textDrag = ""
+            return false
+        }
+        def c:UiCtl (unwrap maybe)
+        return (c.textPointerDrag(px))
+    }
+
+    fn textRelease:void () {
+        if ((strlen textDrag) > 0) {
+            def maybe@(optional):UiCtl (this.ctlFor(textDrag))
+            if (!null? maybe) {
+                def c:UiCtl (unwrap maybe)
+                c.textPointerUp()
+            }
+        }
+        textDrag = ""
+    }
+
     fn pointerMove:void (px:double py:double) {
+        if (this.textDragTo(px)) {
+            return
+        }
         if ((strlen dragBounds) == 0) {
             return
         }
@@ -798,9 +853,22 @@ class UiHost {
     }
 
     fn pointerUp:void () {
+        this.textRelease()
         pressTidValue = ""
         dragTid = ""
         dragBounds = ""
+    }
+
+    ; Every control's text fields onto the page just laid out (see
+    ; UiCtl.placeText). `layout` calls it; a host that lays the tree out
+    ; itself calls it after its own layout, with that layout's engine.
+    fn placeText:void (eng:EVGTextEngine) {
+        def i:int 0
+        while (i < (array_length ctls)) {
+            def c:UiCtl (itemAt ctls i)
+            c.placeText(eng)
+            i = (i + 1)
+        }
     }
 
     ; Focus cannot survive the node it was on going away. A browser drops it to
@@ -932,6 +1000,7 @@ class UiHost {
         if (UiHost.fitSurfaces(r lay)) {
             lay.layout(page)
         }
+        this.placeText((lay.getTextEngine()))
         lastPage = page
         return page
     }

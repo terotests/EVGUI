@@ -15,6 +15,7 @@
 
 Import "pkg:evg/EVGElement.rgr"
 Import "pkg:evg/EVGA11yTree.rgr"
+Import "pkg:evg/EVGTextEngine.rgr"
 Import "UiTree.rgr"
 
 ; Tri-state, spelled as EVGA11yTri: 0 = not applicable, 1 = no, 2 = yes,
@@ -358,6 +359,29 @@ class UiCtl {
     ; interesting case is the pointer going somewhere else entirely.
     fn unhover:string () {
         return ""
+    }
+
+    ; --- text fields ----------------------------------------------------------
+    ; A control with a text field in it (InputCtl, and the controls that hold
+    ; one) places the field's caret and selection band on the laid-out page,
+    ; and takes the pointer's presses and drags inside the field. The host
+    ; calls these for every control, so a host cannot forget a field: after
+    ; each layout `placeText`, and a press's `clicks` (1, 2 a word, 3 all of
+    ; it) and the drag that follows. Everything else ignores them.
+
+    fn placeText:void (eng:EVGTextEngine) {
+    }
+
+    ; True when the press landed in a text field and the field took it.
+    fn textPointerDown:boolean (target:string px:double clicks:int shift:boolean) {
+        return false
+    }
+
+    fn textPointerDrag:boolean (px:double) {
+        return false
+    }
+
+    fn textPointerUp:void () {
     }
 
     ; --- the clock -------------------------------------------------------------

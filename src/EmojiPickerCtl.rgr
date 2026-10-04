@@ -36,6 +36,7 @@
 ; =============================================================================
 
 Import "UiCtl.rgr"
+Import "InputCtl.rgr"
 Import "UiTree.rgr"
 Import "UiEmojiData.rgr"
 Import "pkg:evg/EVGElement.rgr"
@@ -306,7 +307,10 @@ class EmojiPickerCtl extends UiCtl {
     def lang:string "en"
     def placeholder:string "Search emoji"
     def emptyText:string "No emoji found"
+    ; the search line: what is typed in `input` (an InputCtl, so it has a
+    ; caret, a selection, Ctrl+A and the pointer), mirrored in `query`
     def query:string ""
+    def input:InputCtl (new InputCtl())
     def group:string "smileys"
     ; most recent first
     def recent:[string]
@@ -448,6 +452,8 @@ class EmojiPickerCtl extends UiCtl {
     ; --- changing it ----------------------------------------------------------------
     fn setGroup:void (g:string) {
         query = ""
+        input.setValue("")
+        input.moveTo(0 false)
         group = g
         sel = 0
         top = 0
@@ -473,25 +479,19 @@ class EmojiPickerCtl extends UiCtl {
 
     fn setQuery:void (q:string) {
         query = q
+        if (input.value != q) {
+            input.setValue(q)
+            input.moveTo((strlen q) false)
+        }
         sel = 0
         top = 0
         this.refresh()
     }
 
-    ; The query without its last character (a surrogate pair is one).
+    ; Backspace in the search line (an emoji is one character).
     fn backspace:void () {
-        def n:int (strlen query)
-        if (n == 0) {
-            return
-        }
-        def cut:int 1
-        if (n >= 2) {
-            def c:int (charAt query (n - 1))
-            if ((c >= 56320) && (c <= 57343)) {
-                cut = 2
-            }
-        }
-        this.setQuery((substring query 0 (n - cut)))
+        input.backspace()
+        this.setQuery(input.value)
     }
 
     fn pick:void (i:int) {
@@ -550,11 +550,22 @@ class EmojiPickerCtl extends UiCtl {
 
     ; --- the keyboard ------------------------------------------------------------------
     fn typeChar:boolean (target:string ch:string) {
-        this.setQuery((query + ch))
+        input.insertText(ch)
+        this.setQuery(input.value)
         return true
     }
 
     fn keyDownWith:string (target:string key:string shift:boolean ctrl:boolean) {
+        ; Ctrl+A and Delete are the search line's; the arrows move in the grid
+        if (ctrl && ((key == "a") || (key == "A"))) {
+            input.selectAll()
+            return ""
+        }
+        if (key == "Delete") {
+            input.deleteForward()
+            this.setQuery(input.value)
+            return ""
+        }
         if (key == "Tab") {
             if shift {
                 this.stepGroup(-1)
@@ -611,6 +622,22 @@ class EmojiPickerCtl extends UiCtl {
     }
 
     ; --- the pointer -------------------------------------------------------------------
+    fn placeText:void (eng:EVGTextEngine) {
+        input.placeText(eng)
+    }
+
+    fn textPointerDown:boolean (target:string px:double clicks:int shift:boolean) {
+        return (input.textPointerDown(target px clicks shift))
+    }
+
+    fn textPointerDrag:boolean (px:double) {
+        return (input.textPointerDrag(px))
+    }
+
+    fn textPointerUp:void () {
+        input.pointerUp()
+    }
+
     fn tabTid:string (g:string) {
         return (tid + "-g-" + g)
     }
@@ -664,15 +691,15 @@ class EmojiPickerCtl extends UiCtl {
     ; --- drawing --------------------------------------------------------------------------
     fn build:void () {
         def root:EVGElement (UiTree.div(tid "emoji-picker"))
-        def search:EVGElement (UiTree.div((tid + "-search") "emoji-search"))
-        if ((strlen query) > 0) {
-            search.addChild((UiTree.label((tid + "-query") "emoji-query" query)))
-        }
-        search.addChild((UiTree.div((tid + "-caret") "emoji-caret")))
-        if ((strlen query) == 0) {
-            search.addChild((UiTree.label((tid + "-ph") "emoji-placeholder" placeholder)))
-        }
-        root.addChild(search)
+        ; the search line has the keys while the picker is open
+        input.tid = (tid + "-search")
+        input.name = placeholder
+        input.placeholder = placeholder
+        input.textClass = "emoji-query"
+        input.focused = true
+        input.boxClass = "emoji-search"
+        input.build()
+        root.addChild((unwrap input.rootEl))
         def tabRow:EVGElement (UiTree.div((tid + "-tabs") "emoji-tabs"))
         def ts:[string] (this.tabs())
         def i:int 0
@@ -735,7 +762,12 @@ class EmojiPickerCtl extends UiCtl {
     fn tids:[string] () {
         def a:[string]
         push a tid
-        push a (tid + "-search")
+        def inner:[string] (input.tids())
+        def k0:int 0
+        while (k0 < (array_length inner)) {
+            push a (itemAt inner k0)
+            k0 = (k0 + 1)
+        }
         def ts:[string] (this.tabs())
         def i:int 0
         while (i < (array_length ts)) {
@@ -763,6 +795,9 @@ class EmojiPickerCtl extends UiCtl {
         s.parentTid = tid
         s.hasText = true
         s.text = query
+        s.hasSelection = true
+        s.selStart = (input.selStart())
+        s.selEnd = (input.selEnd())
         s.placeholder = placeholder
         s.focusable = true
         s.tabStop = true
