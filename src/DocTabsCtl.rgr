@@ -25,7 +25,10 @@
 ;
 ;   hitAt(x y)       "tab:<key>" | "close:<key>" | "add" | ""
 ;   pressAt(x y)     the same, and a tab pressed may be dragged
-;   dragTo(x)        true when the drag moved the tab to another place
+;   dragTo(x)        true when the drag moved the tab to another place;
+;                    meanwhile its place is a slot (state "slot") and a
+;                    copy, div.ui-doctab-ghost `<tid>-ghost` (state
+;                    "ghost"), follows x
 ;   release()        true when the press was a drag (not a click)
 ;   swipeDir(dx dy ms)  -1 / +1 for a flick left / right, else 0
 ;
@@ -56,6 +59,13 @@ class DocTabsCtl extends UiCtl {
     def dragKey:string ""
     def dragX0:double 0.0
     def dragged:boolean false
+    ; While a tab is dragged its place in the row is an empty slot, where it
+    ; lands, and a see-through copy of it (the ghost) follows the pointer:
+    ; where the pointer is, where in the tab it was pressed, the tab's box.
+    def dragNowX:double 0.0
+    def grabDx:double 0.0
+    def ghostW:double 0.0
+    def ghostY:double 0.0
     ; how far a press travels before it is a drag
     def slop:double 6.0
     ; The row's width (0: no limit). Tabs that do not fit at their narrowest
@@ -201,28 +211,21 @@ class DocTabsCtl extends UiCtl {
             if (k == tabs.active) {
                 word = "active"
             }
-            def tab (EVGElement.createDiv())
-            tab.id = (this.tabTid(k))
-            tab.className = "ui-doctab"
-            UiTree.setState(tab "ui-doctab" word)
-            if ((k == dragKey) && dragged) {
+            def slot:boolean ((k == dragKey) && dragged)
+            if slot {
+                word = "slot"
+            }
+            def tab:EVGElement (this.tabEl(k word (this.tabTid(k))))
+            if slot {
                 UiTree.addClass(tab "ui-doctab-dragging")
             }
-            tab.addChild((DocTabsCtl.wing("M0 32 L12 0 L12 32 Z" word)))
-            def body (EVGElement.createDiv())
-            body.className = "ui-doctab-body"
-            UiTree.setState(body "ui-doctab-body" word)
-            def nameEl:EVGElement (UiTree.label((tab.id + "__name") "ui-doctab-name" (this.shortName(k))))
-            UiTree.setState(nameEl "ui-doctab-name" word)
-            body.addChild(nameEl)
-            if many {
+            if (many && (slot == false)) {
+                def body:EVGElement (tab.getChild(1))
                 def x:EVGElement (UiTree.label((this.closeTid(k)) "ui-doctab-close" "×"))
                 body.addChild(x)
                 push ce x
                 push ck k
             }
-            tab.addChild(body)
-            tab.addChild((DocTabsCtl.wing("M0 0 L12 32 L0 32 Z" word)))
             root.addChild(tab)
             push te tab
             i = (i + 1)
@@ -237,6 +240,58 @@ class DocTabsCtl extends UiCtl {
             addEl = add
             addShown = true
         }
+        if (this.ghostShown()) {
+            def g:EVGElement (this.tabEl(dragKey "ghost" (tid + "-ghost")))
+            UiTree.addClass(g "ui-doctab-ghost")
+            ; placed from the row's padding edge, as an absolute box is
+            g.setAttribute("position" "absolute")
+            g.setAttribute("left" ((to_string (to_int (((this.ghostX()) - root.calculatedX) - root.box.paddingLeftPx))) + "px"))
+            g.setAttribute("top" ((to_string (to_int ((ghostY - root.calculatedY) - root.box.paddingTopPx))) + "px"))
+            g.setAttribute("width" ((to_string (to_int ghostW)) + "px"))
+            g.a11yHidden = true
+            root.addChild(g)
+        }
+    }
+
+    ; A tab: its slanted left edge, its body with the name, its right edge.
+    fn tabEl:EVGElement (k:string word:string id:string) {
+        def tab (EVGElement.createDiv())
+        tab.id = id
+        tab.className = "ui-doctab"
+        UiTree.setState(tab "ui-doctab" word)
+        tab.addChild((DocTabsCtl.wing("M0 32 L12 0 L12 32 Z" word)))
+        def body (EVGElement.createDiv())
+        body.className = "ui-doctab-body"
+        UiTree.setState(body "ui-doctab-body" word)
+        def nameEl:EVGElement (UiTree.label((id + "__name") "ui-doctab-name" (this.shortName(k))))
+        UiTree.setState(nameEl "ui-doctab-name" word)
+        body.addChild(nameEl)
+        tab.addChild(body)
+        tab.addChild((DocTabsCtl.wing("M0 0 L12 32 L0 32 Z" word)))
+        return tab
+    }
+
+    fn ghostShown:boolean () {
+        return (dragged && ((strlen dragKey) > 0))
+    }
+
+    ; Where the ghost's left edge is: under the pointer as the tab was
+    ; pressed, kept inside the row.
+    fn ghostX:double () {
+        def x:double (dragNowX - grabDx)
+        if (!null? rootEl) {
+            def r:EVGElement (unwrap rootEl)
+            if (r.calculatedWidth > 0.0) {
+                def hi:double ((r.calculatedX + r.calculatedWidth) - ghostW)
+                if (x > hi) {
+                    x = hi
+                }
+                if (x < r.calculatedX) {
+                    x = r.calculatedX
+                }
+            }
+        }
+        return x
     }
 
     sfn inside:boolean (el:EVGElement x:double y:double) {
@@ -274,6 +329,17 @@ class DocTabsCtl extends UiCtl {
         if ((indexOf hit "tab:") == 0) {
             dragKey = (substring hit 4 (strlen hit))
             dragX0 = x
+            dragNowX = x
+            def i:int 0
+            while (i < (array_length tabEls)) {
+                if ((tabs.at((first + i))) == dragKey) {
+                    def el:EVGElement (itemAt tabEls i)
+                    grabDx = (x - el.calculatedX)
+                    ghostW = el.calculatedWidth
+                    ghostY = el.calculatedY
+                }
+                i = (i + 1)
+            }
         }
         return hit
     }
@@ -307,6 +373,7 @@ class DocTabsCtl extends UiCtl {
             return false
         }
         dragged = true
+        dragNowX = x
         def before:int (tabs.indexOfKey(dragKey))
         def to:int (first + (this.placeAt(x)))
         if (to == before) {

@@ -110,7 +110,23 @@ class DocTabsCheck {
         this.ok(((c.dragTo(53.0)) == false) "a few pixels are not a drag")
         this.ok((c.dragTo(160.0)) "past the next tab's middle moves it")
         this.ok(((DocTabsCheck.joined(c.tabs.tabs)) == "d2,d1,d3") ("dragged to second: " + (DocTabsCheck.joined(c.tabs.tabs))))
+        this.ok((c.ghostShown()) "a dragged tab has a ghost")
+        c.build()
+        def root2:EVGElement (unwrap c.rootEl)
+        def ghost:EVGElement (root2.getChild(((root2.getChildCount()) - 1)))
+        this.ok((ghost.id == "decks-ghost") ("the ghost is drawn last, over the row: " + ghost.id))
+        this.ok((UiTree.hasClass(ghost "ui-doctab-ghost")) "it is styled as a ghost")
+        def slotEl:EVGElement (root2.getChild(1))
+        this.ok((UiTree.hasClass(slotEl "ui-doctab-state-slot")) "the dragged tab's place is a slot")
+        this.ok(((array_length c.closeEls) == 2) "the slot has no close mark")
+        ; the root at 0, 500 wide; the tab was pressed 50 px into it
+        root2.calculatedX = 0.0
+        root2.calculatedWidth = 500.0
+        this.ok(((c.ghostX()) == 110.0) ("the ghost follows the pointer: " + (to_string (c.ghostX()))))
+        c.dragTo(900.0)
+        this.ok(((c.ghostX()) == 400.0) ("and stays inside the row: " + (to_string (c.ghostX()))))
         this.ok((c.release()) "the press was a drag")
+        this.ok(((c.ghostShown()) == false) "letting go takes the ghost away")
         c.pressAt(150.0 20.0)
         this.ok(((c.release()) == false) "a press without moving is a click")
         def rows:[UiRow] (c.rows())
