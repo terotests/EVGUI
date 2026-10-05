@@ -75,6 +75,8 @@ SUITES=(
   ui:pick:check
   ui:input:field
   ui:text:select
+  # A callout beside its point (src/UiCallout.rgr, src/CalloutCtl.rgr).
+  ui:callout:check
   evg:flexgrow:check
   evg:pctflex:check
   evg:inspect:test

@@ -1718,3 +1718,28 @@
 .pin-closed { opacity: 0.25; }
 .pin-on { border-width: 2.5px; }
 .pin:hover { border-width: 2.5px; }
+
+/* --- callout ----------------------------------------------------------------------
+ * CalloutCtl: a box beside a point with a wedge to it, draggable by its head.
+ * Plain: a white card. `.callout-glass`: dark and see-through, the page
+ * behind it blurred (a comment over a slide being presented). */
+.callout {
+  display: flex; flex-direction: column;
+  background-color: #ffffff;
+  border: 1px solid #e4e4e7;
+  border-radius: 14px;
+  shadow-color: rgba(0, 0, 0, 0.22); shadow-radius: 22px; shadow-offset-y: 8px;
+}
+.callout-tail { fill: #ffffff; }
+.callout-head { display: flex; flex-direction: row; align-items: center; padding: 8px 10px 4px 14px; }
+.callout-title { flex-grow: 1; font-size: 12px; font-weight: bold; color: #52525b; }
+.callout-close { font-size: 15px; color: #71717a; padding: 0 4px; }
+.callout-body { display: flex; flex-direction: column; }
+.callout-glass {
+  background-color: rgba(15, 18, 30, 0.62);
+  border-color: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(14px);
+}
+.callout-glass .callout-title { color: rgba(255, 255, 255, 0.72); }
+.callout-glass .callout-close { color: rgba(255, 255, 255, 0.8); }
+.callout-tail-glass { fill: rgba(15, 18, 30, 0.62); }

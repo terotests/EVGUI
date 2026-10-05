@@ -1,0 +1,120 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; A callout beside its point, on Node: `ui:callout:check`.
+;
+; Where UiCallout puts the box (above-right, then below, left, below-left,
+; else pushed inside the page), its wedge from the edge facing the point,
+; none while the point is under the box, a box dragged by hand staying put
+; and inside the page; then CalloutCtl in a host: laid out as wide as asked
+; and as tall as its content, fitted beside its point, the head grabbed and
+; dragged, the × pressed.
+Import "../src/UiHost.rgr"
+Import "../src/CalloutCtl.rgr"
+
+class CalloutCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    sfn near:boolean (a:double b:double) {
+        def d:double (a - b)
+        if (d < 0.0) {
+            d = (0.0 - d)
+        }
+        return (d < 0.6)
+    }
+
+    fn model:void () {
+        def g (new UiCallout())
+        g.setPage(1000.0 600.0)
+        g.setSize(200.0 100.0)
+        g.setPoint(300.0 300.0)
+        g.place()
+        this.ok(((g.x == 322.0) && (g.y == 156.0)) ("above and right of the point: " + (to_string g.x) + "," + (to_string g.y)))
+        this.ok(g.hasTail "a wedge to the point")
+        this.ok((((itemAt g.tail 4) == 300.0) && ((itemAt g.tail 5) == 300.0)) "the wedge ends at the point")
+        def ey:double (((itemAt g.tail 1) + (itemAt g.tail 3)) * 0.5)
+        def ex:double (((itemAt g.tail 0) + (itemAt g.tail 2)) * 0.5)
+        this.ok((((ex >= g.x) && (ex <= (g.x + 200.0))) && ((CalloutCheck.near(ey (g.y + 100.0))) || (CalloutCheck.near(ex g.x)))) ("the wedge starts on the box's edge: " + (to_string ex) + "," + (to_string ey)))
+        this.ok((((indexOf (g.tailPath()) "M") == 0) && ((indexOf (g.tailPath()) " Z") > 0)) ("a closed path: " + (g.tailPath())))
+        g.setPoint(300.0 60.0)
+        g.place()
+        this.ok((g.y == 104.0) ("near the top: below the point: " + (to_string g.y)))
+        g.setPoint(950.0 300.0)
+        g.place()
+        this.ok(((g.x == 728.0) && (g.y == 156.0)) ("near the right: to the left: " + (to_string g.x)))
+        g.setPoint(950.0 60.0)
+        g.place()
+        this.ok(((g.x == 728.0) && (g.y == 104.0)) ("top right corner: below and left: " + (to_string g.x) + "," + (to_string g.y)))
+        g.setSize(990.0 100.0)
+        g.setPoint(500.0 300.0)
+        g.place()
+        this.ok(((g.x == 8.0) && (g.y == 156.0)) ("too wide for any: pushed inside: " + (to_string g.x)))
+        g.setSize(200.0 100.0)
+        g.setPoint(300.0 300.0)
+        g.place()
+        g.dragBy(-100.0 120.0)
+        this.ok((((g.x == 222.0) && (g.y == 276.0)) && g.moved) ("dragged: where it was put: " + (to_string g.x) + "," + (to_string g.y)))
+        this.ok(((g.hasTail == false) && ((g.tailPath()) == "")) "the point under the box: no wedge")
+        g.setPoint(600.0 500.0)
+        g.place()
+        this.ok(((g.x == 222.0) && g.hasTail) "a dragged box stays when the point moves, the wedge follows")
+        g.dragBy(5000.0 5000.0)
+        this.ok(((g.x == 792.0) && (g.y == 492.0)) ("dragged off the page: kept inside: " + (to_string g.x) + "," + (to_string g.y)))
+        g.reset()
+        g.place()
+        this.ok(((g.x == 622.0) && (g.y == 356.0)) ("reset: beside the point again: " + (to_string g.x) + "," + (to_string g.y)))
+    }
+
+    fn host:void (css:string) {
+        def h (new UiHost())
+        if ((strlen css) > 0) {
+            h.addStyleSheet(css)
+        }
+        h.setPageSize(800.0 500.0)
+        def c:CalloutCtl (CalloutCtl.make("co"))
+        c.title = "Comment"
+        c.closeLabel = "Close"
+        c.width = 240.0
+        c.setPage(800.0 500.0)
+        c.setPoint(200.0 300.0)
+        def body:EVGElement (unwrap c.bodyEl)
+        body.addChild((UiTree.label("co-line" "" "Is Knex still current?")))
+        c.build()
+        h.add(c)
+        h.layout()
+        def fr:EVGElement (unwrap c.frameEl)
+        this.ok((CalloutCheck.near(fr.calculatedWidth 240.0)) ("as wide as asked: " + (to_string fr.calculatedWidth)))
+        this.ok(((fr.calculatedHeight > 20.0) && (fr.calculatedHeight < 120.0)) ("as tall as its content: " + (to_string fr.calculatedHeight)))
+        c.fit(fr.calculatedWidth fr.calculatedHeight)
+        h.layout()
+        this.ok(((CalloutCheck.near(fr.calculatedX 222.0)) && (CalloutCheck.near((fr.calculatedY + fr.calculatedHeight) 256.0))) ("laid out above-right of its point: " + (to_string fr.calculatedX) + "," + (to_string fr.calculatedY)))
+        def tl:EVGElement (unwrap c.tailEl)
+        this.ok((((strlen tl.svgPath) > 0) && (CalloutCheck.near(tl.calculatedX c.geo.tailX))) "the wedge drawn where it goes")
+        this.ok(((c.grab("co-close" 0.0 0.0)) == false) "the × is not a handle")
+        this.ok((c.grab("co-head" 300.0 120.0)) "the head is the handle")
+        c.dragTo(260.0 160.0)
+        c.release()
+        this.ok(((c.geo.x == 182.0) && (c.dragging == false)) ("dragged by the head: " + (to_string c.geo.x)))
+        c.activate("co-close")
+        this.ok(c.closed "the × closes")
+        this.ok((c.owns("co-head") && c.owns("co-body")) "owns its parts")
+    }
+
+    sfn main:void () {
+        def k (new CalloutCheck())
+        k.model()
+        k.host("")
+        print ((to_string k.passes) + " passed, " + (to_string k.fails) + " failed")
+        if (k.fails > 0) {
+            print "RESULT FAIL"
+        }
+    }
+}
