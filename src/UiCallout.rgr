@@ -1,0 +1,227 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; UiCallout — where a callout box goes beside the point it is about, and its
+; tail: no page, no drawing, only the numbers (CalloutCtl draws them)
+; =============================================================================
+; A callout is a box near a point (`ax`, `ay` on the page) with a wedge from
+; the box's edge to the point, the way a slide's callout shape points at
+; what it says something about.
+;
+; WHERE THE BOX GOES (`place`, once its size `bw` × `bh` is known): above
+; and to the right of the point, `gap` away; below, left, or below-left when
+; that does not fit inside the page (`pw` × `ph`, `margin` from its edges);
+; when none fits, the first one pushed inside. A box the person dragged
+; (`dragBy`) stays where they put it, still inside the page.
+;
+; THE TAIL: from the middle of the box edge facing the point (where the line
+; from the box's centre to the point leaves the box) to the point itself,
+; `tailW` wide at the box. None while the point is under the box.
+; `tailPath` is that wedge for an SVG path in its own bounding box
+; (`tailX`, `tailY`, `tailBoxW` × `tailBoxH`).
+; =============================================================================
+
+class UiCallout {
+    ; the point, and the page
+    def ax:double 0.0
+    def ay:double 0.0
+    def pw:double 0.0
+    def ph:double 0.0
+    ; the box's size, and where it went
+    def bw:double 0.0
+    def bh:double 0.0
+    def x:double 0.0
+    def y:double 0.0
+    def gap:double 44.0
+    def margin:double 8.0
+    def tailW:double 16.0
+    ; put somewhere by hand: kept there (`ux`, `uy`, before clamping)
+    def moved:boolean false
+    def ux:double 0.0
+    def uy:double 0.0
+    ; the wedge: the box edge's two corners of it, then the point
+    def hasTail:boolean false
+    def tail:[double]
+    def tailX:double 0.0
+    def tailY:double 0.0
+    def tailBoxW:double 0.0
+    def tailBoxH:double 0.0
+
+    fn setPoint:void (px:double py:double) {
+        ax = px
+        ay = py
+    }
+
+    fn setPage:void (w:double h:double) {
+        pw = w
+        ph = h
+    }
+
+    fn setSize:void (w:double h:double) {
+        bw = w
+        bh = h
+    }
+
+    ; the box at (bx, by) is inside the page
+    fn fits:boolean (bx:double by:double) {
+        return ((((bx >= margin) && (by >= margin)) && ((bx + bw) <= (pw - margin))) && ((by + bh) <= (ph - margin)))
+    }
+
+    fn clampX:double (bx:double) {
+        def v:double bx
+        if ((v + bw) > (pw - margin)) {
+            v = ((pw - margin) - bw)
+        }
+        if (v < margin) {
+            v = margin
+        }
+        return v
+    }
+
+    fn clampY:double (by:double) {
+        def v:double by
+        if ((v + bh) > (ph - margin)) {
+            v = ((ph - margin) - bh)
+        }
+        if (v < margin) {
+            v = margin
+        }
+        return v
+    }
+
+    ; Where the box goes, and the tail to the point.
+    fn place:void () {
+        if moved {
+            x = (this.clampX(ux))
+            y = (this.clampY(uy))
+        } {
+            def right:double (ax + (gap * 0.5))
+            def left:double ((ax - (gap * 0.5)) - bw)
+            def above:double ((ay - gap) - bh)
+            def below:double (ay + gap)
+            def xs:[double] (([] _:double (right right left left)))
+            def ys:[double] (([] _:double (above below above below)))
+            x = (this.clampX(right))
+            y = (this.clampY(above))
+            def i:int 3
+            while (i >= 0) {
+                if (this.fits((itemAt xs i) (itemAt ys i))) {
+                    x = (itemAt xs i)
+                    y = (itemAt ys i)
+                }
+                i = (i - 1)
+            }
+        }
+        this.placeTail()
+    }
+
+    ; Dragged by (`dx`, `dy`) from where it is now.
+    fn dragBy:void (dx:double dy:double) {
+        moved = true
+        ux = (x + dx)
+        uy = (y + dy)
+        this.place()
+    }
+
+    ; Back where it goes by itself.
+    fn reset:void () {
+        moved = false
+    }
+
+    fn placeTail:void () {
+        def none:[double]
+        tail = none
+        hasTail = false
+        if ((((ax >= x) && (ax <= (x + bw))) && (ay >= y)) && (ay <= (y + bh))) {
+            return
+        }
+        def cx:double (x + (bw * 0.5))
+        def cy:double (y + (bh * 0.5))
+        def dx:double (ax - cx)
+        def dy:double (ay - cy)
+        ; where the line from the centre to the point leaves the box
+        def t:double 1.0
+        if (dx != 0.0) {
+            def tx:double ((bw * 0.5) / (UiCallout.absOf(dx)))
+            if (tx < t) {
+                t = tx
+            }
+        }
+        if (dy != 0.0) {
+            def ty:double ((bh * 0.5) / (UiCallout.absOf(dy)))
+            if (ty < t) {
+                t = ty
+            }
+        }
+        def ex:double (cx + (dx * t))
+        def ey:double (cy + (dy * t))
+        def len:double (sqrt ((dx * dx) + (dy * dy)))
+        if (len <= 0.0) {
+            return
+        }
+        ; across the line, half the width each way
+        def nx:double ((0.0 - dy) / len)
+        def ny:double (dx / len)
+        def hw:double (tailW * 0.5)
+        push tail (ex + (nx * hw))
+        push tail (ey + (ny * hw))
+        push tail (ex - (nx * hw))
+        push tail (ey - (ny * hw))
+        push tail ax
+        push tail ay
+        def minX:double (itemAt tail 0)
+        def minY:double (itemAt tail 1)
+        def maxX:double minX
+        def maxY:double minY
+        def k:int 0
+        while (k < 6) {
+            def px:double (itemAt tail k)
+            def py:double (itemAt tail (k + 1))
+            if (px < minX) {
+                minX = px
+            }
+            if (px > maxX) {
+                maxX = px
+            }
+            if (py < minY) {
+                minY = py
+            }
+            if (py > maxY) {
+                maxY = py
+            }
+            k = (k + 2)
+        }
+        tailX = (to_double (floor minX))
+        tailY = (to_double (floor minY))
+        tailBoxW = (((to_double (floor maxX)) - tailX) + 1.0)
+        tailBoxH = (((to_double (floor maxY)) - tailY) + 1.0)
+        hasTail = true
+    }
+
+    sfn absOf:double (v:double) {
+        if (v < 0.0) {
+            return (0.0 - v)
+        }
+        return v
+    }
+
+    sfn num:string (v:double) {
+        return (to_string ((to_double (to_int ((v * 10.0) + (? (v < 0.0) -0.5 0.5)))) / 10.0))
+    }
+
+    ; the wedge, in its bounding box ("" without one)
+    fn tailPath:string () {
+        if (hasTail == false) {
+            return ""
+        }
+        def s:string ""
+        def k:int 0
+        while (k < 6) {
+            def px:double ((itemAt tail k) - tailX)
+            def py:double ((itemAt tail (k + 1)) - tailY)
+            s = (s + (? (k == 0) "M" " L") + (UiCallout.num(px)) + " " + (UiCallout.num(py)))
+            k = (k + 2)
+        }
+        return (s + " Z")
+    }
+}

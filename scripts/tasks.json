@@ -73,5 +73,6 @@
   "ui:web": "npm run ui:web:build && npm run ui:demo:build && node gallery/evgui/demo/build.mjs && node gallery/evgui/web/serve.mjs",
   "ui:web:build": "npm run ui:build && node gallery/evgui/web/build.mjs",
   "ui:styles:check": "npm run ui:demo:build --silent && node gallery/evgui/demo/build.mjs && node gallery/evgui/demo/styles-check.mjs",
-  "ui:chat:check": "node dist/rgrc.js -es6 -nodemodule ./gallery/evgui/demo/ChatDemo.rgr -d=./gallery/evgui/bin -o=ChatDemo.cjs && node gallery/evgui/demo/chat-check.mjs"
+  "ui:chat:check": "node dist/rgrc.js -es6 -nodemodule ./gallery/evgui/demo/ChatDemo.rgr -d=./gallery/evgui/bin -o=ChatDemo.cjs && node gallery/evgui/demo/chat-check.mjs",
+  "ui:callout:check": "node dist/rgrc.js -es6 gallery/evgui/demo/CalloutCheck.rgr -d=gallery/evgui/bin -o=CalloutCheck.js -nodecli && node gallery/evgui/bin/CalloutCheck.js | tee /dev/stderr | grep -q ' 0 failed'"
 }
