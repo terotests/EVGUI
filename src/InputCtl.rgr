@@ -145,8 +145,24 @@ class InputCtl extends UiCtl {
     ; A class of the host's on the text run as well as `ui-input-text`, so a
     ; theme can colour this field's text (a dark search line) on its own.
     def textClass:string ""
+    ; The host's class on the run while it shows the placeholder, in place of
+    ; `textClass`. Not both: a theme writes the field's text colour on
+    ; `textClass`, and with both on the run that colour won over
+    ; `.ui-input-placeholder` wherever the sheet declared it later — the hint
+    ; read as text already typed. A host whose text class sets the size gives
+    ; this class the same size, so the run does not jump on the first key.
+    def placeholderClass:string ""
+    ; The placeholder goes when the field takes the keyboard, so focusing an
+    ; empty field visibly changes it and the caret stands alone at the start.
+    ; A field that always has the keys (a picker's search line) turns this off,
+    ; or its placeholder would never show.
+    def placeholderHidesOnFocus:boolean true
     ; The caret's width when the stylesheet gives `.ui-input-caret` none.
     def caretWidth:double 2.0
+    ; The caret took the text's colour because the sheet gave it none
+    ; (`caret-color: auto`). Remembered so the next build hands the caret back
+    ; to the sheet unpainted, and a theme change re-tints it.
+    def caretFromText:boolean false
 
     ; What the last `placeText` found: the engine the page was measured with
     ; and the page x where the text run starts unscrolled. The pointer maps
@@ -624,6 +640,9 @@ class InputCtl extends UiCtl {
         if ((strlen value) > 0) {
             return false
         }
+        if (focused && placeholderHidesOnFocus) {
+            return false
+        }
         return ((strlen placeholder) > 0)
     }
 
@@ -949,6 +968,15 @@ class InputCtl extends UiCtl {
         }
         fontSize = fs
         letterSpacing = txt.letterSpacing
+        ; A caret the sheet did not colour is drawn in the text's colour, as a
+        ; browser's is: one theme colour for the caret was invisible on the
+        ; same field in a dark panel.
+        if (car.backgroundColor.isSet == false) {
+            if txt.color.isSet {
+                car.backgroundColor = txt.color
+                caretFromText = true
+            }
+        }
         def cw:double caretWidth
         if car.width.isSet {
             if (car.width.pixels > 0.0) {
@@ -966,6 +994,19 @@ class InputCtl extends UiCtl {
         txt.calculatedX = (textX - scrollX)
         def y:double txt.calculatedY
         def h:double txt.calculatedHeight
+        ; An empty run lays out with no height (unless the sheet gives the run
+        ; one), and the caret took that height: a focused empty field showed
+        ; no caret at all. It is a line of the run's font, centred in the view
+        ; (the empty run itself lays out at the view's top).
+        if (h < 1.0) {
+            def lm:EVGTextMetrics (e.measureRun("Hg" fontFamily fontSize))
+            def lh:double lm.height
+            if (lh < 1.0) {
+                lh = (fontSize * 1.2)
+            }
+            y = (view.calculatedY + ((view.calculatedHeight - lh) / 2.0))
+            h = lh
+        }
         car.calculatedY = y
         car.calculatedHeight = h
         car.calculatedWidth = 0.0
@@ -990,12 +1031,29 @@ class InputCtl extends UiCtl {
 
     ; --- what the host routes here (see UiCtl) --------------------------------
 
+    ; Focus changes what the field draws (the focused class, and the
+    ; placeholder that goes on focus), so a change rebuilds the field in place
+    ; once it has been built. Hosts that keep focus themselves call this rather
+    ; than setting `focused`, or the hint stays until the next key.
+    fn setFocused:void (on:boolean) {
+        if (focused == on) {
+            return
+        }
+        focused = on
+        def root:EVGElement (unwrap rootEl)
+        if ((strlen tid) > 0) {
+            if (root.id == tid) {
+                this.build()
+            }
+        }
+    }
+
     fn onFocus:void (target:string) {
-        focused = true
+        this.setFocused(true)
     }
 
     fn onBlur:void (target:string) {
-        focused = false
+        this.setFocused(false)
         dragging = false
     }
 
@@ -1006,7 +1064,7 @@ class InputCtl extends UiCtl {
         if disabled {
             return false
         }
-        focused = true
+        this.setFocused(true)
         ; the clear button: emptied, and no drag follows
         if (this.isClearHit(target)) {
             this.clearValue()
@@ -1092,13 +1150,16 @@ class InputCtl extends UiCtl {
         def txt:EVGElement (unwrap textEl)
         txt.id = (this.textTid())
         txt.className = "ui-input-text"
-        if ((strlen textClass) > 0) {
-            UiTree.addClass(txt textClass)
-        }
         if (this.showsPlaceholder()) {
             UiTree.addClass(txt "ui-input-placeholder")
+            if ((strlen placeholderClass) > 0) {
+                UiTree.addClass(txt placeholderClass)
+            }
             txt.textContent = placeholder
         } {
+            if ((strlen textClass) > 0) {
+                UiTree.addClass(txt textClass)
+            }
             txt.textContent = (this.glyphText())
         }
         UiTree.clearChildren(txt)
@@ -1109,6 +1170,10 @@ class InputCtl extends UiCtl {
         def car:EVGElement (unwrap caretEl)
         car.id = (this.caretTid())
         car.className = "ui-input-caret"
+        if caretFromText {
+            car.backgroundColor = (EVGColor.noColor())
+            caretFromText = false
+        }
         UiTree.clearChildren(car)
         UiTree.inline(car "position" "absolute")
         view.addChild(car)

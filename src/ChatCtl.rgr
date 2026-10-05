@@ -391,11 +391,11 @@ class ChatCtl extends UiCtl {
     }
 
     fn onFocus:void (target:string) {
-        input.focused = (target == (this.fieldTid()))
+        input.setFocused((target == (this.fieldTid())))
     }
 
     fn onBlur:void (target:string) {
-        input.focused = false
+        input.setFocused(false)
         input.pointerUp()
     }
 
@@ -640,6 +640,7 @@ class ChatCtl extends UiCtl {
         input.maxLength = maxLength
         input.boxClass = "chat-field"
         input.textClass = "chat-draft"
+        input.placeholderClass = "chat-placeholder"
         input.build()
         def field:EVGElement (unwrap input.rootEl)
         composer.addChild(field)

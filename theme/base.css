@@ -1533,6 +1533,7 @@
   width: auto;
 }
 .emoji-query { color: #0f172a; font-size: 13px; }
+.emoji-query-placeholder { font-size: 13px; }
 .emoji-tabs {
   display: flex;
   flex-direction: row;
@@ -1675,6 +1676,9 @@
   border-radius: 6px;
 }
 .chat-draft { color: #0f172a; font-size: 13px; }
+/* The hint while the box is empty: ON the run instead of .chat-draft (InputCtl
+ * placeholderClass), so the draft's colour cannot reach it; same size. */
+.chat-placeholder { font-size: 13px; }
 .chat-send { height: 30px; line-height: 30px; padding: 0 12px; font-size: 13px; color: #ffffff; background-color: #2563eb; border-radius: 6px; }
 .chat-send-off { background-color: #93c5fd; }
 /* A thread (ChatCtl.subtitle, addAction, readOnly): a line under the title,
