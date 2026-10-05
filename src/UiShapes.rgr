@@ -1,0 +1,170 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; ============================================================================
+; UiShapes.rgr — path outlines a control draws that a box cannot
+; ============================================================================
+;
+; Each one is an SVG `d` in the box's own pixels, (0, 0) at its top left, for
+; a `path` element given `viewBox "0 0 w h"` and `preserveAspectRatio none`,
+; so the shape keeps its size whatever its bounds are.
+;
+;   - hatch: diagonal stripes filling a w × h box, cut at its edges (a
+;     hatched area: spacing, a reserved or disabled region)
+;   - tab: a tab with a cut corner, attached to an edge along its open side
+;
+; Checked on Node by demo/UiShapesCheck.rgr (`ui:shapes:check`).
+; ============================================================================
+
+class UiShapes {
+
+    ; Stripes rising to the right ("/"), `thick` wide and `gap` apart across
+    ; them (both in pixels, measured along x), filling the box. Each stripe
+    ; is its own closed polygon, so the path fills with either rule.
+    sfn hatch:string (w:double h:double thick:double gap:double) {
+        def d:string ""
+        if ((((w <= 0.0) || (h <= 0.0)) || (thick <= 0.0)) || (gap < 0.0)) {
+            return d
+        }
+        def step:double (thick + gap)
+        ; a stripe is the box between the lines x + y = c and x + y = c + thick
+        def c:double (0.0 - thick)
+        def top:double (w + h)
+        while (c < top) {
+            def xs:[double]
+            def ys:[double]
+            push xs 0.0
+            push ys 0.0
+            push xs w
+            push ys 0.0
+            push xs w
+            push ys h
+            push xs 0.0
+            push ys h
+            def p1:[[double]] (UiShapes.clip(xs ys 1.0 c))
+            def p2:[[double]] (UiShapes.clip((itemAt p1 0) (itemAt p1 1) -1.0 (0.0 - (c + thick))))
+            d = (d + (UiShapes.ring((itemAt p2 0) (itemAt p2 1))))
+            c = (c + step)
+        }
+        return d
+    }
+
+    ; A tab `w` × `h` whose open side is its foot (`down` false: it stands
+    ; on an edge below it) or its head (`down` true: it hangs from an edge
+    ; above it). The far corner on the right is cut at 45°, `cut` long.
+    sfn tab:string (w:double h:double cut:double down:boolean) {
+        if ((w <= 0.0) || (h <= 0.0)) {
+            return ""
+        }
+        def k:double cut
+        if (k > h) {
+            k = h
+        }
+        if (k > w) {
+            k = w
+        }
+        def xs:[double]
+        def ys:[double]
+        if down {
+            push xs 0.0
+            push ys 0.0
+            push xs w
+            push ys 0.0
+            push xs w
+            push ys (h - k)
+            push xs (w - k)
+            push ys h
+            push xs 0.0
+            push ys h
+        } {
+            push xs 0.0
+            push ys h
+            push xs 0.0
+            push ys 0.0
+            push xs (w - k)
+            push ys 0.0
+            push xs w
+            push ys k
+            push xs w
+            push ys h
+        }
+        return (UiShapes.ring(xs ys))
+    }
+
+    ; The part of the polygon where s·(x + y) >= t (Sutherland–Hodgman on
+    ; one half-plane). Returns its xs and ys.
+    sfn clip:[[double]] (xs:[double] ys:[double] s:double t:double) {
+        def ox:[double]
+        def oy:[double]
+        def n:int (array_length xs)
+        def i:int 0
+        while (i < n) {
+            def j:int ((i + 1) % n)
+            def ax:double (itemAt xs i)
+            def ay:double (itemAt ys i)
+            def bx:double (itemAt xs j)
+            def by:double (itemAt ys j)
+            def fa:double ((s * (ax + ay)) - t)
+            def fb:double ((s * (bx + by)) - t)
+            if (fa >= 0.0) {
+                push ox ax
+                push oy ay
+            }
+            if (((fa >= 0.0) && (fb < 0.0)) || ((fa < 0.0) && (fb >= 0.0))) {
+                def u:double (fa / (fa - fb))
+                push ox (ax + ((bx - ax) * u))
+                push oy (ay + ((by - ay) * u))
+            }
+            i = (i + 1)
+        }
+        def out:[[double]]
+        push out ox
+        push out oy
+        return out
+    }
+
+    ; "M x y L … Z" for a polygon of three corners or more, else "".
+    sfn ring:string (xs:[double] ys:[double]) {
+        def n:int (array_length xs)
+        if (n < 3) {
+            return ""
+        }
+        def d:string ""
+        def i:int 0
+        while (i < n) {
+            def cmd:string "L"
+            if (i == 0) {
+                cmd = "M"
+            }
+            d = (d + cmd + (UiShapes.num((itemAt xs i))) + " " + (UiShapes.num((itemAt ys i))) + " ")
+            i = (i + 1)
+        }
+        return (d + "Z ")
+    }
+
+    ; A coordinate to two decimals, without a trailing ".00".
+    sfn num:string (v:double) {
+        def neg:boolean (v < 0.0)
+        def a:double v
+        if neg {
+            a = (0.0 - v)
+        }
+        def cents:int (to_int ((a * 100.0) + 0.5))
+        def whole:int (idiv cents 100)
+        def frac:int (cents % 100)
+        def s:string (to_string whole)
+        if (frac > 0) {
+            if (frac < 10) {
+                s = (s + ".0" + (to_string frac))
+            } {
+                s = (s + "." + (to_string frac))
+            }
+            if ((frac % 10) == 0) {
+                s = (substring s 0 ((strlen s) - 1))
+            }
+        }
+        if (neg && (cents > 0)) {
+            s = ("-" + s)
+        }
+        return s
+    }
+}
