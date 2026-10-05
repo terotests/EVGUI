@@ -1,0 +1,384 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+;
+; UiTone — a light stylesheet in another colour cast, contrast kept.
+;
+; The kit's light colours are cool: white paper, slate greys with a blue
+; cast, a bright blue accent. An app that wants its chrome warmer would have
+; to restate every colour of every sheet, and miss the next one added. So
+; the cast is DERIVED, like UiDark's dark look: `sheet(css theme)` gives the
+; same sheet with every colour it sets moved into the cast, and the dark
+; look is then derived from that (`UiDark.overlay(UiTone.sheet(...))`).
+;
+; THE MAPPING keeps contrast. Luminance goes through
+;
+;     Y' + 0.05 = f * (Y + 0.05)
+;
+; which multiplies both sides of every WCAG ratio (Y1 + 0.05) / (Y2 + 0.05)
+; by f and so keeps it; f < 1 lets white come down to paper. Only the black
+; end is clamped (Y' = 0), where the loss is a hundredth of a ratio.
+; Chromaticity moves towards the paper's by how neutral the colour is: a
+; grey (HSL saturation under about 35 %) takes the paper's cast fully, so
+; slate becomes a warm stone; a saturated colour (60 % and up) takes only
+; `cast` of it, so blue stays blue and red stays red, a little aged. What
+; would overflow a channel is mixed towards white, keeping the luminance.
+;
+; What stays out: rules scoped to another theme (`.theme-retro .x`,
+; `.theme-dark .x`, another host's `.theme-ce .x`) and `@vars <other>`.
+; Those are skins over the light look and keep their own colours.
+Import "pkg:evg/EVGStyleSheet.rgr"
+Import "UiDark.rgr"
+
+class UiTone {
+
+    ; --- the warm cast -----------------------------------------------------
+
+    ; The paper the warm cast is taken from: a muted papyrus beige.
+    sfn warmPaper:EVGColor () {
+        return (EVGColor.rgb(238 231 221))
+    }
+
+    ; White comes down to about #fef7ec, slate #f1f5f9 to #f2ede5; every
+    ; ratio stays.
+    sfn warmFactor:double () {
+        return 0.94
+    }
+
+    ; How much of the cast a saturated colour takes.
+    sfn warmCast:double () {
+        return 0.15
+    }
+
+    ; A colour of the light look in the warm cast.
+    sfn warm:EVGColor (c:EVGColor) {
+        return (UiTone.tone(c (UiTone.warmPaper()) (UiTone.warmFactor()) (UiTone.warmCast())))
+    }
+
+    ; A light sheet in the warm cast, for a host applied with `theme` (its
+    ; own theme name, "" for none).
+    sfn warmSheet:string (css:string theme:string) {
+        return (UiTone.sheet(css theme (fn:EVGColor (c:EVGColor) {
+            return (UiTone.warm(c))
+        })))
+    }
+
+    ; --- colour ------------------------------------------------------------
+
+    ; HSL saturation of an sRGB colour, 0..1
+    sfn saturation:double (c:EVGColor) {
+        def mx:double c.r
+        def mn:double c.r
+        if (c.g > mx) {
+            mx = c.g
+        }
+        if (c.b > mx) {
+            mx = c.b
+        }
+        if (c.g < mn) {
+            mn = c.g
+        }
+        if (c.b < mn) {
+            mn = c.b
+        }
+        mx = (mx / 255.0)
+        mn = (mn / 255.0)
+        if ((mx - mn) < 0.000001) {
+            return 0.0
+        }
+        def l2:double ((mx + mn) - 1.0)
+        if (l2 < 0.0) {
+            l2 = (0.0 - l2)
+        }
+        def d:double (1.0 - l2)
+        if (d < 0.000001) {
+            return 0.0
+        }
+        return ((mx - mn) / d)
+    }
+
+    ; How much of the paper's cast `c` takes: 1 for a grey, `cast` for a
+    ; saturated colour, a straight line between.
+    sfn castOf:double (c:EVGColor cast:double) {
+        def w:double ((0.6 - (UiTone.saturation(c))) / 0.25)
+        if (w < 0.0) {
+            w = 0.0
+        }
+        if (w > 1.0) {
+            w = 1.0
+        }
+        return (w + (cast * (1.0 - w)))
+    }
+
+    ; `c` in the cast of `paper`: luminance scaled by `f` (see the top of the
+    ; file), chromaticity moved towards the paper's, alpha kept.
+    sfn tone:EVGColor (c:EVGColor paper:EVGColor f:double cast:double) {
+        if (c.isSet == false) {
+            return c
+        }
+        def lr:double (UiDark.toLinear(c.r))
+        def lg:double (UiDark.toLinear(c.g))
+        def lb:double (UiDark.toLinear(c.b))
+        def y:double (((0.2126 * lr) + (0.7152 * lg)) + (0.0722 * lb))
+        def yt:double ((f * (y + 0.05)) - 0.05)
+        if (yt < 0.0) {
+            yt = 0.0
+        }
+        ; the paper's chromaticity, at luminance 1
+        def pr:double (UiDark.toLinear(paper.r))
+        def pg:double (UiDark.toLinear(paper.g))
+        def pb:double (UiDark.toLinear(paper.b))
+        def py:double (((0.2126 * pr) + (0.7152 * pg)) + (0.0722 * pb))
+        pr = (pr / py)
+        pg = (pg / py)
+        pb = (pb / py)
+        def a:double (UiTone.castOf(c cast))
+        def nr:double pr
+        def ng:double pg
+        def nb:double pb
+        if (y > 0.000001) {
+            nr = (((1.0 - a) * (lr / y)) + (a * pr))
+            ng = (((1.0 - a) * (lg / y)) + (a * pg))
+            nb = (((1.0 - a) * (lb / y)) + (a * pb))
+        }
+        lr = (nr * yt)
+        lg = (ng * yt)
+        lb = (nb * yt)
+        if (lr > 1.0) {
+            lr = 1.0
+        }
+        if (lg > 1.0) {
+            lg = 1.0
+        }
+        if (lb > 1.0) {
+            lb = 1.0
+        }
+        ; what the clipping lost comes back as white
+        def got:double (((0.2126 * lr) + (0.7152 * lg)) + (0.0722 * lb))
+        if ((got < yt) && (got < 1.0)) {
+            def t:double ((yt - got) / (1.0 - got))
+            lr = (lr + (t * (1.0 - lr)))
+            lg = (lg + (t * (1.0 - lg)))
+            lb = (lb + (t * (1.0 - lb)))
+        }
+        def r:double (to_double (floor ((UiDark.fromLinear(lr)) + 0.5)))
+        def g:double (to_double (floor ((UiDark.fromLinear(lg)) + 0.5)))
+        def b:double (to_double (floor ((UiDark.fromLinear(lb)) + 0.5)))
+        return (EVGColor.create(r g b c.a))
+    }
+
+    ; --- sheets ------------------------------------------------------------
+
+    ; True when `s` starts with `p`.
+    sfn begins:boolean (s:string p:string) {
+        if ((strlen s) < (strlen p)) {
+            return false
+        }
+        return ((substring s 0 (strlen p)) == p)
+    }
+
+    ; The end of the comment opening at `i` (just past its `*/`).
+    sfn commentEnd:int (s:string i:int) {
+        def n:int (strlen s)
+        def j:int (i + 2)
+        while ((j + 1) < n) {
+            if (((charAt s j) == 42) && ((charAt s (j + 1)) == 47)) {
+                return (j + 2)
+            }
+            j = (j + 1)
+        }
+        return n
+    }
+
+    ; True when a comment opens at `i`.
+    sfn isComment:boolean (s:string i:int) {
+        if ((i + 1) >= (strlen s)) {
+            return false
+        }
+        return (((charAt s i) == 47) && ((charAt s (i + 1)) == 42))
+    }
+
+    ; `s` without its comments.
+    sfn bare:string (s:string) {
+        def out:string ""
+        def i:int 0
+        def n:int (strlen s)
+        while (i < n) {
+            if (UiTone.isComment(s i)) {
+                i = (UiTone.commentEnd(s i))
+                out = (out + " ")
+            } {
+                out = (out + (strfromcode (charAt s i)))
+                i = (i + 1)
+            }
+        }
+        return out
+    }
+
+    ; `v` with the colours outside its comments through `map`.
+    sfn mapText:string (v:string map:(fn:EVGColor (c:EVGColor))) {
+        def out:string ""
+        def i:int 0
+        def from:int 0
+        def n:int (strlen v)
+        while (i < n) {
+            if (UiTone.isComment(v i)) {
+                def e:int (UiTone.commentEnd(v i))
+                out = (out + ((UiDark.mapValue((substring v from i) map)) + (substring v i e)))
+                i = e
+                from = e
+            } {
+                i = (i + 1)
+            }
+        }
+        return (out + (UiDark.mapValue((substring v from n) map)))
+    }
+
+    ; True when a selector list is this host's: some selector in it is not
+    ; scoped to another theme.
+    sfn ownSelector:boolean (sel:string theme:string) {
+        def parts:[string] (strsplit sel ",")
+        def i:int 0
+        while (i < (array_length parts)) {
+            def p:string (trim (itemAt parts i))
+            if (UiTone.begins(p ".theme-")) {
+                def rest:string (substring p 7 (strlen p))
+                def sp:int (indexOf rest " ")
+                def th:string rest
+                if (sp >= 0) {
+                    th = (substring rest 0 sp)
+                }
+                if (th == theme) {
+                    return true
+                }
+            } {
+                return true
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    ; A block's declarations, the colours of the colour properties through
+    ; `map` (every custom property, in `@vars`).
+    sfn mapBody:string (body:string vars:boolean map:(fn:EVGColor (c:EVGColor))) {
+        def out:string ""
+        def n:int (strlen body)
+        def i:int 0
+        def from:int 0
+        def depth:int 0
+        while (i <= n) {
+            def end:boolean (i == n)
+            if ((end == false) && (UiTone.isComment(body i))) {
+                i = (UiTone.commentEnd(body i))
+            } {
+                def ch:int 0
+                if (end == false) {
+                    ch = (charAt body i)
+                }
+                if (ch == 40) {
+                    depth = (depth + 1)
+                }
+                if (ch == 41) {
+                    depth = (depth - 1)
+                }
+                if (end || ((ch == 59) && (depth <= 0))) {
+                    def decl:string (substring body from i)
+                    def flat:string (UiTone.bare(decl))
+                    def colon:int (indexOf flat ":")
+                    def at:int (indexOf decl ":")
+                    def done:boolean false
+                    if ((colon >= 0) && (at >= 0)) {
+                        def name:string (trim (substring flat 0 colon))
+                        def take:boolean (UiDark.isColorProp(name))
+                        if (name == "shadow-color") {
+                            take = true
+                        }
+                        if vars {
+                            take = (UiTone.begins(name "--"))
+                        }
+                        if take {
+                            out = (out + ((substring decl 0 (at + 1)) + (UiTone.mapText((substring decl (at + 1) (strlen decl)) map))))
+                            done = true
+                        }
+                    }
+                    if (done == false) {
+                        out = (out + decl)
+                    }
+                    if (end == false) {
+                        out = (out + ";")
+                    }
+                    from = (i + 1)
+                }
+                i = (i + 1)
+            }
+        }
+        return out
+    }
+
+    ; The `}` closing a block whose body starts at `i`, or the sheet's end.
+    sfn blockEnd:int (s:string i0:int) {
+        def n:int (strlen s)
+        def i:int i0
+        while (i < n) {
+            if (UiTone.isComment(s i)) {
+                i = (UiTone.commentEnd(s i))
+            } {
+                if ((charAt s i) == 125) {
+                    return i
+                }
+                i = (i + 1)
+            }
+        }
+        return n
+    }
+
+    ; The sheet with every colour it sets for this host through `map`: rules
+    ; unscoped or scoped to `theme`, `@vars` and `@vars <theme>`. The text is
+    ; kept as it is otherwise (comments, order, layout), so a later sheet
+    ; and UiDark read it as they read the light one.
+    sfn sheet:string (css:string theme:string map:(fn:EVGColor (c:EVGColor))) {
+        def out:string ""
+        def n:int (strlen css)
+        def i:int 0
+        ; where the current prelude starts, and how much of `css` is in `out`
+        def from:int 0
+        def copied:int 0
+        while (i < n) {
+            if (UiTone.isComment(css i)) {
+                i = (UiTone.commentEnd(css i))
+            } {
+                def ch:int (charAt css i)
+                if ((ch == 125) || (ch == 59)) {
+                    ; a `@media` block closing, or a statement such as @import
+                    i = (i + 1)
+                    from = i
+                } {
+                    if (ch == 123) {
+                        def pre:string (trim (UiTone.bare((substring css from i))))
+                        i = (i + 1)
+                        if (UiTone.begins(pre "@media") == false) {
+                            def close:int (UiTone.blockEnd(css i))
+                            def vars:boolean (UiTone.begins(pre "@vars"))
+                            def own:boolean false
+                            if vars {
+                                def th:string (trim (substring pre 5 (strlen pre)))
+                                own = ((th == "") || (th == theme))
+                            } {
+                                own = (UiTone.ownSelector(pre theme))
+                            }
+                            if own {
+                                out = (out + (substring css copied i))
+                                out = (out + (UiTone.mapBody((substring css i close) vars map)))
+                                copied = close
+                            }
+                            i = close
+                        }
+                        from = i
+                    } {
+                        i = (i + 1)
+                    }
+                }
+            }
+        }
+        return (out + (substring css copied n))
+    }
+}
