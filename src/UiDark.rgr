@@ -1,0 +1,500 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+;
+; UiDark — the dark look of a light stylesheet, worked out rather than
+; written by hand.
+;
+; An app's chrome is many sheets of light colours (the kit's base.css, the
+; app's own), and a dark theme written beside them by hand misses every rule
+; added after it: the new control shows up white in the dark. So the dark
+; look is DERIVED: `overlay(css theme)` reads a light sheet and writes, for
+; every colour it sets, the same rule scoped to `.theme-dark` with the colour
+; mapped. Apply the tree with "dark" among its themes and the overlay wins
+; (it is scoped, and it comes later).
+;
+; THE MAPPING keeps contrast. WCAG contrast is (Y1 + 0.05) / (Y2 + 0.05) over
+; relative luminance Y, so the map
+;
+;     Y' + 0.05 = K / (Y + 0.05)
+;
+; turns every ratio upside down and keeps its size: text that read at 7:1 on
+; its background reads at 7:1 after, with light and dark swapped. K is chosen
+; so white becomes a near-black ground (Y' = 0.012, about #1c1c1e) rather
+; than pure black; the only loss is at the black end, where Y' is clamped to
+; 1 (white). The colour keeps its chromaticity: its linear RGB is scaled to
+; the new luminance, and what would overflow is mixed towards white.
+;
+; What stays out: `shadow-color` (a shadow is dark in both looks), rules
+; scoped to another host's theme (`.theme-ce .x` on the toolbar's sheet),
+; classes drawn over content that does not turn (`overlayKeep`: a crop frame
+; over a picture, a selection over a slide), and anything an app writes
+; itself as `.theme-dark .x` AFTER the overlay — that is where a colour that
+; must not turn (the black of a presenting screen, the dimming under a
+; dialog) is put back.
+Import "pkg:evg/EVGStyleSheet.rgr"
+
+class UiDark {
+
+    ; --- numbers -----------------------------------------------------------
+    ; (the language has sqrt and fabs, not pow)
+
+    sfn ln:double (v:double) {
+        if (v <= 0.0) {
+            return (0.0 - 1000.0)
+        }
+        def x:double v
+        def k:int 0
+        while (x > 2.0) {
+            x = (x / 2.0)
+            k = (k + 1)
+        }
+        while (x < 1.0) {
+            x = (x * 2.0)
+            k = (k - 1)
+        }
+        def y:double ((x - 1.0) / (x + 1.0))
+        def y2:double (y * y)
+        def term:double y
+        def sum:double 0.0
+        def i:int 0
+        while (i < 30) {
+            sum = (sum + (term / (to_double ((2 * i) + 1))))
+            term = (term * y2)
+            i = (i + 1)
+        }
+        return ((2.0 * sum) + ((to_double k) * 0.6931471805599453))
+    }
+
+    sfn exp:double (v:double) {
+        def n:int (floor (v / 0.6931471805599453))
+        def r:double (v - ((to_double n) * 0.6931471805599453))
+        def term:double 1.0
+        def sum:double 1.0
+        def i:int 1
+        while (i < 25) {
+            term = ((term * r) / (to_double i))
+            sum = (sum + term)
+            i = (i + 1)
+        }
+        while (n > 0) {
+            sum = (sum * 2.0)
+            n = (n - 1)
+        }
+        while (n < 0) {
+            sum = (sum / 2.0)
+            n = (n + 1)
+        }
+        return sum
+    }
+
+    sfn pow:double (a:double b:double) {
+        if (a <= 0.0) {
+            return 0.0
+        }
+        return (UiDark.exp((b * (UiDark.ln(a)))))
+    }
+
+    ; --- colour ------------------------------------------------------------
+
+    ; one sRGB channel (0..255) as linear light (0..1)
+    sfn toLinear:double (c:double) {
+        def v:double (c / 255.0)
+        if (v <= 0.04045) {
+            return (v / 12.92)
+        }
+        return (UiDark.pow(((v + 0.055) / 1.055) 2.4))
+    }
+
+    sfn fromLinear:double (v0:double) {
+        def v:double v0
+        if (v < 0.0) {
+            v = 0.0
+        }
+        if (v > 1.0) {
+            v = 1.0
+        }
+        def s:double (v * 12.92)
+        if (v > 0.0031308) {
+            s = ((1.055 * (UiDark.pow(v (1.0 / 2.4)))) - 0.055)
+        }
+        return (s * 255.0)
+    }
+
+    ; WCAG relative luminance
+    sfn luminance:double (c:EVGColor) {
+        return ((((0.2126 * (UiDark.toLinear(c.r))) + (0.7152 * (UiDark.toLinear(c.g)))) + (0.0722 * (UiDark.toLinear(c.b)))))
+    }
+
+    ; WCAG contrast of two opaque colours, 1..21
+    sfn contrast:double (a:EVGColor b:EVGColor) {
+        def la:double ((UiDark.luminance(a)) + 0.05)
+        def lb:double ((UiDark.luminance(b)) + 0.05)
+        if (la > lb) {
+            return (la / lb)
+        }
+        return (lb / la)
+    }
+
+    ; The luminance a colour of luminance `y` takes in the dark look.
+    sfn darkLuminance:double (y:double) {
+        def t:double ((0.0651 / (y + 0.05)) - 0.05)
+        if (t < 0.0) {
+            return 0.0
+        }
+        if (t > 1.0) {
+            return 1.0
+        }
+        return t
+    }
+
+    ; A light look's colour in the dark look: the luminance mapped (see the
+    ; top of the file), the chromaticity and the alpha kept.
+    sfn color:EVGColor (c:EVGColor) {
+        if (c.isSet == false) {
+            return c
+        }
+        def lr:double (UiDark.toLinear(c.r))
+        def lg:double (UiDark.toLinear(c.g))
+        def lb:double (UiDark.toLinear(c.b))
+        def y:double (((0.2126 * lr) + (0.7152 * lg)) + (0.0722 * lb))
+        def yt:double (UiDark.darkLuminance(y))
+        if (y < 0.000001) {
+            lr = yt
+            lg = yt
+            lb = yt
+        } {
+            def s:double (yt / y)
+            lr = (lr * s)
+            lg = (lg * s)
+            lb = (lb * s)
+            if (lr > 1.0) {
+                lr = 1.0
+            }
+            if (lg > 1.0) {
+                lg = 1.0
+            }
+            if (lb > 1.0) {
+                lb = 1.0
+            }
+            ; what the clipping lost comes back as white
+            def got:double (((0.2126 * lr) + (0.7152 * lg)) + (0.0722 * lb))
+            if ((got < yt) && (got < 1.0)) {
+                def t:double ((yt - got) / (1.0 - got))
+                lr = (lr + (t * (1.0 - lr)))
+                lg = (lg + (t * (1.0 - lg)))
+                lb = (lb + (t * (1.0 - lb)))
+            }
+        }
+        def r:double (to_double (floor ((UiDark.fromLinear(lr)) + 0.5)))
+        def g:double (to_double (floor ((UiDark.fromLinear(lg)) + 0.5)))
+        def b:double (to_double (floor ((UiDark.fromLinear(lb)) + 0.5)))
+        return (EVGColor.create(r g b c.a))
+    }
+
+    sfn colorText:string (c:EVGColor) {
+        if (c.a < 1.0) {
+            return (c.toCSSString())
+        }
+        return (c.toHexString())
+    }
+
+    ; --- values ------------------------------------------------------------
+
+    sfn isHex:boolean (ch:int) {
+        if ((ch >= 48) && (ch <= 57)) {
+            return true
+        }
+        if ((ch >= 97) && (ch <= 102)) {
+            return true
+        }
+        return ((ch >= 65) && (ch <= 70))
+    }
+
+    sfn isWordChar:boolean (ch:int) {
+        if ((ch >= 97) && (ch <= 122)) {
+            return true
+        }
+        if ((ch >= 65) && (ch <= 90)) {
+            return true
+        }
+        if ((ch >= 48) && (ch <= 57)) {
+            return true
+        }
+        return (ch == 45)
+    }
+
+    ; the `)` closing the `(` at `open`, or -1
+    sfn closeParen:int (s:string open:int) {
+        def depth:int 0
+        def i:int open
+        def n:int (strlen s)
+        while (i < n) {
+            def ch:int (charAt s i)
+            if (ch == 40) {
+                depth = (depth + 1)
+            }
+            if (ch == 41) {
+                depth = (depth - 1)
+                if (depth == 0) {
+                    return i
+                }
+            }
+            i = (i + 1)
+        }
+        return -1
+    }
+
+    ; A declaration's value with every colour in it mapped: `#e4e4e7`,
+    ; `rgb()`, `rgba()`, `hsl()`, `hsla()`, `white` and `black`. A colour
+    ; built from var() is left as it is (its variable is mapped instead).
+    sfn value:string (v:string) {
+        def out:string ""
+        def n:int (strlen v)
+        def i:int 0
+        while (i < n) {
+            def ch:int (charAt v i)
+            if (ch == 35) {
+                def j:int (i + 1)
+                while ((j < n) && (UiDark.isHex((charAt v j)))) {
+                    j = (j + 1)
+                }
+                def len:int ((j - i) - 1)
+                if ((((len == 3) || (len == 4)) || (len == 6)) || (len == 8)) {
+                    out = (out + (UiDark.colorText((UiDark.color((EVGColor.parse((substring v i j))))))))
+                } {
+                    out = (out + (substring v i j))
+                }
+                i = j
+            } {
+                if (UiDark.isWordChar(ch)) {
+                    def j:int i
+                    while ((j < n) && (UiDark.isWordChar((charAt v j)))) {
+                        j = (j + 1)
+                    }
+                    def word:string (substring v i j)
+                    def isFn:boolean (((word == "rgb") || (word == "rgba")) || ((word == "hsl") || (word == "hsla")))
+                    if (isFn && ((j < n) && ((charAt v j) == 40))) {
+                        def close:int (UiDark.closeParen(v j))
+                        if (close < 0) {
+                            out = (out + (substring v i n))
+                            i = n
+                        } {
+                            def whole:string (substring v i (close + 1))
+                            if ((indexOf whole "var(") >= 0) {
+                                out = (out + whole)
+                            } {
+                                out = (out + (UiDark.colorText((UiDark.color((EVGColor.parse(whole)))))))
+                            }
+                            i = (close + 1)
+                        }
+                    } {
+                        if ((word == "white") || (word == "black")) {
+                            out = (out + (UiDark.colorText((UiDark.color((EVGColor.parse(word)))))))
+                        } {
+                            out = (out + word)
+                        }
+                        i = j
+                    }
+                } {
+                    out = (out + (strfromcode ch))
+                    i = (i + 1)
+                }
+            }
+        }
+        return out
+    }
+
+    ; The properties whose colours turn. `shadow-color` is not one of them.
+    sfn isColorProp:boolean (name:string) {
+        if ((name == "color") || (name == "background-color")) {
+            return true
+        }
+        if ((name == "background") || (name == "border")) {
+            return true
+        }
+        if ((indexOf name "border-") == 0) {
+            ; border-color, border-top, border-left-color...; not the
+            ; radius, the width, the style or the collapse
+            if ((indexOf name "radius") >= 0) {
+                return false
+            }
+            if ((indexOf name "width") >= 0) {
+                return false
+            }
+            if ((indexOf name "style") >= 0) {
+                return false
+            }
+            return ((indexOf name "collapse") < 0)
+        }
+        if ((name == "outline") || (name == "outline-color")) {
+            return true
+        }
+        if ((name == "stroke") || (name == "fill")) {
+            return true
+        }
+        return (name == "caret-color")
+    }
+
+    ; --- sheets ------------------------------------------------------------
+
+    sfn pseudoText:string (p:int) {
+        if (p == 1) {
+            return ":hover"
+        }
+        if (p == 2) {
+            return ":focus"
+        }
+        if (p == 3) {
+            return ":active"
+        }
+        if (p == 4) {
+            return ":disabled"
+        }
+        return ""
+    }
+
+    sfn num:string (v:double) {
+        return (to_string (floor (v + 0.5)))
+    }
+
+    ; a parsed `@media` query written back as CSS
+    sfn mediaText:string (m:EVGMediaQuery) {
+        def parts:[string]
+        if (m.minWidth >= 0.0) {
+            push parts ("(min-width: " + ((UiDark.num(m.minWidth)) + "px)"))
+        }
+        if (m.maxWidth >= 0.0) {
+            push parts ("(max-width: " + ((UiDark.num(m.maxWidth)) + "px)"))
+        }
+        if (m.minHeight >= 0.0) {
+            push parts ("(min-height: " + ((UiDark.num(m.minHeight)) + "px)"))
+        }
+        if (m.maxHeight >= 0.0) {
+            push parts ("(max-height: " + ((UiDark.num(m.maxHeight)) + "px)"))
+        }
+        if ((strlen m.orientation) > 0) {
+            push parts ("(orientation: " + (m.orientation + ")"))
+        }
+        if (m.pointer == 1) {
+            push parts "(pointer: coarse)"
+        }
+        if (m.pointer == 2) {
+            push parts "(pointer: fine)"
+        }
+        return (join parts " and ")
+    }
+
+    ; One rule of the overlay, or "" when the rule sets no colour. Every
+    ; colour the rule sets is stated again, mapped or (`transparent`, a
+    ; var()) as it is: the overlay outranks the light rules and any older
+    ; `.theme-dark` rule, so what it leaves out would come from those. A
+    ; var() is mapped through its variable, in `@vars dark`.
+    sfn ruleText:string (r:EVGStyleRule) {
+        def body:string ""
+        def i:int 0
+        def n:int (array_length r.decls)
+        while (i < n) {
+            def d:EVGStyleDecl (itemAt r.decls i)
+            if (UiDark.isColorProp(d.name)) {
+                def mapped:string d.value
+                if ((indexOf d.value "var(") < 0) {
+                    mapped = (UiDark.value(d.value))
+                }
+                body = (body + ((" " + d.name) + (": " + (mapped + ";"))))
+            }
+            i = (i + 1)
+        }
+        if ((strlen body) == 0) {
+            return ""
+        }
+        def line:string ((".theme-dark ." + r.className) + ((UiDark.pseudoText(r.pseudo)) + (" {" + (body + " }"))))
+        if (r.media.isEmpty()) {
+            return line
+        }
+        return ("@media " + ((UiDark.mediaText(r.media)) + (" { " + (line + " }"))))
+    }
+
+    ; The dark overlay of a light sheet, for a host applied with `theme`
+    ; (its own theme name, "" for none): append it after the sheet and apply
+    ; the host with "dark" added to its themes. Rules scoped to `theme` come
+    ; after the unscoped ones, as they outrank them in the light look too;
+    ; rules scoped to any other theme are not this host's and are left out.
+    sfn overlay:string (css:string theme:string) {
+        return (UiDark.overlayKeep(css theme ""))
+    }
+
+    ; Classes drawn over content that is not chrome (a picture being cropped,
+    ; a slide) keep their colours in both looks: they are read against that
+    ; content, which does not turn. The kit's own are here; an app names its
+    ; own in `keep`.
+    sfn kitKeep:string () {
+        return "ui-crop"
+    }
+
+    ; True when `cls` starts with one of the space-separated prefixes.
+    sfn kept:boolean (cls:string keep:string) {
+        def parts:[string] (strsplit keep " ")
+        def i:int 0
+        while (i < (array_length parts)) {
+            def p:string (trim (itemAt parts i))
+            if (((strlen p) > 0) && ((indexOf cls p) == 0)) {
+                return true
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    ; `overlay`, leaving out every class that starts with one of `keep`'s
+    ; space-separated prefixes ("sel- rv-bar"), besides the kit's own
+    ; (`kitKeep`).
+    sfn overlayKeep:string (css:string theme:string keep:string) {
+        def keepAll:string (((UiDark.kitKeep()) + " ") + keep)
+        def sheet (new EVGStyleSheet())
+        sheet.parse(css)
+        def out:string ""
+        ; the palette
+        def vars:string ""
+        def k:int 0
+        def nv:int (array_length sheet.varNames)
+        while (k < nv) {
+            def th:string (itemAt sheet.varThemes k)
+            def mq:EVGMediaQuery (itemAt sheet.varMedia k)
+            if (((th == "") || (th == theme)) && (mq.isEmpty())) {
+                def val:string (itemAt sheet.varValues k)
+                def mapped:string (UiDark.value(val))
+                if (mapped != val) {
+                    vars = (vars + (("  " + (itemAt sheet.varNames k)) + (": " + (mapped + ";\n"))))
+                }
+            }
+            k = (k + 1)
+        }
+        if ((strlen vars) > 0) {
+            out = (out + ("@vars dark {\n" + (vars + "}\n")))
+        }
+        ; the rules: unscoped, then the host's own
+        def pass:int 0
+        while (pass < 2) {
+            def i:int 0
+            def n:int (array_length sheet.rules)
+            while (i < n) {
+                def r:EVGStyleRule (itemAt sheet.rules i)
+                def take:boolean (r.theme == "")
+                if (pass == 1) {
+                    take = (((strlen theme) > 0) && (r.theme == theme))
+                }
+                if (take && (UiDark.kept(r.className keepAll))) {
+                    take = false
+                }
+                if take {
+                    def t:string (UiDark.ruleText(r))
+                    if ((strlen t) > 0) {
+                        out = (out + (t + "\n"))
+                    }
+                }
+                i = (i + 1)
+            }
+            pass = (pass + 1)
+        }
+        return out
+    }
+}

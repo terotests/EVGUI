@@ -70,6 +70,7 @@ SUITES=(
   ui:layout:check
   # The z-order model: which surface is on top (src/UiLayers.rgr).
   ui:layers:check
+  ui:dark:check
   ui:menufit:check
   # A table's ticks and an editor's open tabs (src/UiPick.rgr, src/UiOpenTabs.rgr).
   ui:pick:check

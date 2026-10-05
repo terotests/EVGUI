@@ -1,0 +1,16 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * "dark": the colours the derived dark look must not turn.
+ *
+ * The dark look itself is not written here. UiDark.overlay(css, theme) reads
+ * the light sheet (base.css and the app's own) and writes every colour it
+ * sets again, scoped to `.theme-dark` and mapped so that each contrast stays
+ * what it was (src/UiDark.rgr). Load this sheet AFTER that overlay: what is
+ * here is what a plain inversion gets wrong, the few colours that mean the
+ * same thing in both looks.
+ */
+
+/* The dimming under a dialog stays a dimming: inverted it would be a white
+   haze. */
+.theme-dark .ui-dialog-overlay,
+.theme-dark .ui-alertdialog-overlay { background-color: rgba(0, 0, 0, 0.6); }
