@@ -1171,8 +1171,11 @@ console.log("--- and the background can be swapped for a preset ---");
   // A BACKDROP preset lands on the PANE instead: it draws what is behind an
   // element, and the sky's own background would paint over it a moment later.
   // The sky is left exactly as the picker before it left it.
+  // Which effect it is is the file's to say (fx-rain has been raindrop and
+  // bubbles); that it lands on the pane is the picker's.
+  const rain = presets.find((p) => p.name === "fx-rain");
   await pick("fx-rain");
-  ok("a backdrop preset becomes the pane's effect", await waitKind("fx-glass", "raindrop"));
+  ok("a backdrop preset becomes the pane's effect", await waitKind("fx-glass", rain.kind), rain.kind);
   const stillTide = await instOf("fx-sky");
   ok("and the sky it was not meant for is untouched",
     stillTide && stillTide.kind === "plasma-wave", JSON.stringify(stillTide && stillTide.kind));
@@ -1185,7 +1188,7 @@ console.log("--- and the background can be swapped for a preset ---");
   const typed = await page.evaluate(() => document.getElementById("fxcss").value);
   const glassBlock = typed.slice(typed.indexOf(".fx-glass {"), typed.indexOf("}", typed.indexOf(".fx-glass {")));
   ok("what it typed is in the editor, under the pane",
-    /evg-surface-effect:\s*raindrop/.test(glassBlock) && /evg-fx-refract/.test(glassBlock),
+    new RegExp("evg-surface-effect:\\s*" + rain.kind + "\\s*;").test(glassBlock) && /evg-fx-refract/.test(glassBlock),
     glassBlock.replace(/\s+/g, " ").slice(0, 120));
 
   await page.evaluate(() => document.getElementById("fxcssreset").click());
