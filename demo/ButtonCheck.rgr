@@ -1,0 +1,71 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; ButtonCtl's icon, on Node: `ui:button:check`.
+Import "../src/ButtonCtl.rgr"
+
+class ButtonCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    fn button:ButtonCtl (icon:string only:boolean) {
+        def b (new ButtonCtl())
+        b.tid = "b"
+        b.name = "Close"
+        b.variant = "ghost"
+        b.icon = icon
+        b.iconOnly = only
+        b.build()
+        return b
+    }
+
+    fn run:void () {
+        def pb:ButtonCtl (this.button("" false))
+        def plain:EVGElement (unwrap pb.rootEl)
+        this.ok(((plain.getChildCount()) == 1) "no icon: the words alone")
+        def both:ButtonCtl (this.button("M15 6l-6 6 6 6" false))
+        def el:EVGElement (unwrap both.rootEl)
+        this.ok(((el.getChildCount()) == 2) "an icon, then the words")
+        def ic:EVGElement (el.getChild(0))
+        this.ok(((indexOf ic.className "ui-button-icon") == 0) ("icon class: " + ic.className))
+        this.ok(((indexOf ic.className "ui-button-icon-ui-button-ghost") > 0) ("the variant's pen: " + ic.className))
+        this.ok((ic.elementType == 3) "the icon is a path")
+        this.ok((ic.svgPath == "M15 6l-6 6 6 6") "its path")
+        this.ok((ic.id == "b-icon") ("its id: " + ic.id))
+        ; pressing builds the button again: the icon stays
+        both.press(true)
+        this.ok(((el.getChildCount()) == 2) "a press keeps the icon")
+        both.press(false)
+        def ob:ButtonCtl (new ButtonCtl())
+        ob.tid = "o"
+        ob.name = "Add"
+        ob.icon = "M12 5v14M5 12h14"
+        ob.iconOnly = true
+        ob.iconClass = "my-add"
+        ob.build()
+        def only:EVGElement (unwrap ob.rootEl)
+        this.ok(((only.getChildCount()) == 1) "iconOnly: the icon alone")
+        this.ok(((indexOf only.className "ui-button-icononly") >= 0) "iconOnly class")
+        def oic:EVGElement (only.getChild(0))
+        this.ok(((indexOf oic.className "my-add") > 0) "the screen's own icon class")
+        def rows:[UiRow] ((this.button("M12 5v14" true)).rows())
+        this.ok(((array_length rows) == 1) "a reader still gets the button")
+        this.ok(((itemAt rows 0).name == "Close") "named by its name")
+    }
+
+    sfn main@(main):void () {
+        def c (new ButtonCheck())
+        c.run()
+        print ((to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
+        if (c.fails > 0) {
+            print "RESULT FAIL"
+        }
+    }
+}
