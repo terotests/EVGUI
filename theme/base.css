@@ -1721,8 +1721,9 @@
 
 /* --- callout ----------------------------------------------------------------------
  * CalloutCtl: a box beside a point with a wedge to it, draggable by its head.
- * Plain: a white card. `.callout-glass`: dark and see-through, the page
- * behind it blurred (a comment over a slide being presented). */
+ * Plain: a white card. The "glass" look (`<part>-glass`): dark and
+ * see-through, the page behind it blurred (a comment over a slide being
+ * presented). */
 .callout {
   display: flex; flex-direction: column;
   background-color: #ffffff;
@@ -1740,6 +1741,7 @@
   border-color: rgba(255, 255, 255, 0.18);
   backdrop-filter: blur(14px);
 }
-.callout-glass .callout-title { color: rgba(255, 255, 255, 0.72); }
-.callout-glass .callout-close { color: rgba(255, 255, 255, 0.8); }
+.callout-head-glass { border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+.callout-title-glass { color: rgba(255, 255, 255, 0.72); }
+.callout-close-glass { color: rgba(255, 255, 255, 0.8); }
 .callout-tail-glass { fill: rgba(15, 18, 30, 0.62); }

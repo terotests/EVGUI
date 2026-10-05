@@ -20,8 +20,10 @@
 ; `overlayX/Y`, so the second pass moves them and nothing else).
 ;
 ; LOOK (base.css): `.callout` the frame, `.callout-head`/`-title`/`-close`,
-; `.callout-body`, `.callout-tail` the wedge (a path: `fill`). A host may
-; give it any look; a dark, see-through glass one is `.callout-glass`.
+; `.callout-body`, `.callout-tail` the wedge (a path: `fill`). `look` is a
+; word that each part also gets as `<part>-<look>` (a stylesheet has no
+; descendant rules to style the parts of one look): "glass" is dark and
+; see-through, the page behind it blurred. `frameClass` is the host's own.
 ;
 ; TO A READER: a group named by the title; its content as it is.
 ; =============================================================================
@@ -37,8 +39,9 @@ class CalloutCtl extends UiCtl {
     def geo:UiCallout (new UiCallout())
     def title:string ""
     def closeLabel:string ""
-    ; extra classes on the frame (".callout-glass")
+    ; "" or a look's word ("glass"), and the host's own classes on the frame
     def look:string ""
+    def frameClass:string ""
     ; how wide the box is (its height is its content's)
     def width:double 300.0
     def dragging:boolean false
@@ -105,14 +108,14 @@ class CalloutCtl extends UiCtl {
         UiTree.clearChildren(root)
         def tl:EVGElement (unwrap tailEl)
         tl.id = (this.tailTid())
-        tl.className = "callout-tail"
+        tl.className = (this.cls("callout-tail"))
         tl.a11yHidden = true
         UiTree.surface(tl "free" "start")
         this.shapeTail()
         root.addChild(tl)
         def fr:EVGElement (unwrap frameEl)
         fr.id = (this.frameTid())
-        fr.className = (trim ("callout " + look))
+        fr.className = (trim ((this.cls("callout")) + " " + frameClass))
         if dragging {
             UiTree.addClass(fr "callout-dragging")
         }
@@ -122,10 +125,10 @@ class CalloutCtl extends UiCtl {
         fr.overlayX = geo.x
         fr.overlayY = geo.y
         if (((strlen title) > 0) || ((strlen closeLabel) > 0)) {
-            def head:EVGElement (UiTree.div((this.headTid()) "callout-head"))
-            head.addChild((UiTree.label((tid + "-title") "callout-title" title)))
+            def head:EVGElement (UiTree.div((this.headTid()) (this.cls("callout-head"))))
+            head.addChild((UiTree.label((tid + "-title") (this.cls("callout-title")) title)))
             if ((strlen closeLabel) > 0) {
-                head.addChild((UiTree.label((this.closeTid()) "callout-close" "×")))
+                head.addChild((UiTree.label((this.closeTid()) (this.cls("callout-close")) "×")))
             }
             fr.addChild(head)
         }
@@ -134,6 +137,14 @@ class CalloutCtl extends UiCtl {
         UiTree.addClass(body "callout-body")
         fr.addChild(body)
         root.addChild(fr)
+    }
+
+    ; a part's class, and its look's
+    fn cls:string (base:string) {
+        if ((strlen look) == 0) {
+            return base
+        }
+        return (base + " " + base + "-" + look)
     }
 
     ; the wedge's element as `geo` has it now

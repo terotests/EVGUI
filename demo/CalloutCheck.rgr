@@ -106,6 +106,12 @@ class CalloutCheck {
         c.activate("co-close")
         this.ok(c.closed "the × closes")
         this.ok((c.owns("co-head") && c.owns("co-body")) "owns its parts")
+        c.look = "glass"
+        c.frameClass = "mine"
+        c.build()
+        def fr2:EVGElement (unwrap c.frameEl)
+        def tl2:EVGElement (unwrap c.tailEl)
+        this.ok(((fr2.className == "callout callout-glass mine") && (tl2.className == "callout-tail callout-tail-glass")) ("a look on each part: " + fr2.className + " / " + tl2.className))
     }
 
     sfn main:void () {
