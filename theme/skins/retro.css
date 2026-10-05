@@ -228,6 +228,28 @@
   border-color: var(--retro-edge);
   color: var(--retro-ink);
 }
+/* --- document tabs: dark plates on the player's screen; the open one is lit in
+   the shell's top colour, so it runs on into the bar under it (Sliqtly's
+   editor tabs start with --retro-shell-a) */
+.theme-retro .ui-doctab-wing { fill: var(--retro-screen-3); }
+.theme-retro .ui-doctab-wing-state-active { fill: var(--retro-shell-a); }
+.theme-retro .ui-doctab-body { background-color: var(--retro-screen-3); shadow-color: rgba(0, 0, 0, 0); }
+.theme-retro .ui-doctab-body-state-active { background-color: var(--retro-shell-a); shadow-color: var(--retro-glow); shadow-radius: 6px; shadow-offset-y: 0px; }
+.theme-retro .ui-doctab-name { color: var(--retro-ink-dim); }
+.theme-retro .ui-doctab-name-state-active { color: var(--retro-btn-ink); font-weight: 700; }
+.theme-retro .ui-doctab-close { background-color: var(--retro-chin-a); color: var(--retro-ink); }
+.theme-retro .ui-doctab-close:hover { background-color: var(--retro-hot-b); color: var(--retro-btn-ink); }
+.theme-retro .ui-doctab-wing-state-slot { fill: rgba(0, 0, 0, 0); }
+.theme-retro .ui-doctab-body-state-slot { background-color: rgba(0, 0, 0, 0); border: 2px dashed var(--retro-ink-dim); shadow-color: rgba(0, 0, 0, 0); }
+.theme-retro .ui-doctab-wing-state-ghost { fill: var(--retro-hot-b); }
+.theme-retro .ui-doctab-body-state-ghost { background-color: var(--retro-hot-b); shadow-color: var(--retro-glow); shadow-radius: 10px; shadow-offset-y: 3px; }
+.theme-retro .ui-doctab-name-state-ghost { color: var(--retro-btn-ink); }
+.theme-retro .ui-doctab-add {
+  background: linear-gradient(180deg, var(--retro-btn-a), var(--retro-btn-b));
+  border: 1.5px solid var(--retro-edge);
+  color: var(--retro-btn-ink);
+}
+.theme-retro .ui-doctab-add:hover { background: linear-gradient(180deg, var(--retro-hot-a), var(--retro-hot-b)); }
 .theme-retro .ui-togglegroup-item { background: var(--retro-clear); color: var(--retro-ink); background-color: var(--retro-screen); border-color: var(--retro-edge); }
 .theme-retro .ui-togglegroup-item-state-on {
   background: linear-gradient(180deg, var(--retro-play-a), var(--retro-play-b));
