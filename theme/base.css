@@ -149,8 +149,10 @@
 .ui-input-text { color: #0f172a; font-size: 13px; height: 18px; }
 .ui-input-placeholder { color: #64748b; }
 /* The caret and the selection band are placed by InputCtl.placeText from the
- * laid-out run; the sheet gives their colours (and the caret a width). */
-.ui-input-caret { width: 2px; background-color: #2563eb; }
+ * laid-out run; the sheet gives the caret a width and the band its colour.
+ * The caret has no colour here: InputCtl draws it in the text's colour, so it
+ * shows on a light field and a dark one alike. */
+.ui-input-caret { width: 2px; }
 .ui-input-selection { background-color: #bfdbfe; }
 .ui-text-selection { background-color: #bfdbfe; }
 /* InputCtl.clearable: the × at the end while the field holds text; the
