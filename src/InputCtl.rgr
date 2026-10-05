@@ -89,6 +89,7 @@ Import "pkg:evg/EVGElement.rgr"
 Import "pkg:evg/EVGA11yTree.rgr"
 Import "pkg:evg/EVGTextEngine.rgr"
 Import "UiWords.rgr"
+Import "UiTextSel.rgr"
 
 class InputCtl extends UiCtl {
     ; What the field holds. For a password this is the TEXT, never the bullets.
@@ -164,6 +165,28 @@ class InputCtl extends UiCtl {
     ; to the sheet unpainted, and a theme change re-tints it.
     def caretFromText:boolean false
 
+    ; A field that wraps, as a <textarea> does: long text breaks onto more
+    ; lines and the box grows by a line at a time up to `maxLines`, then
+    ; scrolls so the caret's line stays in view. Enter (or Shift+Enter, where
+    ; a host keeps Enter for itself) puts in a line break; ArrowUp/ArrowDown
+    ; go between lines, Home/End to the ends of the caret's line.
+    def multiline:boolean false
+    def maxLines:int 5
+    ; Where the lines were laid out (the last `placeText`), and what the box's
+    ; growth is worked out from: the box's height with one line, a line's
+    ; height, the width the run breaks at, and how many lines the box was
+    ; last sized for.
+    def placed@(optional):UiTextLines
+    def oneLineHeight:double 0.0
+    def lineBox:double 0.0
+    def wrapW:double 0.0
+    def sizedLines:int 1
+    ; How far the lines are scrolled up, once there are more than the box
+    ; shows. History, like `scrollX`.
+    def scrollY:double 0.0
+    ; The y of the last press, for a host that drags with x alone.
+    def lastY:double 0.0
+
     ; What the last `placeText` found: the engine the page was measured with
     ; and the page x where the text run starts unscrolled. The pointer maps
     ; through both, so a press measures against the run that is on screen.
@@ -183,6 +206,10 @@ class InputCtl extends UiCtl {
     def textEl:EVGElement
     def caretEl:EVGElement
     def clearEl:EVGElement
+    ; a selection over several lines is a band per line: the first, the
+    ; whole lines between as one block, the last
+    def selEl1:EVGElement
+    def selEl2:EVGElement
 
     Constructor () {
         rootEl = (EVGElement.createDiv())
@@ -191,6 +218,8 @@ class InputCtl extends UiCtl {
         textEl = (EVGElement.createDiv())
         caretEl = (EVGElement.createDiv())
         clearEl = (EVGElement.createDiv())
+        selEl1 = (EVGElement.createDiv())
+        selEl2 = (EVGElement.createDiv())
     }
 
     ; --- names ----------------------------------------------------------------
@@ -817,6 +846,25 @@ class InputCtl extends UiCtl {
             this.build()
             return ""
         }
+        if multiline {
+            if ((key == "ArrowUp") || (key == "ArrowDown")) {
+                this.moveTo((this.lineStep(caret (? (key == "ArrowUp") -1 1))) shift)
+                this.build()
+                return ""
+            }
+            if (((key == "Home") || (key == "End")) && (ctrl == false)) {
+                this.moveTo((this.lineEdge(caret (key == "End"))) shift)
+                this.build()
+                return ""
+            }
+            if (key == "Enter") {
+                if (readOnly == false) {
+                    this.insertText("\n")
+                    this.build()
+                }
+                return ""
+            }
+        }
         if (key == "Home") {
             this.moveTo(0 shift)
             this.build()
@@ -888,11 +936,25 @@ class InputCtl extends UiCtl {
         return (this.snapStop(at))
     }
 
+    ; The character a page point lands on: in a wrapping field the line `py`
+    ; is level with, else the one line.
+    fn indexAtPoint:int (px:double py:double) {
+        if multiline {
+            if (!null? placed) {
+                def p:UiTextLines (unwrap placed)
+                if ((p.count()) > 0) {
+                    return (this.snapStop((p.indexAt(px py))))
+                }
+            }
+        }
+        return (this.indexAtPage(px))
+    }
+
     fn pointerDown:void (px:double clicks:int shift:boolean) {
         if disabled {
             return
         }
-        def at:int (this.indexAtPage(px))
+        def at:int (this.indexAtPoint(px lastY))
         dragging = true
         if (clicks >= 3) {
             this.selectAll()
@@ -920,7 +982,7 @@ class InputCtl extends UiCtl {
         if (dragUnit == 2) {
             return
         }
-        def at:int (this.indexAtPage(px))
+        def at:int (this.indexAtPoint(px lastY))
         if (dragUnit == 0) {
             this.placeCaret(at true)
             return
@@ -942,6 +1004,175 @@ class InputCtl extends UiCtl {
 
     fn pointerUp:void () {
         dragging = false
+    }
+
+    ; --- lines (a wrapping field) ----------------------------------------------
+
+    ; The index on the line above (-1) or below (1) `i`, under the same x;
+    ; past the first line the start, past the last the end, as a <textarea>.
+    fn lineStep:int (i:int dir:int) {
+        if (null? placed) {
+            return (? (dir < 0) 0 (strlen value))
+        }
+        def p:UiTextLines (unwrap placed)
+        def n:int (p.count())
+        def li:int (p.lineOf(i))
+        def to:int (li + dir)
+        if ((n == 0) || (to < 0)) {
+            return 0
+        }
+        if (to >= n) {
+            return (strlen value)
+        }
+        def ln:UiTextLine (itemAt p.lines to)
+        return (this.snapStop((p.indexAt((p.xAt(i)) (ln.y + (ln.h / 2.0))))))
+    }
+
+    ; The start or the end of the line `i` is on.
+    fn lineEdge:int (i:int toEnd:boolean) {
+        if (null? placed) {
+            return (? toEnd (strlen value) 0)
+        }
+        def p:UiTextLines (unwrap placed)
+        if ((p.count()) == 0) {
+            return 0
+        }
+        def ln:UiTextLine (itemAt p.lines (p.lineOf(i)))
+        return (? toEnd ln.end ln.start)
+    }
+
+    ; How many lines the value breaks into at the width the run had, with the
+    ; engine it was measured with; 1 before the first layout.
+    fn wrapCount:int () {
+        if (null? measuredBy) {
+            return 1
+        }
+        if (wrapW <= 0.0) {
+            return 1
+        }
+        def t:string (this.glyphText())
+        if (this.showsPlaceholder()) {
+            t = placeholder
+        }
+        if ((strlen t) == 0) {
+            return 1
+        }
+        def e:EVGTextEngine (unwrap measuredBy)
+        def n:int (array_length (e.breakLinesSpaced(t fontFamily fontSize wrapW letterSpacing)))
+        if (n < 1) {
+            return 1
+        }
+        return n
+    }
+
+    fn hideBand:void (b:EVGElement) {
+        b.calculatedWidth = 0.0
+        b.calculatedHeight = 0.0
+    }
+
+    fn putBand:void (b:EVGElement r:UiTextRect) {
+        b.calculatedX = r.x
+        b.calculatedY = r.y
+        b.calculatedWidth = r.w
+        b.calculatedHeight = r.h
+    }
+
+    ; `placeText` for a wrapping field: learn the box's one-line height, scroll
+    ; the caret's line into view once there are more lines than the box
+    ; shows, then the caret and the bands from the laid-out lines.
+    fn placeLines:void (e:EVGTextEngine cw:double) {
+        def root:EVGElement (unwrap rootEl)
+        def view:EVGElement (unwrap viewEl)
+        def txt:EVGElement (unwrap textEl)
+        def car:EVGElement (unwrap caretEl)
+        def b0:EVGElement (unwrap selEl)
+        def b1:EVGElement (unwrap selEl1)
+        def b2:EVGElement (unwrap selEl2)
+        this.hideBand(b0)
+        this.hideBand(b1)
+        this.hideBand(b2)
+        car.calculatedWidth = 0.0
+        def lb:double (txt.lineBoxFor(fontSize (e.lineHeightFor(fontFamily fontSize))))
+        if (lb <= 0.0) {
+            lb = (fontSize * 1.2)
+        }
+        lineBox = lb
+        wrapW = (txt.wrapWidth((txt.box.getInnerWidth(txt.calculatedWidth))))
+        ; the sheet's height, read while the box holds one line
+        if ((sizedLines <= 1) || (oneLineHeight <= 0.0)) {
+            oneLineHeight = (root.calculatedHeight - ((to_double (sizedLines - 1)) * lb))
+        }
+        textX = txt.calculatedX
+        def p:UiTextLines (UiTextLines.of(e txt))
+        def n:int (p.count())
+        def shown:int sizedLines
+        if (shown < 1) {
+            shown = 1
+        }
+        if (n > shown) {
+            ; more lines than the box: the run from the top of the shown
+            ; lines, scrolled so the caret's line is in them
+            def room:double ((to_double shown) * lb)
+            def top:double (view.calculatedY + ((view.calculatedHeight - room) / 2.0))
+            def ct:double ((to_double (p.lineOf(caret))) * lb)
+            if ((ct - scrollY) < 0.0) {
+                scrollY = ct
+            }
+            if (((ct + lb) - scrollY) > room) {
+                scrollY = ((ct + lb) - room)
+            }
+            def most:double (((to_double n) * lb) - room)
+            if (scrollY > most) {
+                scrollY = most
+            }
+            if (scrollY < 0.0) {
+                scrollY = 0.0
+            }
+            txt.calculatedY = (top - scrollY)
+            p = (UiTextLines.of(e txt))
+        } {
+            scrollY = 0.0
+        }
+        placed = p
+        if ((focused == false) || disabled) {
+            return
+        }
+        if (this.hasSelection()) {
+            def rs:[UiTextRect] (p.rects((this.selStart()) (this.selEnd())))
+            def k:int (array_length rs)
+            if (k == 0) {
+                return
+            }
+            this.putBand(b0 (itemAt rs 0))
+            if (k == 1) {
+                return
+            }
+            def lastR:UiTextRect (itemAt rs (k - 1))
+            this.putBand(b2 lastR)
+            if (k > 2) {
+                def first:UiTextRect (itemAt rs 1)
+                def mid (new UiTextRect())
+                mid.x = p.left
+                mid.y = first.y
+                mid.w = (p.right - p.left)
+                mid.h = (lastR.y - first.y)
+                this.putBand(b1 mid)
+            }
+            return
+        }
+        if ((n == 0) || ((strlen value) == 0)) {
+            ; empty: a line's height centred in the view (an empty run lays
+            ; out with no height of its own)
+            car.calculatedX = textX
+            car.calculatedY = (view.calculatedY + ((view.calculatedHeight - lb) / 2.0))
+            car.calculatedHeight = lb
+        } {
+            def ln:UiTextLine (itemAt p.lines (p.lineOf(caret)))
+            car.calculatedX = (p.xAt(caret))
+            car.calculatedY = ln.y
+            car.calculatedHeight = ln.h
+        }
+        car.calculatedWidth = cw
     }
 
     ; --- placing it on the page -----------------------------------------------
@@ -982,6 +1213,10 @@ class InputCtl extends UiCtl {
             if (car.width.pixels > 0.0) {
                 cw = car.width.pixels
             }
+        }
+        if multiline {
+            this.placeLines(e cw)
+            return
         }
         def inset:double (view.box.borderWidthPx + view.box.paddingLeftPx)
         textX = ((view.calculatedX + inset) + txt.box.marginLeftPx)
@@ -1082,6 +1317,21 @@ class InputCtl extends UiCtl {
         return true
     }
 
+    ; With the pointer's y: which line of a wrapping field it is on.
+    fn textPointerDownAt:boolean (target:string px:double py:double clicks:int shift:boolean) {
+        if (py >= 0.0) {
+            lastY = py
+        }
+        return (this.textPointerDown(target px clicks shift))
+    }
+
+    fn textPointerDragAt:boolean (px:double py:double) {
+        if (py >= 0.0) {
+            lastY = py
+        }
+        return (this.textPointerDrag(px))
+    }
+
     fn textPointerUp:void () {
         this.pointerUp()
     }
@@ -1125,6 +1375,29 @@ class InputCtl extends UiCtl {
             root.className = ((root.className + " ") + boxClass)
         }
         UiTree.clearChildren(root)
+        ; [view, clear] side by side whatever the sheet says: a sheet that left
+        ; the box a column shrank an empty view to the caret's width
+        UiTree.inline(root "display" "flex")
+        UiTree.inline(root "flex-direction" "row")
+        ; a wrapping field is as tall as its lines, up to `maxLines`: the
+        ; one-line height the sheet gave it plus a line box per further line
+        if (multiline && (oneLineHeight > 0.0)) {
+            def want:int (this.wrapCount())
+            if (want > maxLines) {
+                want = maxLines
+            }
+            if (want < 1) {
+                want = 1
+            }
+            sizedLines = want
+            ; a minimum over the sheet's height, so the sheet keeps saying
+            ; how tall one line is (a theme may change it)
+            def grow:double 0.0
+            if (want > 1) {
+                grow = (oneLineHeight + ((to_double (want - 1)) * lineBox))
+            }
+            UiTree.inline(root "min-height" ((to_string grow) + "px"))
+        }
 
         def view:EVGElement (unwrap viewEl)
         view.id = (this.viewTid())
@@ -1138,6 +1411,12 @@ class InputCtl extends UiCtl {
         UiTree.inline(view "display" "flex")
         UiTree.inline(view "flex-direction" "row")
         UiTree.inline(view "align-items" "center")
+        if multiline {
+            ; grown from nothing to the room there is, whatever it holds: an
+            ; empty run would leave it as narrow as the caret, and the lines
+            ; are broken at its width
+            UiTree.inline(view "width" "0px")
+        }
         root.addChild(view)
 
         def sel:EVGElement (unwrap selEl)
@@ -1146,6 +1425,21 @@ class InputCtl extends UiCtl {
         UiTree.clearChildren(sel)
         UiTree.inline(sel "position" "absolute")
         view.addChild(sel)
+        if multiline {
+            def bands:[EVGElement]
+            push bands (unwrap selEl1)
+            push bands (unwrap selEl2)
+            def bi:int 0
+            while (bi < 2) {
+                def b:EVGElement (itemAt bands bi)
+                b.id = ((this.selTid()) + "-" + (to_string (bi + 1)))
+                b.className = "ui-input-selection"
+                UiTree.clearChildren(b)
+                UiTree.inline(b "position" "absolute")
+                view.addChild(b)
+                bi = (bi + 1)
+            }
+        }
 
         def txt:EVGElement (unwrap textEl)
         txt.id = (this.textTid())
@@ -1163,8 +1457,16 @@ class InputCtl extends UiCtl {
             txt.textContent = (this.glyphText())
         }
         UiTree.clearChildren(txt)
-        UiTree.inline(txt "white-space" "nowrap")
-        UiTree.inline(txt "flex-shrink" "0")
+        if multiline {
+            ; the run takes the view's width and breaks inside it
+            UiTree.inline(txt "white-space" "normal")
+            UiTree.inline(txt "flex-shrink" "1")
+            UiTree.inline(txt "width" "100%")
+            UiTree.inline(txt "min-width" "0px")
+        } {
+            UiTree.inline(txt "white-space" "nowrap")
+            UiTree.inline(txt "flex-shrink" "0")
+        }
         view.addChild(txt)
 
         def car:EVGElement (unwrap caretEl)
@@ -1194,6 +1496,10 @@ class InputCtl extends UiCtl {
         push a tid
         push a (this.viewTid())
         push a (this.selTid())
+        if multiline {
+            push a ((this.selTid()) + "-1")
+            push a ((this.selTid()) + "-2")
+        }
         push a (this.textTid())
         push a (this.caretTid())
         if clearable {
