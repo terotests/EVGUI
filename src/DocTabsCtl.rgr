@@ -1,0 +1,341 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; DocTabsCtl — a row of open documents as tabs, a browser's or a notebook's:
+; slanted edges, a close mark on each, "+" after the last, dragged to change
+; their order, swiped to go to the next
+; =============================================================================
+; Which documents are open, which one is in front and in what order is
+; UiOpenTabs (`tabs`); this control draws them and says what a press, a drag
+; or a swipe meant. What a key opens and what its tab is called is the
+; host's: `setLabel(key name)`.
+;
+;   div.ui-doctabs                         the row
+;     div.ui-doctab (+ -state-active)      a tab, `<tid>-tab-<key>`
+;       path.ui-doctab-wing                its slanted left edge
+;       div.ui-doctab-body                 the name and the close mark
+;         span.ui-doctab-name
+;         span.ui-doctab-close             `<tid>-close-<key>` (with 2+ tabs)
+;       path.ui-doctab-wing                its right edge
+;     div.ui-doctab-add                    "+", `<tid>-add`
+;
+; The wings carry the tab's state class too (`ui-doctab-wing-state-active`),
+; so a sheet colours a tab whole: this engine's selectors are one class
+; deep. Every coordinate here is the last layout's (`calculatedX`…).
+;
+;   hitAt(x y)       "tab:<key>" | "close:<key>" | "add" | ""
+;   pressAt(x y)     the same, and a tab pressed may be dragged
+;   dragTo(x)        true when the drag moved the tab to another place
+;   release()        true when the press was a drag (not a click)
+;   swipeDir(dx dy ms)  -1 / +1 for a flick left / right, else 0
+; =============================================================================
+
+Import "UiCtl.rgr"
+Import "UiTree.rgr"
+Import "UiOpenTabs.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+
+class DocTabsCtl extends UiCtl {
+    def tabs:UiOpenTabs (new UiOpenTabs())
+    def labelKeys:[string]
+    def labelNames:[string]
+    def canAdd:boolean true
+    def addWord:string "New"
+    def closeWord:string "Close "
+    ; the elements the last build made, in `tabs.tabs`' order
+    def tabEls:[EVGElement]
+    def closeEls:[EVGElement]
+    def closeKeys:[string]
+    def addEl@(optional):EVGElement
+    def addShown:boolean false
+    ; a tab pressed, and how far it has been dragged
+    def dragKey:string ""
+    def dragX0:double 0.0
+    def dragged:boolean false
+    ; how far a press travels before it is a drag
+    def slop:double 6.0
+
+    Constructor () {
+        rootEl = (EVGElement.createDiv())
+        def a:[string]
+        labelKeys = a
+        def b:[string]
+        labelNames = b
+        def c:[EVGElement]
+        tabEls = c
+        def d:[EVGElement]
+        closeEls = d
+        def e:[string]
+        closeKeys = e
+    }
+
+    fn setLabel:void (k:string label:string) {
+        def i:int 0
+        while (i < (array_length labelKeys)) {
+            if ((itemAt labelKeys i) == k) {
+                def nk:[string]
+                def nn:[string]
+                def j:int 0
+                while (j < (array_length labelKeys)) {
+                    push nk (itemAt labelKeys j)
+                    if (j == i) {
+                        push nn label
+                    } {
+                        push nn (itemAt labelNames j)
+                    }
+                    j = (j + 1)
+                }
+                labelKeys = nk
+                labelNames = nn
+                return
+            }
+            i = (i + 1)
+        }
+        push labelKeys k
+        push labelNames label
+    }
+
+    fn labelOf:string (k:string) {
+        def i:int 0
+        while (i < (array_length labelKeys)) {
+            if ((itemAt labelKeys i) == k) {
+                return (itemAt labelNames i)
+            }
+            i = (i + 1)
+        }
+        return (tabs.label(k))
+    }
+
+    fn tabTid:string (k:string) {
+        return (tid + "-tab-" + k)
+    }
+
+    fn closeTid:string (k:string) {
+        return (tid + "-close-" + k)
+    }
+
+    fn addTid:string () {
+        return (tid + "-add")
+    }
+
+    sfn wing:EVGElement (d:string word:string) {
+        def w (EVGElement.createPath())
+        w.svgPath = d
+        w.viewBox = "0 0 12 32"
+        w.className = "ui-doctab-wing"
+        UiTree.setState(w "ui-doctab-wing" word)
+        w.a11yHidden = true
+        return w
+    }
+
+    fn build:void () {
+        def root:EVGElement (unwrap rootEl)
+        root.id = tid
+        root.className = "ui-doctabs"
+        UiTree.clearChildren(root)
+        def te:[EVGElement]
+        def ce:[EVGElement]
+        def ck:[string]
+        def many:boolean ((tabs.count()) > 1)
+        def i:int 0
+        while (i < (tabs.count())) {
+            def k:string (tabs.at(i))
+            def word:string "inactive"
+            if (k == tabs.active) {
+                word = "active"
+            }
+            def tab (EVGElement.createDiv())
+            tab.id = (this.tabTid(k))
+            tab.className = "ui-doctab"
+            UiTree.setState(tab "ui-doctab" word)
+            if ((k == dragKey) && dragged) {
+                UiTree.addClass(tab "ui-doctab-dragging")
+            }
+            tab.addChild((DocTabsCtl.wing("M0 32 L12 0 L12 32 Z" word)))
+            def body (EVGElement.createDiv())
+            body.className = "ui-doctab-body"
+            UiTree.setState(body "ui-doctab-body" word)
+            body.addChild((UiTree.label((tab.id + "__name") "ui-doctab-name" (this.labelOf(k)))))
+            if many {
+                def x:EVGElement (UiTree.label((this.closeTid(k)) "ui-doctab-close" "×"))
+                body.addChild(x)
+                push ce x
+                push ck k
+            }
+            tab.addChild(body)
+            tab.addChild((DocTabsCtl.wing("M0 0 L12 32 L0 32 Z" word)))
+            root.addChild(tab)
+            push te tab
+            i = (i + 1)
+        }
+        tabEls = te
+        closeEls = ce
+        closeKeys = ck
+        addShown = false
+        if canAdd {
+            def add:EVGElement (UiTree.label((this.addTid()) "ui-doctab-add" "+"))
+            root.addChild(add)
+            addEl = add
+            addShown = true
+        }
+    }
+
+    sfn inside:boolean (el:EVGElement x:double y:double) {
+        return ((((x >= el.calculatedX) && (x <= (el.calculatedX + el.calculatedWidth))) && (y >= el.calculatedY)) && (y <= (el.calculatedY + el.calculatedHeight)))
+    }
+
+    fn hitAt:string (x:double y:double) {
+        def c:int 0
+        while (c < (array_length closeEls)) {
+            if (DocTabsCtl.inside((itemAt closeEls c) x y)) {
+                return ("close:" + (itemAt closeKeys c))
+            }
+            c = (c + 1)
+        }
+        def i:int 0
+        while (i < (array_length tabEls)) {
+            if (DocTabsCtl.inside((itemAt tabEls i) x y)) {
+                return ("tab:" + (tabs.at(i)))
+            }
+            i = (i + 1)
+        }
+        if (addShown && (!null? addEl)) {
+            def a:EVGElement (unwrap addEl)
+            if (DocTabsCtl.inside(a x y)) {
+                return "add"
+            }
+        }
+        return ""
+    }
+
+    fn pressAt:string (x:double y:double) {
+        def hit:string (this.hitAt(x y))
+        dragKey = ""
+        dragged = false
+        if ((indexOf hit "tab:") == 0) {
+            dragKey = (substring hit 4 (strlen hit))
+            dragX0 = x
+        }
+        return hit
+    }
+
+    ; The place among the tabs a tab dragged to x goes to: the number of the
+    ; other tabs whose middle is left of x.
+    fn placeAt:int (x:double) {
+        def n:int 0
+        def i:int 0
+        while (i < (array_length tabEls)) {
+            if ((i < (tabs.count())) && ((tabs.at(i)) != dragKey)) {
+                def el:EVGElement (itemAt tabEls i)
+                if ((el.calculatedX + (el.calculatedWidth * 0.5)) < x) {
+                    n = (n + 1)
+                }
+            }
+            i = (i + 1)
+        }
+        return n
+    }
+
+    fn dragTo:boolean (x:double) {
+        if ((strlen dragKey) == 0) {
+            return false
+        }
+        def d:double (x - dragX0)
+        if (d < 0.0) {
+            d = (0.0 - d)
+        }
+        if ((dragged == false) && (d < slop)) {
+            return false
+        }
+        dragged = true
+        def before:int (tabs.indexOfKey(dragKey))
+        def to:int (this.placeAt(x))
+        if (to == before) {
+            return false
+        }
+        tabs.move(dragKey to)
+        return true
+    }
+
+    fn release:boolean () {
+        def was:boolean dragged
+        dragKey = ""
+        dragged = false
+        return was
+    }
+
+    ; A flick along the row: far enough, mostly sideways and quick. A finger
+    ; moving left brings the tab on the right (+1), as pages turn.
+    sfn swipeDir:int (dx:double dy:double ms:double) {
+        def ax:double dx
+        if (ax < 0.0) {
+            ax = (0.0 - ax)
+        }
+        def ay:double dy
+        if (ay < 0.0) {
+            ay = (0.0 - ay)
+        }
+        if (((ax < 40.0) || (ax < (ay * 1.5))) || (ms > 600.0)) {
+            return 0
+        }
+        if (dx < 0.0) {
+            return 1
+        }
+        return -1
+    }
+
+    fn tids:[string] () {
+        def a:[string]
+        push a tid
+        def i:int 0
+        while (i < (tabs.count())) {
+            push a (this.tabTid((tabs.at(i))))
+            if ((tabs.count()) > 1) {
+                push a (this.closeTid((tabs.at(i))))
+            }
+            i = (i + 1)
+        }
+        if canAdd {
+            push a (this.addTid())
+        }
+        return a
+    }
+
+    fn rows:[UiRow] () {
+        def out:[UiRow]
+        def list:UiRow (UiRow.of(tid (EVGA11yRole.tabList()) name))
+        list.orientation = "horizontal"
+        push out list
+        def i:int 0
+        while (i < (tabs.count())) {
+            def k:string (tabs.at(i))
+            def r:UiRow (UiRow.of((this.tabTid(k)) (EVGA11yRole.tab()) (this.labelOf(k))))
+            r.parentTid = tid
+            r.focusable = true
+            if (k == tabs.active) {
+                r.state = "active"
+                r.selected = (EVGA11yTri.yes())
+                r.tabStop = true
+            } {
+                r.state = "inactive"
+                r.selected = (EVGA11yTri.no())
+            }
+            push out r
+            if ((tabs.count()) > 1) {
+                def x:UiRow (UiRow.of((this.closeTid(k)) (EVGA11yRole.button()) (closeWord + (this.labelOf(k)))))
+                x.parentTid = (this.tabTid(k))
+                x.focusable = true
+                push out x
+            }
+            i = (i + 1)
+        }
+        if canAdd {
+            def add:UiRow (UiRow.of((this.addTid()) (EVGA11yRole.button()) addWord))
+            add.parentTid = tid
+            add.focusable = true
+            push out add
+        }
+        return out
+    }
+}

@@ -71,8 +71,10 @@ SUITES=(
   # The z-order model: which surface is on top (src/UiLayers.rgr).
   ui:layers:check
   ui:menufit:check
-  # A table's ticks and an editor's open tabs (src/UiPick.rgr, src/UiOpenTabs.rgr).
+  # A table's ticks, open tabs (src/UiPick.rgr, src/UiOpenTabs.rgr) and the
+  # document tab row (src/DocTabsCtl.rgr).
   ui:pick:check
+  ui:doctabs:check
   ui:input:field
   ui:text:select
   evg:flexgrow:check
