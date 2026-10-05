@@ -250,6 +250,19 @@
   color: var(--retro-btn-ink);
 }
 .theme-retro .ui-doctab-add:hover { background: linear-gradient(180deg, var(--retro-hot-a), var(--retro-hot-b)); }
+/* --- the rail: pale lime marks on the dark screen; the open place is a lit cap */
+.theme-retro .ui-rail-item:hover { background-color: var(--retro-screen-3); }
+.theme-retro .ui-rail-item:focus { background-color: var(--retro-screen-3); }
+.theme-retro .ui-rail-pad { background: var(--retro-clear); }
+.theme-retro .ui-rail-pad-state-active {
+  background: linear-gradient(180deg, var(--retro-play-a), var(--retro-play-b));
+  shadow-color: var(--retro-glow); shadow-radius: 8px; shadow-offset-y: 0px;
+}
+.theme-retro .ui-rail-icon { stroke: var(--retro-ink-dim); }
+.theme-retro .ui-rail-icon-state-active { stroke: var(--retro-btn-ink); }
+.theme-retro .ui-rail-label { color: var(--retro-ink-dim); }
+.theme-retro .ui-rail-label-state-active { color: var(--retro-ink); }
+.theme-retro .ui-rail-badge { color: var(--retro-danger); }
 .theme-retro .ui-togglegroup-item { background: var(--retro-clear); color: var(--retro-ink); background-color: var(--retro-screen); border-color: var(--retro-edge); }
 .theme-retro .ui-togglegroup-item-state-on {
   background: linear-gradient(180deg, var(--retro-play-a), var(--retro-play-b));

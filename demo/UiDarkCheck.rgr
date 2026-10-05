@@ -28,8 +28,8 @@ class UiDarkCheck {
     fn colors:void () {
         def white:EVGColor (UiDark.color((UiDarkCheck.hex("#ffffff"))))
         def black:EVGColor (UiDark.color((UiDarkCheck.hex("#000000"))))
-        this.ok(((UiDark.luminance(white)) < 0.02) ("white turns a near-black ground: " + (white.toHexString())))
-        this.ok(((UiDark.luminance(white)) > 0.005) ("...not pure black: " + (white.toHexString())))
+        this.ok(((UiDark.luminance(white)) < 0.006) ("white turns a near-black ground: " + (white.toHexString())))
+        this.ok(((UiDark.luminance(white)) > 0.002) ("...not pure black: " + (white.toHexString())))
         this.ok(((UiDark.luminance(black)) > 0.95) ("black turns white: " + (black.toHexString())))
         ; the zinc ramp keeps its contrasts, in reverse
         def ramp:[string] ([] _:string ("#ffffff" "#fafafa" "#f4f4f5" "#e4e4e7" "#d4d4d8" "#a1a1aa" "#71717a" "#52525b" "#3f3f46" "#27272a" "#18181b" "#09090b" "#2563eb" "#dc2626" "#16a34a" "#f59e0b" "#eff6ff" "#fef2f2"))
