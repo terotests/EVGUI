@@ -211,7 +211,9 @@ class InputFieldCheck {
     fn chatField:void () {
         def h (new UiHost())
         h.setPageSize(320.0 440.0)
-        h.addStyleSheet(".chat-field { display: flex; align-items: center; width: 200px; height: 30px; } .ui-input-text { font-size: 13px; }")
+        ; the theme's own rules for the composer (theme/base.css): the field
+        ; is `width: 0` and grows into the row beside Send
+        h.addStyleSheet(".ui-input { display: flex; width: 220px; height: 34px; padding: 0 10px; } .chat-panel { display: flex; flex-direction: column; width: 300px; } .chat-composer { display: flex; flex-direction: row; align-items: center; gap: 6px; padding: 8px 10px; } .chat-field { display: flex; align-items: center; flex-grow: 1; flex-shrink: 1; width: 0px; min-width: 0px; height: 30px; padding: 0 8px; } .chat-send { height: 30px; padding: 0 12px; font-size: 13px; } .ui-input-text { font-size: 13px; }")
         def ch (new ChatCtl())
         ch.setup("ch" "Chat")
         ch.typeChar("" "hello")
@@ -219,6 +221,8 @@ class InputFieldCheck {
         h.add(ch)
         h.focus("ch-field")
         h.layout()
+        def fld:EVGElement (this.el(h "ch-field"))
+        this.ok((fld.calculatedWidth > 150.0) ("the chat field fills the row beside Send: " + (to_string fld.calculatedWidth)))
         def car:EVGElement (this.el(h "ch-field-caret"))
         this.ok((car.calculatedWidth > 0.0) "the chat field draws its caret when focused")
         h.keyWith("a" false true)
