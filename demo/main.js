@@ -4632,7 +4632,7 @@ if (fxCss) {
   // is left in the editor to be read and changed.
   //
   // The presets are the FILE, `lib/evg/gl/effect-presets.css`, carried into
-  // the bundle and parsed here — the same eleven blocks the contact sheet
+  // the bundle and parsed here — the same blocks the contact sheet
   // paints and the pixel gate checks.
   const fxPresets = document.getElementById("fxpresets");
   if (fxPresets) {
