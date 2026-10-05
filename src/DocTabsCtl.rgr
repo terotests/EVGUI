@@ -14,7 +14,7 @@
 ;     div.ui-doctab (+ -state-active)      a tab, `<tid>-tab-<key>`
 ;       path.ui-doctab-wing                its slanted left edge
 ;       div.ui-doctab-body                 the name and the close mark
-;         span.ui-doctab-name
+;         span.ui-doctab-name (+ -state-…)
 ;         span.ui-doctab-close             `<tid>-close-<key>` (with 2+ tabs)
 ;       path.ui-doctab-wing                its right edge
 ;     div.ui-doctab-add                    "+", `<tid>-add`
@@ -28,6 +28,9 @@
 ;   dragTo(x)        true when the drag moved the tab to another place
 ;   release()        true when the press was a drag (not a click)
 ;   swipeDir(dx dy ms)  -1 / +1 for a flick left / right, else 0
+;
+; With `room` set, only the tabs that fit are in the row (`first`, `shown`),
+; the one in front among them; tids() and rows() are those of the row.
 ; =============================================================================
 
 Import "UiCtl.rgr"
@@ -55,6 +58,16 @@ class DocTabsCtl extends UiCtl {
     def dragged:boolean false
     ; how far a press travels before it is a drag
     def slop:double 6.0
+    ; The row's width (0: no limit). Tabs that do not fit at their narrowest
+    ; (`tabMin`, wings and all) are left out of the row, the ones nearest
+    ; the tab in front kept: `first` is the first shown, `shown` how many.
+    ; They stay open, and a swipe or the neighbour of a tab brings them.
+    def room:double 0.0
+    def tabMin:double 84.0
+    def first:int 0
+    def shown:int 0
+    ; a longer name is cut, with "…"
+    def maxChars:int 24
 
     Constructor () {
         rootEl = (EVGElement.createDiv())
@@ -107,6 +120,48 @@ class DocTabsCtl extends UiCtl {
         return (tabs.label(k))
     }
 
+    fn shortName:string (k:string) {
+        def s:string (this.labelOf(k))
+        if ((maxChars > 1) && ((strlen s) > maxChars)) {
+            return ((substring s 0 (maxChars - 1)) + "…")
+        }
+        return s
+    }
+
+    ; Which tabs the row has room for (`first`, `shown`).
+    fn fitWindow:void () {
+        def n:int (tabs.count())
+        first = 0
+        shown = n
+        if (room <= 0.0) {
+            return
+        }
+        def avail:double (room - 20.0)
+        if canAdd {
+            avail = (avail - 36.0)
+        }
+        def fit:int (to_int (avail / tabMin))
+        if (fit < 1) {
+            fit = 1
+        }
+        if (n <= fit) {
+            return
+        }
+        shown = fit
+        def a:int (tabs.indexOfKey(tabs.active))
+        if (a < 0) {
+            a = 0
+        }
+        def f:int (a - (to_int ((to_double fit) / 2.0)))
+        if (f > (n - fit)) {
+            f = (n - fit)
+        }
+        if (f < 0) {
+            f = 0
+        }
+        first = f
+    }
+
     fn tabTid:string (k:string) {
         return (tid + "-tab-" + k)
     }
@@ -138,8 +193,9 @@ class DocTabsCtl extends UiCtl {
         def ce:[EVGElement]
         def ck:[string]
         def many:boolean ((tabs.count()) > 1)
-        def i:int 0
-        while (i < (tabs.count())) {
+        this.fitWindow()
+        def i:int first
+        while (i < (first + shown)) {
             def k:string (tabs.at(i))
             def word:string "inactive"
             if (k == tabs.active) {
@@ -156,7 +212,9 @@ class DocTabsCtl extends UiCtl {
             def body (EVGElement.createDiv())
             body.className = "ui-doctab-body"
             UiTree.setState(body "ui-doctab-body" word)
-            body.addChild((UiTree.label((tab.id + "__name") "ui-doctab-name" (this.labelOf(k)))))
+            def nameEl:EVGElement (UiTree.label((tab.id + "__name") "ui-doctab-name" (this.shortName(k))))
+            UiTree.setState(nameEl "ui-doctab-name" word)
+            body.addChild(nameEl)
             if many {
                 def x:EVGElement (UiTree.label((this.closeTid(k)) "ui-doctab-close" "×"))
                 body.addChild(x)
@@ -196,7 +254,7 @@ class DocTabsCtl extends UiCtl {
         def i:int 0
         while (i < (array_length tabEls)) {
             if (DocTabsCtl.inside((itemAt tabEls i) x y)) {
-                return ("tab:" + (tabs.at(i)))
+                return ("tab:" + (tabs.at((first + i))))
             }
             i = (i + 1)
         }
@@ -226,7 +284,7 @@ class DocTabsCtl extends UiCtl {
         def n:int 0
         def i:int 0
         while (i < (array_length tabEls)) {
-            if ((i < (tabs.count())) && ((tabs.at(i)) != dragKey)) {
+            if ((tabs.at((first + i))) != dragKey) {
                 def el:EVGElement (itemAt tabEls i)
                 if ((el.calculatedX + (el.calculatedWidth * 0.5)) < x) {
                     n = (n + 1)
@@ -250,7 +308,7 @@ class DocTabsCtl extends UiCtl {
         }
         dragged = true
         def before:int (tabs.indexOfKey(dragKey))
-        def to:int (this.placeAt(x))
+        def to:int (first + (this.placeAt(x)))
         if (to == before) {
             return false
         }
@@ -288,8 +346,9 @@ class DocTabsCtl extends UiCtl {
     fn tids:[string] () {
         def a:[string]
         push a tid
-        def i:int 0
-        while (i < (tabs.count())) {
+        this.fitWindow()
+        def i:int first
+        while (i < (first + shown)) {
             push a (this.tabTid((tabs.at(i))))
             if ((tabs.count()) > 1) {
                 push a (this.closeTid((tabs.at(i))))
@@ -307,8 +366,9 @@ class DocTabsCtl extends UiCtl {
         def list:UiRow (UiRow.of(tid (EVGA11yRole.tabList()) name))
         list.orientation = "horizontal"
         push out list
-        def i:int 0
-        while (i < (tabs.count())) {
+        this.fitWindow()
+        def i:int first
+        while (i < (first + shown)) {
             def k:string (tabs.at(i))
             def r:UiRow (UiRow.of((this.tabTid(k)) (EVGA11yRole.tab()) (this.labelOf(k))))
             r.parentTid = tid

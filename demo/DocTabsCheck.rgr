@@ -131,10 +131,41 @@ class DocTabsCheck {
         this.ok(((DocTabsCtl.swipeDir(-90.0 0.0 900.0)) == 0) "nor a slow drag")
     }
 
+    ; a narrow row: the tabs that fit, the one in front among them
+    fn narrow:void () {
+        def c (new DocTabsCtl())
+        c.tid = "n"
+        def i:int 0
+        while (i < 8) {
+            c.tabs.open(("k" + (to_string i)))
+            i = (i + 1)
+        }
+        c.tabs.open("k1")
+        c.room = 400.0
+        c.build()
+        ; (400 - 20 - 36) / 84 = 4 tabs
+        this.ok((c.shown == 4) ("four fit: " + (to_string c.shown)))
+        this.ok((c.first == 0) ("k1 near the start: from " + (to_string c.first)))
+        c.tabs.open("k6")
+        c.build()
+        this.ok((c.first == 4) ("k6 near the end: from " + (to_string c.first)))
+        this.ok(((array_length c.tabEls) == 4) "only those are drawn")
+        this.lay(c)
+        this.ok(((c.hitAt(250.0 20.0)) == "tab:k6") "a press finds the tab shown there")
+        this.ok(((array_length (c.rows())) == 10) "rows: the list, four tabs, their close marks and +")
+        c.room = 0.0
+        c.build()
+        this.ok((c.shown == 8) "no limit: all of them")
+        c.setLabel("k6" "A rather long name for a deck of slides")
+        c.maxChars = 10
+        this.ok(((c.shortName("k6")) == "A rather …") ("a long name is cut: " + (c.shortName("k6"))))
+    }
+
     sfn main:void () {
         def c (new DocTabsCheck())
         c.model()
         c.control()
+        c.narrow()
         print ((to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
         if (c.fails > 0) {
             print "RESULT FAIL"
