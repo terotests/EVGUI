@@ -1,0 +1,174 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; Open documents as tabs (DocTabsCtl over UiOpenTabs), on Node:
+; `ui:doctabs:check`.
+Import "../src/DocTabsCtl.rgr"
+
+class DocTabsCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    sfn joined:string (a:[string]) {
+        def s:string ""
+        def i:int 0
+        while (i < (array_length a)) {
+            if (i > 0) {
+                s = (s + ",")
+            }
+            s = (s + (itemAt a i))
+            i = (i + 1)
+        }
+        return s
+    }
+
+    ; tabs 100 px wide side by side from x 0, as a layout would place them
+    fn lay:void (c:DocTabsCtl) {
+        def i:int 0
+        while (i < (array_length c.tabEls)) {
+            def el:EVGElement (itemAt c.tabEls i)
+            el.calculatedX = ((to_double i) * 100.0)
+            el.calculatedY = 0.0
+            el.calculatedWidth = 100.0
+            el.calculatedHeight = 32.0
+            i = (i + 1)
+        }
+        def j:int 0
+        while (j < (array_length c.closeEls)) {
+            def x:EVGElement (itemAt c.closeEls j)
+            x.calculatedX = (((to_double j) * 100.0) + 76.0)
+            x.calculatedY = 8.0
+            x.calculatedWidth = 16.0
+            x.calculatedHeight = 16.0
+            j = (j + 1)
+        }
+        if (!null? c.addEl) {
+            def a:EVGElement (unwrap c.addEl)
+            a.calculatedX = ((to_double (array_length c.tabEls)) * 100.0) + 8.0
+            a.calculatedY = 6.0
+            a.calculatedWidth = 22.0
+            a.calculatedHeight = 22.0
+        }
+    }
+
+    fn model:void () {
+        def t (new UiOpenTabs())
+        t.open("a")
+        t.open("b")
+        t.open("c")
+        t.open("d")
+        t.move("d" 0)
+        this.ok(((DocTabsCheck.joined(t.tabs)) == "d,a,b,c") ("moved to the front: " + (DocTabsCheck.joined(t.tabs))))
+        t.move("d" 9)
+        this.ok(((DocTabsCheck.joined(t.tabs)) == "a,b,c,d") "past the end goes last")
+        t.move("a" 2)
+        this.ok(((DocTabsCheck.joined(t.tabs)) == "b,c,a,d") ("to the middle: " + (DocTabsCheck.joined(t.tabs))))
+        this.ok((t.active == "d") "moving keeps the tab in front")
+        this.ok(((t.neighbour(-1)) == "a") "the tab left of the front one")
+        this.ok(((t.neighbour(1)) == "") "nothing right of the last")
+        t.open("b")
+        this.ok(((t.neighbour(-1)) == "") "nothing left of the first")
+        this.ok(((t.neighbour(1)) == "c") "the tab right of it")
+    }
+
+    fn control:void () {
+        def c (new DocTabsCtl())
+        c.tid = "decks"
+        c.name = "Presentations"
+        c.tabs.open("d1")
+        c.build()
+        this.ok(((array_length c.closeEls) == 0) "a single tab has no close mark")
+        c.tabs.open("d2")
+        c.tabs.open("d3")
+        c.setLabel("d1" "Budget")
+        c.setLabel("d2" "Sales")
+        c.setLabel("d1" "Budget 2027")
+        c.build()
+        this.lay(c)
+        this.ok(((c.labelOf("d1")) == "Budget 2027") "a label set again replaces the old")
+        this.ok(((c.labelOf("d3")) == "d3") "a tab with no label shows its key")
+        this.ok(((c.hitAt(150.0 20.0)) == "tab:d2") "a press on a tab")
+        this.ok(((c.hitAt(180.0 12.0)) == "close:d2") "a press on its close mark")
+        this.ok(((c.hitAt(312.0 12.0)) == "add") "a press on +")
+        this.ok(((c.hitAt(500.0 12.0)) == "") "a press beside them all")
+        def root:EVGElement (unwrap c.rootEl)
+        def first:EVGElement (root.getChild(0))
+        this.ok(((first.getChildCount()) == 3) "a tab is a wing, its body and a wing")
+        this.ok((UiTree.hasClass(first "ui-doctab-state-inactive")) "the first is not in front")
+        def third:EVGElement (root.getChild(2))
+        this.ok((UiTree.hasClass(third "ui-doctab-state-active")) "the one opened last is in front")
+        this.ok((UiTree.hasClass((third.getChild(0)) "ui-doctab-wing-state-active")) "and its wings say so")
+        ; a drag: the first tab past the middle of the second
+        c.pressAt(50.0 20.0)
+        this.ok(((c.dragTo(53.0)) == false) "a few pixels are not a drag")
+        this.ok((c.dragTo(160.0)) "past the next tab's middle moves it")
+        this.ok(((DocTabsCheck.joined(c.tabs.tabs)) == "d2,d1,d3") ("dragged to second: " + (DocTabsCheck.joined(c.tabs.tabs))))
+        this.ok((c.release()) "the press was a drag")
+        c.pressAt(150.0 20.0)
+        this.ok(((c.release()) == false) "a press without moving is a click")
+        def rows:[UiRow] (c.rows())
+        def named:boolean false
+        def i:int 0
+        while (i < (array_length rows)) {
+            def r:UiRow (itemAt rows i)
+            if ((r.tid == "decks-close-d2") && (r.name == "Close Sales")) {
+                named = true
+            }
+            i = (i + 1)
+        }
+        this.ok(named "each close mark is a button named after its tab")
+        this.ok(((DocTabsCtl.swipeDir(-90.0 10.0 200.0)) == 1) "a flick left brings the next tab")
+        this.ok(((DocTabsCtl.swipeDir(90.0 10.0 200.0)) == -1) "a flick right the one before")
+        this.ok(((DocTabsCtl.swipeDir(-30.0 0.0 200.0)) == 0) "a short move is no swipe")
+        this.ok(((DocTabsCtl.swipeDir(-90.0 80.0 200.0)) == 0) "a mostly vertical one is not either")
+        this.ok(((DocTabsCtl.swipeDir(-90.0 0.0 900.0)) == 0) "nor a slow drag")
+    }
+
+    ; a narrow row: the tabs that fit, the one in front among them
+    fn narrow:void () {
+        def c (new DocTabsCtl())
+        c.tid = "n"
+        def i:int 0
+        while (i < 8) {
+            c.tabs.open(("k" + (to_string i)))
+            i = (i + 1)
+        }
+        c.tabs.open("k1")
+        c.room = 400.0
+        c.build()
+        ; (400 - 20 - 36) / 84 = 4 tabs
+        this.ok((c.shown == 4) ("four fit: " + (to_string c.shown)))
+        this.ok((c.first == 0) ("k1 near the start: from " + (to_string c.first)))
+        c.tabs.open("k6")
+        c.build()
+        this.ok((c.first == 4) ("k6 near the end: from " + (to_string c.first)))
+        this.ok(((array_length c.tabEls) == 4) "only those are drawn")
+        this.lay(c)
+        this.ok(((c.hitAt(250.0 20.0)) == "tab:k6") "a press finds the tab shown there")
+        this.ok(((array_length (c.rows())) == 10) "rows: the list, four tabs, their close marks and +")
+        c.room = 0.0
+        c.build()
+        this.ok((c.shown == 8) "no limit: all of them")
+        c.setLabel("k6" "A rather long name for a deck of slides")
+        c.maxChars = 10
+        this.ok(((c.shortName("k6")) == "A rather …") ("a long name is cut: " + (c.shortName("k6"))))
+    }
+
+    sfn main:void () {
+        def c (new DocTabsCheck())
+        c.model()
+        c.control()
+        c.narrow()
+        print ((to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
+        if (c.fails > 0) {
+            print "RESULT FAIL"
+        }
+    }
+}
