@@ -1,0 +1,130 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; The dark look derived from a light sheet, on Node: `ui:dark:check`.
+;
+; The colour map (UiDark.color) keeps every contrast ratio, turns light into
+; dark and keeps alpha and hue; a value's colours are found and mapped and
+; nothing else in it moves; and the overlay of a sheet keeps to its host's
+; theme, keeps the light look's order of strength, leaves shadows alone and
+; reads back without an error.
+Import "../src/UiDark.rgr"
+
+class UiDarkCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    sfn hex:EVGColor (s:string) {
+        return (EVGColor.parse(s))
+    }
+
+    fn colors:void () {
+        def white:EVGColor (UiDark.color((UiDarkCheck.hex("#ffffff"))))
+        def black:EVGColor (UiDark.color((UiDarkCheck.hex("#000000"))))
+        this.ok(((UiDark.luminance(white)) < 0.02) ("white turns a near-black ground: " + (white.toHexString())))
+        this.ok(((UiDark.luminance(white)) > 0.005) ("...not pure black: " + (white.toHexString())))
+        this.ok(((UiDark.luminance(black)) > 0.95) ("black turns white: " + (black.toHexString())))
+        ; the zinc ramp keeps its contrasts, in reverse
+        def ramp:[string] ([] _:string ("#ffffff" "#fafafa" "#f4f4f5" "#e4e4e7" "#d4d4d8" "#a1a1aa" "#71717a" "#52525b" "#3f3f46" "#27272a" "#18181b" "#09090b" "#2563eb" "#dc2626" "#16a34a" "#f59e0b" "#eff6ff" "#fef2f2"))
+        def i:int 0
+        def n:int (array_length ramp)
+        while (i < n) {
+            def j:int 0
+            while (j < n) {
+                def a:EVGColor (UiDarkCheck.hex((itemAt ramp i)))
+                def b:EVGColor (UiDarkCheck.hex((itemAt ramp j)))
+                def before:double (UiDark.contrast(a b))
+                def after:double (UiDark.contrast((UiDark.color(a)) (UiDark.color(b))))
+                ; equal but for rounding to 8 bits, and for the black end,
+                ; which is clamped to white: at least 84 % of a ratio there
+                def want:double (before * 0.97)
+                def la:double (UiDark.luminance(a))
+                def lb:double (UiDark.luminance(b))
+                if ((la < 0.02) || (lb < 0.02)) {
+                    want = (before * 0.84)
+                }
+                this.ok((after >= want) ((((itemAt ramp i) + " on ") + (itemAt ramp j)) + ((" " + (to_string before)) + (" -> " + (to_string after)))))
+                j = (j + 1)
+            }
+            i = (i + 1)
+        }
+        ; lighter turns darker
+        def l1:double (UiDark.luminance((UiDark.color((UiDarkCheck.hex("#f4f4f5"))))))
+        def l2:double (UiDark.luminance((UiDark.color((UiDarkCheck.hex("#e4e4e7"))))))
+        this.ok((l1 < l2) "the order of the greys is reversed")
+        ; alpha and hue are kept
+        def tint:EVGColor (UiDark.color((UiDarkCheck.hex("rgba(0, 0, 0, 0.08)"))))
+        this.ok(((tint.a > 0.079) && (tint.a < 0.081)) ("alpha kept: " + (tint.toCSSString())))
+        this.ok(((tint.red()) > 240) ("a dark hover tint turns a light one: " + (tint.toCSSString())))
+        def blue:EVGColor (UiDark.color((UiDarkCheck.hex("#2563eb"))))
+        this.ok((((blue.blue()) > (blue.red())) && ((blue.blue()) > (blue.green()))) ("blue stays blue: " + (blue.toHexString())))
+        def wash:EVGColor (UiDark.color((UiDarkCheck.hex("#fef2f2"))))
+        this.ok(((wash.red()) > (wash.blue())) ("a red wash stays reddish: " + (wash.toHexString())))
+        this.ok(((UiDark.luminance(wash)) < 0.03) ("...and turns dark: " + (wash.toHexString())))
+    }
+
+    fn values:void () {
+        def b:string (UiDark.value("1px solid #e4e4e7"))
+        this.ok(((indexOf b "1px solid #") == 0) ("a border keeps its width and style: " + b))
+        this.ok((b != "1px solid #e4e4e7") ("...and its colour turns: " + b))
+        this.ok(((UiDark.value("var(--ink)")) == "var(--ink)") "a variable is left alone")
+        this.ok(((UiDark.value("hsl(var(--h) 50% 40%)")) == "hsl(var(--h) 50% 40%)") "a colour built from a variable is left alone")
+        def g:string (UiDark.value("linear-gradient(180deg, #ffffff, rgba(0,0,0,0.1))"))
+        this.ok((((indexOf g "linear-gradient(180deg, #") == 0) && ((indexOf g "#FFFFFF") < 0)) ("a gradient's stops turn: " + g))
+        this.ok(((UiDark.value("2px solid black")) != "2px solid black") "a named colour turns")
+        this.ok(((UiDark.value("12px")) == "12px") "a value with no colour is unchanged")
+        this.ok(((UiDark.value("#abc0")) != "#abc0") "a short hex with alpha turns")
+    }
+
+    fn sheets:void () {
+        def css:string "@vars { --bg: #ffffff; --pad: 4px; }\n.a { color: #000000; padding: 4px; shadow-color: rgba(0,0,0,0.2); }\n.theme-tb .a { color: #ffffff; }\n.b:hover { background-color: #f4f4f5; }\n.theme-ce .c { color: #000000; }\n.d { background-color: var(--bg); }\n.e { width: 10px; border-radius: 4px; }\n.h { background-color: transparent; border-radius: 4px; }\n@media (max-width: 600px) { .f { color: #111111; } }\n.theme-dark .g { color: #123456; }\n"
+        def o:string (UiDark.overlay(css "tb"))
+        this.ok(((indexOf o "@vars dark") >= 0) ("the palette is mapped: " + o))
+        this.ok(((indexOf o "--pad") < 0) "a variable with no colour stays out")
+        def ia:int (indexOf o ".theme-dark .a {")
+        this.ok((ia >= 0) "the unscoped rule is in")
+        this.ok(((indexOf o "shadow-color") < 0) "shadows stay out")
+        this.ok(((indexOf o "padding") < 0) "only colours are written")
+        def rest:string (substring o (ia + 1) (strlen o))
+        this.ok(((indexOf rest ".theme-dark .a { color: #") >= 0) "the host's own rule comes after the unscoped one")
+        this.ok(((indexOf o ".theme-dark .b:hover {") >= 0) "a state rule keeps its state")
+        this.ok(((indexOf o ".c {") < 0) "another host's rule stays out")
+        this.ok(((indexOf o ".theme-dark .d { background-color: var(--bg); }") >= 0) "a var() value is repeated as it is")
+        this.ok(((indexOf o ".e") < 0) "a rule with no colour stays out")
+        this.ok(((indexOf o ".theme-dark .h { background-color: transparent; }") >= 0) ("a colour that does not turn is stated again, a radius is not: " + o))
+        this.ok(((indexOf o "@media (max-width: 600px) { .theme-dark .f {") >= 0) ("a media rule keeps its query: " + o))
+        this.ok(((indexOf o ".g") < 0) "a hand-written dark rule is not mapped again")
+        def kc:string ".ui-crop-box { border: 2px solid #ffffff; }\n.sel-box { border: 2px solid #3b82f6; }\n.selx { color: #000000; }\n"
+        def ko:string (UiDark.overlayKeep(kc "" "sel- other-"))
+        this.ok(((indexOf ko "ui-crop") < 0) "the kit's crop frame keeps its colours")
+        this.ok(((indexOf ko ".sel-box") < 0) "a class the app keeps keeps its colours")
+        this.ok(((indexOf ko ".theme-dark .selx {") >= 0) ("...and a prefix is a prefix of the name with its dash: " + ko))
+        ; it reads back
+        def back (new EVGStyleSheet())
+        back.parse(o)
+        this.ok(((back.getErrorCount()) == 0) "the overlay reads back without errors")
+        def none:string (UiDark.overlay(css ""))
+        def ia2:int (indexOf none ".theme-dark .a {")
+        def rest2:string (substring none (ia2 + 1) (strlen none))
+        this.ok(((indexOf rest2 ".theme-dark .a {") < 0) "with no host theme only the unscoped rule is in")
+    }
+
+    fn main:void () {
+        this.colors()
+        this.values()
+        this.sheets()
+        print ((("UiDarkCheck: " + (to_string passes)) + " passed, ") + ((to_string fails) + " failed"))
+    }
+
+    sfn main:void () {
+        def c (new UiDarkCheck())
+        c.main()
+    }
+}

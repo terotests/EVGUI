@@ -70,6 +70,8 @@ SUITES=(
   ui:layout:check
   # The z-order model: which surface is on top (src/UiLayers.rgr).
   ui:layers:check
+  # The dark look derived from a light sheet (src/UiDark.rgr).
+  ui:dark:check
   # Hatch stripes and tab outlines as paths (src/UiShapes.rgr).
   ui:shapes:check
   ui:menufit:check
