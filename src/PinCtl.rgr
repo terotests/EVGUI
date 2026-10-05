@@ -1,18 +1,21 @@
 ; SPDX-License-Identifier: AGPL-3.0-or-later
 
 ; =============================================================================
-; PinCtl — a speech bubble pinned to a point: a comment on a picture or a page
+; PinCtl — a map pin on a point: a comment on a picture or a page
 ; =============================================================================
-; A small bubble whose lower-left corner is the point it is about (`x`, `y`
-; on the page), with a short label in it (how many messages it holds). The
-; fill is the host's colour (`color`, a review's own yellow by default), the
-; edge thin and dark. A closed one (a comment that was dealt with) is faint
-; but still there; the one open beside it (`active`) has a heavier edge.
+; A round badge with a short point under its middle; the tip of the point is
+; the point it is about (`x`, `y` on the page), so the pin is symmetric about
+; it. The badge holds a short label (how many messages, "!", "+"), centred.
+; The fill is the host's colour (`color`, a review's own yellow by default),
+; lit from above by a soft gradient worked out from it, with a soft shadow
+; under it and no outline. A closed one (a comment that was dealt with) is
+; faint but still there; the one open beside it (`active`) has a light ring.
 ;
 ; The host places pins over what they are about and asks `has` which one a
-; press landed on; the bubble is a free surface of its own, so pins are laid
+; press landed on; the pin is a free surface of its own, so pins are laid
 ; out wherever their points are, over each other when they are close (the
-; one added last on top).
+; one added last on top). `midX`/`midY` is the badge's middle, for a callout
+; that points at the pin.
 ;
 ; TO A READER: a button, "<info>" (the host says what it is: "Comment 2,
 ; resolved, 3 messages"); pressing it opens the conversation.
@@ -22,14 +25,20 @@ Import "UiCtl.rgr"
 Import "UiTree.rgr"
 Import "pkg:evg/EVGElement.rgr"
 Import "pkg:evg/EVGA11yTree.rgr"
+Import "pkg:evg/EVGColor.rgr"
+Import "pkg:evg/EVGUnit.rgr"
 
 class PinCtl extends UiCtl {
     ; the point, on the page
     def x:double 0.0
     def y:double 0.0
-    ; the bubble's size (base.css .pin)
+    ; the pin's size (base.css .pin): the badge's diameter and the point
+    ; under it, which reaches 4px up into the badge (.pin-tail's margin)
+    def d:double 26.0
+    def tailW:double 12.0
+    def tailH:double 9.0
     def w:double 26.0
-    def h:double 22.0
+    def h:double 31.0
     def label:string ""
     def color:string "#fde047"
     def closed:boolean false
@@ -49,16 +58,25 @@ class PinCtl extends UiCtl {
         return p
     }
 
-    ; the bubble's box: it sits above and to the right of its point
+    ; the pin's box: centred over its point, the tip at the bottom
     fn left:double () {
-        return x
+        return (x - (w / 2.0))
     }
 
     fn top:double () {
         return (y - h)
     }
 
-    ; A press on the bubble, with a few pixels to spare round it for a finger.
+    ; the badge's middle
+    fn midX:double () {
+        return x
+    }
+
+    fn midY:double () {
+        return ((this.top()) + (d / 2.0))
+    }
+
+    ; A press on the pin, with a few pixels to spare round it for a finger.
     fn has:boolean (px:double py:double) {
         def pad:double 3.0
         return ((((px >= ((this.left()) - pad)) && (px <= (((this.left()) + w) + pad))) && (py >= ((this.top()) - pad))) && (py <= (y + pad)))
@@ -75,12 +93,46 @@ class PinCtl extends UiCtl {
         return cls
     }
 
+    ; the badge's light (top) and the colour it ends in, which the point
+    ; carries on
+    fn lit:string () {
+        def c:EVGColor (EVGColor.parse(color))
+        return ((c.lighten(0.24)).toCSSString())
+    }
+
+    fn deep:string () {
+        def c:EVGColor (EVGColor.parse(color))
+        return ((c.darken(0.06)).toCSSString())
+    }
+
+    ; the point: from the badge's width down to the tip, the sides drawn in
+    fn tailPath:string () {
+        def tw:string (to_string tailW)
+        def th:string (to_string tailH)
+        def mid:string (to_string (tailW / 2.0))
+        return ("M0 0 L" + tw + " 0 Q" + (to_string ((tailW / 2.0) + 1.5)) + " " + (to_string (tailH * 0.4)) + " " + mid + " " + th + " Q" + (to_string ((tailW / 2.0) - 1.5)) + " " + (to_string (tailH * 0.4)) + " 0 0 Z")
+    }
+
     fn build:void () {
-        def b:EVGElement (UiTree.label(tid (this.classes()) label))
+        def b:EVGElement (UiTree.div(tid (this.classes())))
         UiTree.surface(b "free" "start")
         b.overlayX = (this.left())
         b.overlayY = (this.top())
-        UiTree.inline(b "background-color" color)
+        def tl (EVGElement.createDiv())
+        tl.id = (tid + "-tail")
+        tl.className = "pin-tail"
+        tl.tagName = "path"
+        tl.elementType = 3
+        tl.viewBox = ("0 0 " + (to_string tailW) + " " + (to_string tailH))
+        tl.svgPath = (this.tailPath())
+        tl.width = (EVGUnit.px(tailW))
+        tl.height = (EVGUnit.px(tailH))
+        tl.a11yHidden = true
+        UiTree.inline(tl "fill" (this.deep()))
+        def bd:EVGElement (UiTree.label((tid + "-badge") (? active "pin-badge pin-badge-on" "pin-badge") label))
+        UiTree.inline(bd "background" ("linear-gradient(180deg, " + (this.lit()) + ", " + (this.deep()) + ")"))
+        b.addChild(bd)
+        b.addChild(tl)
         rootEl = b
     }
 

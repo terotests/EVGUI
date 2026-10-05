@@ -1706,24 +1706,33 @@
 .chat-ro-text { font-size: 12px; color: #64748b; }
 
 /* --- pin -------------------------------------------------------------------------
- * PinCtl: a speech bubble pinned to a point (a comment on a slide). Its
- * lower-left corner is the point; the fill is the host's colour (inline), the
- * edge thin and dark. Closed: faint. On: the one open. */
+ * PinCtl: a map pin on a point (a comment on a slide): a round badge and a
+ * short point under its middle, whose tip is the point. The badge's
+ * gradient and the point's fill come from the host's colour (inline); a soft
+ * shadow, no outline. Closed: faint. On: the one open, a light ring. */
 .pin {
   width: 26px;
-  height: 22px;
-  line-height: 22px;
+  height: 31px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.pin-badge {
+  width: 26px;
+  height: 26px;
+  line-height: 26px;
   text-align: center;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: bold;
   color: #111111;
   background-color: #fde047;
-  border: 1.5px solid #111111;
-  border-radius: 11px 11px 11px 2px;
+  border-radius: 13px;
+  shadow-color: rgba(0, 0, 0, 0.32); shadow-radius: 5px; shadow-offset-y: 2px;
 }
-.pin-closed { opacity: 0.25; }
-.pin-on { border-width: 2.5px; }
-.pin:hover { border-width: 2.5px; }
+.pin-tail { fill: #fde047; margin-top: -4px; }
+.pin-closed { opacity: 0.35; }
+.pin-badge-on { border: 2px solid rgba(255, 255, 255, 0.92); line-height: 22px; }
+.pin-badge:hover { shadow-color: rgba(0, 0, 0, 0.42); shadow-radius: 8px; shadow-offset-y: 3px; }
 
 /* --- callout ----------------------------------------------------------------------
  * CalloutCtl: a box beside a point with a wedge to it, draggable by its head.
