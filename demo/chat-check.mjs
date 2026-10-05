@@ -141,6 +141,29 @@ ok("the draft is a text field", byTid.get("ch-field").role === R.textField() && 
 ok("Send is off with nothing written", byTid.get("ch-send").disabled === true);
 ok("owns its ids", c.owns(c.msgTid(2)) && c.owns("ch-send") && !c.owns("ch-m-99"));
 
+// --- copying ------------------------------------------------------------------
+console.log("copy");
+d = fresh();
+c = d.chat;
+c.setOpen(true);
+c.add("1", "zebra", "Anonymous Zebra", "#ea580c", "Possua tähän kuva", "09:00", false);
+c.add("2", "me", "Tero", "#2563eb", "Second one", "09:01", true);
+d.rebuild();
+const w0 = rect(c.msgTid(0) + "-text");
+ok("a message's words are selectable text", d.displayListJson().length > 0 && c.owns(c.msgTid(0) + "-text-text"), w0);
+const cy = w0[1] + w0[3] / 2;
+ok("a double click takes a word", d.selectAt(w0[0] + 3, cy, w0[0] + 3, 2) === "Possua");
+ok("a triple click takes the message", d.selectAt(w0[0] + 3, cy, w0[0] + 3, 3) === "Possua tähän kuva");
+const dragged = d.selectAt(w0[0] + 1, cy, w0[0] + w0[2] - 1, 1);
+ok("a drag selects across it", dragged.length >= 15 && "Possua tähän kuva".startsWith(dragged.slice(0, 6)), dragged);
+c.add("3", "otter", "Anonymous Otter", "#0d9488", "late", "09:02", false);
+d.rebuild();
+ok("the selection outlives a rebuild", d.copyText() === dragged);
+const w1 = rect(c.msgTid(1) + "-text");
+ok("a press on another message takes the selection there", d.selectAt(w1[0] + 2, w1[1] + w1[3] / 2, w1[0] + 2, 3) === "Second one" && c.texts[0].selectedText() === "");
+c.dropSelection();
+ok("dropped: nothing to copy", d.copyText() === "");
+
 // --- a thread ------------------------------------------------------------------
 console.log("thread");
 d = fresh();
