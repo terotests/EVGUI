@@ -33,6 +33,7 @@
   "ui:text:select": "node dist/rgrc.js -es6 gallery/evgui/demo/TextSelectCheck.rgr -d=gallery/evgui/bin -o=TextSelectCheck.js -nodecli && node gallery/evgui/bin/TextSelectCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
   "ui:pick:check": "node dist/rgrc.js -es6 gallery/evgui/demo/UiPickCheck.rgr -d=gallery/evgui/bin -o=UiPickCheck.js -nodecli && node gallery/evgui/bin/UiPickCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
   "ui:doctabs:check": "node dist/rgrc.js -es6 gallery/evgui/demo/DocTabsCheck.rgr -d=gallery/evgui/bin -o=DocTabsCheck.js -nodecli && node gallery/evgui/bin/DocTabsCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
+  "ui:button:check": "node dist/rgrc.js -es6 gallery/evgui/demo/ButtonCheck.rgr -d=gallery/evgui/bin -o=ButtonCheck.js -nodecli && node gallery/evgui/bin/ButtonCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
   "ui:rail:check": "node dist/rgrc.js -es6 gallery/evgui/demo/RailCheck.rgr -d=gallery/evgui/bin -o=RailCheck.js -nodecli && node gallery/evgui/bin/RailCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
   "ui:menufit:check": "node dist/rgrc.js -es6 gallery/evgui/demo/MenuFitCheck.rgr -d=gallery/evgui/bin -o=MenuFitCheck.js -nodecli && node gallery/evgui/bin/MenuFitCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
   "ui:dark:check": "node dist/rgrc.js -es6 gallery/evgui/demo/UiDarkCheck.rgr -d=gallery/evgui/bin -o=UiDarkCheck.js -nodecli && node gallery/evgui/bin/UiDarkCheck.js | tee /dev/stderr | grep -q ' 0 failed'",

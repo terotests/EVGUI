@@ -31,6 +31,16 @@
 ; The label is its own element rather than text on the root because a button
 ; with an icon beside its words is the next thing anybody asks for, and a
 ; sheet cannot space two things that are one text node.
+;
+; AN ICON IS A PATH, NOT A GLYPH. `icon` is an SVG path on a 24×24 grid,
+; drawn before the words as `ui-button-icon` (stroked; the sheet sets the
+; pen). A glyph such as "‹" or "+" sits where its font puts it — "‹" at the
+; x-height, well under the line's middle — so a button drawn with one is never
+; centred; a path is centred by its box. `iconOnly` leaves the words out of
+; the drawing; `name` is still what a reader is told.
+;
+;     path.ui-button-icon.ui-button-icon-ui-button-ghost   the icon, when
+;                                            there is one; the variant's pen
 ; =============================================================================
 
 Import "UiCtl.rgr"
@@ -43,6 +53,13 @@ class ButtonCtl extends UiCtl {
     def variant:string "secondary"
     ; Held down. A press paints it; letting go paints it back.
     def held:boolean false
+    ; An SVG path on a 24×24 grid, drawn before the words; "" for none.
+    def icon:string ""
+    ; Only the icon is drawn; `name` stays the button's name for a reader.
+    def iconOnly:boolean false
+    ; One more class on the icon, for a screen sizing its own: a sheet styles
+    ; an element by its own classes, not by the button it is in.
+    def iconClass:string ""
 
     Constructor () {
         rootEl = (EVGElement.createDiv())
@@ -80,6 +97,26 @@ class ButtonCtl extends UiCtl {
         UiTree.clearChildren(el)
         el.elementType = 0
         el.textContent = ""
+
+        if ((strlen icon) > 0) {
+            def ic (EVGElement.createDiv())
+            ic.id = (tid + "-icon")
+            ic.className = "ui-button-icon"
+            UiTree.addClass(ic ("ui-button-icon-" + (this.variantClass())))
+            if ((strlen iconClass) > 0) {
+                UiTree.addClass(ic iconClass)
+            }
+            ic.tagName = "path"
+            ic.elementType = 3
+            ic.viewBox = "0 0 24 24"
+            ic.svgPath = icon
+            ic.a11yHidden = true
+            el.addChild(ic)
+            if iconOnly {
+                UiTree.addClass(el "ui-button-icononly")
+                return
+            }
+        }
 
         def words:EVGElement (EVGElement.createSpan())
         words.className = "ui-button-label"

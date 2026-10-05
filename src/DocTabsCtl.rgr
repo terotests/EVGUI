@@ -254,12 +254,14 @@ class DocTabsCtl extends UiCtl {
     }
 
     ; A tab: its slanted left edge, its body with the name, its right edge.
+    ; The edges are soft: a rounded top corner and a foot that curves out into
+    ; the row, as a paper tab's are.
     fn tabEl:EVGElement (k:string word:string id:string) {
         def tab (EVGElement.createDiv())
         tab.id = id
         tab.className = "ui-doctab"
         UiTree.setState(tab "ui-doctab" word)
-        tab.addChild((DocTabsCtl.wing("M0 32 L12 0 L12 32 Z" word)))
+        tab.addChild((DocTabsCtl.wing("M0 32 Q3.6 32 4.4 28.4 L8.5 5 Q9.5 0 12 0 L12 32 Z" word)))
         def body (EVGElement.createDiv())
         body.className = "ui-doctab-body"
         UiTree.setState(body "ui-doctab-body" word)
@@ -267,7 +269,7 @@ class DocTabsCtl extends UiCtl {
         UiTree.setState(nameEl "ui-doctab-name" word)
         body.addChild(nameEl)
         tab.addChild(body)
-        tab.addChild((DocTabsCtl.wing("M0 0 L12 32 L0 32 Z" word)))
+        tab.addChild((DocTabsCtl.wing("M0 0 Q2.5 0 3.5 5 L7.6 28.4 Q8.4 32 12 32 L0 32 Z" word)))
         return tab
     }
 

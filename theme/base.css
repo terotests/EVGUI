@@ -62,6 +62,12 @@
   color: #0f172a;
 }
 .ui-button-label { font-weight: 600; }
+/* An icon is a stroked path on a 24 grid, in the colour of the words. */
+.ui-button-icon { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: #0f172a; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ui-button-icon-ui-button-primary { stroke: #ffffff; }
+.ui-button-icon-ui-button-ghost { stroke: #2563eb; }
+.ui-button-icon-ui-button-danger { stroke: #ffffff; }
+.ui-button-icononly { padding: 8px; }
 
 .ui-button-primary { background-color: #2563eb; color: #ffffff; border-color: #2563eb; }
 .ui-button-secondary { background-color: #e2e8f0; color: #0f172a; border-color: #cbd5e1; }
@@ -76,6 +82,10 @@
 .theme-dark .ui-button { background-color: #1e293b; color: #e2e8f0; border-color: #334155; }
 .theme-dark .ui-button-secondary { background-color: #1e293b; color: #e2e8f0; border-color: #334155; }
 .theme-dark .ui-button-ghost { background-color: rgba(0,0,0,0); color: #60a5fa; }
+.theme-dark .ui-button-icon { stroke: #e2e8f0; }
+.theme-dark .ui-button-icon-ui-button-ghost { stroke: #60a5fa; }
+.theme-dark .ui-button-icon-ui-button-primary { stroke: #ffffff; }
+.theme-dark .ui-button-icon-ui-button-danger { stroke: #ffffff; }
 
 /* A row of CTAs. `gap` rather than margins so `space-between` and `center`
    both look right without a second rule per alignment.                      */
