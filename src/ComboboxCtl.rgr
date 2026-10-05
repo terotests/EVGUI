@@ -1166,13 +1166,13 @@ class ComboboxCtl extends UiCtl {
         } {
             chipFocus = ""
         }
-        input.focused = (target == (this.inputTid()))
+        input.setFocused((target == (this.inputTid())))
         this.build()
     }
 
     fn onBlur:void (target:string) {
         chipFocus = ""
-        input.focused = false
+        input.setFocused(false)
         input.pointerUp()
         this.commitBlur()
     }
@@ -1190,7 +1190,7 @@ class ComboboxCtl extends UiCtl {
         if disabled {
             return false
         }
-        input.focused = true
+        input.setFocused(true)
         input.pointerDown(px clicks shift)
         return true
     }

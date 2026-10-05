@@ -696,6 +696,10 @@ class EmojiPickerCtl extends UiCtl {
         input.name = placeholder
         input.placeholder = placeholder
         input.textClass = "emoji-query"
+        input.placeholderClass = "emoji-query-placeholder"
+        ; the search line always has the keys: hiding the hint on focus would
+        ; hide it for good
+        input.placeholderHidesOnFocus = false
         input.focused = true
         input.boxClass = "emoji-search"
         input.build()

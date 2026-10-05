@@ -229,6 +229,47 @@ class InputFieldCheck {
         this.ok((((ch.input.selStart()) == 0) && ((ch.input.selEnd()) == 5)) "Ctrl+A in the chat field selects its text")
     }
 
+    ; The comment box on a dark panel (Sliqtly's review mode): the hint must
+    ; read as a hint, go when the field is focused, and the caret must show.
+    ; The bugs: `.chat-draft`'s white, declared after `.ui-input-placeholder`,
+    ; coloured the hint like typed text; the hint stayed on focus; and the
+    ; theme's dark caret vanished on the dark field.
+    fn placeholder:void () {
+        def h (new UiHost())
+        h.setPageSize(320.0 440.0)
+        h.addStyleSheet(".ui-input { display: flex; width: 220px; height: 34px; padding: 0 10px; } .chat-panel { display: flex; flex-direction: column; width: 300px; } .chat-composer { display: flex; flex-direction: row; align-items: center; gap: 6px; padding: 8px 10px; } .chat-field { display: flex; align-items: center; flex-grow: 1; flex-shrink: 1; width: 0px; min-width: 0px; height: 30px; padding: 0 8px; } .chat-send { height: 30px; padding: 0 12px; font-size: 13px; } .ui-input-text { font-size: 13px; } .ui-input-placeholder { color: #808080; } .chat-draft { color: #ffffff; font-size: 15px; } .chat-placeholder { font-size: 15px; }")
+        def ch (new ChatCtl())
+        ch.setup("ch" "Chat")
+        ch.placeholder = "Write a comment…"
+        ch.build()
+        h.add(ch)
+        h.layout()
+        def txt:EVGElement (this.el(h "ch-field-text"))
+        this.ok((txt.textContent == "Write a comment…") ("an empty field shows its hint: " + txt.textContent))
+        this.ok(((txt.color.r < 150.0) && (txt.color.r > 100.0)) ("the hint has the placeholder colour, not the text's: " + (to_string txt.color.r)))
+        this.ok((txt.inheritedFontSize == 15.0) ("the hint has the text's size: " + (to_string txt.inheritedFontSize)))
+        h.focus("ch-field")
+        h.layout()
+        def txt2:EVGElement (this.el(h "ch-field-text"))
+        this.ok((txt2.textContent == "") ("focusing the field hides the hint: " + txt2.textContent))
+        def car:EVGElement (this.el(h "ch-field-caret"))
+        this.ok((car.calculatedWidth > 0.0) "the caret shows in the focused empty field")
+        this.ok((car.calculatedHeight > 8.0) ("the caret has a height: " + (to_string car.calculatedHeight)))
+        def fld:EVGElement (this.el(h "ch-field"))
+        this.ok(((car.calculatedY > fld.calculatedY) && ((car.calculatedY + car.calculatedHeight) < (fld.calculatedY + fld.calculatedHeight))) ("the caret sits inside the field: " + (to_string car.calculatedY) + " in " + (to_string fld.calculatedY)))
+        this.ok((car.backgroundColor.isSet && (car.backgroundColor.r > 230.0)) "a caret the sheet does not colour takes the text's colour")
+        h.keyWith("h" false false)
+        h.layout()
+        def txt3:EVGElement (this.el(h "ch-field-text"))
+        this.ok((txt3.color.r > 230.0) "typed text has the text colour")
+        h.blur()
+        ch.input.setValue("")
+        ch.build()
+        h.layout()
+        def txt4:EVGElement (this.el(h "ch-field-text"))
+        this.ok((txt4.textContent == "Write a comment…") "the hint comes back on blur")
+    }
+
     sfn main:void () {
         def c (new InputFieldCheck())
         c.bandOverText()
@@ -238,6 +279,7 @@ class InputFieldCheck {
         c.clears()
         c.emoji()
         c.chatField()
+        c.placeholder()
         print ((to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
         if (c.fails > 0) {
             print "RESULT FAIL"
