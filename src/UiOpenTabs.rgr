@@ -17,6 +17,8 @@
 ;   close(k)       → the tab now in front ("" when none is left)
 ;   rename(a b)    a file moved: its tab follows it
 ;   retain(keys)   the files there still are: tabs of the others close
+;   move(k i)      a tab dragged to place i (0 = first)
+;   neighbour(d)   the tab left (-1) or right (+1) of the one in front
 ; =============================================================================
 
 class UiOpenTabs {
@@ -215,5 +217,54 @@ class UiOpenTabs {
             }
         }
         return name
+    }
+
+    ; A tab dragged to place `to` among the tabs (clamped to the ends).
+    fn move:void (k:string to:int) {
+        if ((this.has(k)) == false) {
+            return
+        }
+        def rest:[string] (UiOpenTabs.without(tabs k))
+        def at:int to
+        if (at < 0) {
+            at = 0
+        }
+        if (at > (array_length rest)) {
+            at = (array_length rest)
+        }
+        def out:[string]
+        def i:int 0
+        while (i < (array_length rest)) {
+            if (i == at) {
+                push out k
+            }
+            push out (itemAt rest i)
+            i = (i + 1)
+        }
+        if (at == (array_length rest)) {
+            push out k
+        }
+        tabs = out
+    }
+
+    fn indexOfKey:int (k:string) {
+        def i:int 0
+        while (i < (array_length tabs)) {
+            if ((itemAt tabs i) == k) {
+                return i
+            }
+            i = (i + 1)
+        }
+        return -1
+    }
+
+    ; The tab beside the one in front: `dir` -1 left, +1 right; "" at an end
+    ; (a swipe past the last tab does not wrap round).
+    fn neighbour:string (dir:int) {
+        def i:int (this.indexOfKey(active))
+        if (i < 0) {
+            return ""
+        }
+        return (this.at((i + dir)))
     }
 }
