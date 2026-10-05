@@ -32,6 +32,7 @@
 ; shows `readOnlyText` where the composer was (a closed thread).
 ;
 ; KEYS (the host sends them while the composer has focus): Enter sends,
+; Shift+Enter breaks the line (the draft wraps and grows, `multiline`),
 ; Escape closes, PageUp/PageDown scroll; typing and every other key are the
 ; text field's (caret, selection, Ctrl+A, Backspace a whole emoji). POINTER:
 ; `<tid>-close`, `<tid>-send`, `<tid>-jump`, and presses in the field
@@ -69,6 +70,10 @@ class UiChatMessage {
 class ChatCtl extends UiCtl {
     def title:string "Chat"
     def placeholder:string "Write a message…"
+    ; The draft wraps and grows up to `draftLines` lines, so a long message
+    ; is read whole while it is written; Shift+Enter starts a new line.
+    def multiline:boolean true
+    def draftLines:int 5
     def emptyText:string "No messages yet."
     def sendText:string "Send"
     def closeText:string "Close"
@@ -326,6 +331,7 @@ class ChatCtl extends UiCtl {
         input.setValue("")
         input.moveTo(0 false)
         input.scrollX = 0.0
+        input.scrollY = 0.0
         return true
     }
 
@@ -343,6 +349,10 @@ class ChatCtl extends UiCtl {
     ; other key is the text field's (arrows, Home/End, Ctrl+A, Backspace…).
     fn keyDownWith:string (target:string key:string shift:boolean ctrl:boolean) {
         def mine:boolean ((((key == "Enter") || (key == "Escape")) || (key == "PageUp")) || (key == "PageDown"))
+        ; Shift+Enter: a line break in a wrapping draft
+        if (((key == "Enter") && shift) && input.multiline) {
+            mine = false
+        }
         if (mine == false) {
             if (readOnly == false) {
                 input.keyDownWith(input.tid key shift ctrl)
@@ -419,7 +429,7 @@ class ChatCtl extends UiCtl {
         if (input.owns(target)) {
             this.dropTexts(-1)
             selIn = -1
-            return (input.textPointerDown(target px clicks shift))
+            return (input.textPointerDownAt(target px py clicks shift))
         }
         def k:int (this.textIndexOf(target))
         if (k < 0) {
@@ -448,7 +458,7 @@ class ChatCtl extends UiCtl {
             def t:TextCtl (itemAt texts selIn)
             return (t.textPointerDragAt(px py))
         }
-        return (input.textPointerDrag(px))
+        return (input.textPointerDragAt(px py))
     }
 
     fn textPointerUp:void () {
@@ -641,6 +651,8 @@ class ChatCtl extends UiCtl {
         input.boxClass = "chat-field"
         input.textClass = "chat-draft"
         input.placeholderClass = "chat-placeholder"
+        input.multiline = multiline
+        input.maxLines = draftLines
         input.build()
         def field:EVGElement (unwrap input.rootEl)
         composer.addChild(field)
