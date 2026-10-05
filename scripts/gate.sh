@@ -70,6 +70,8 @@ SUITES=(
   ui:layout:check
   # The z-order model: which surface is on top (src/UiLayers.rgr).
   ui:layers:check
+  # Hatch stripes and tab outlines as paths (src/UiShapes.rgr).
+  ui:shapes:check
   ui:menufit:check
   # A table's ticks, open tabs (src/UiPick.rgr, src/UiOpenTabs.rgr) and the
   # document tab row (src/DocTabsCtl.rgr).

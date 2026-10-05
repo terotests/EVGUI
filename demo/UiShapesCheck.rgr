@@ -1,0 +1,104 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; The path outlines on Node: `ui:shapes:check`.
+Import "../src/UiShapes.rgr"
+
+class UiShapesCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    fn count:int (d:string ch:string) {
+        def n:int 0
+        def i:int 0
+        while (i < (strlen d)) {
+            if ((substring d i (i + 1)) == ch) {
+                n = (n + 1)
+            }
+            i = (i + 1)
+        }
+        return n
+    }
+
+    ; Every coordinate of `d` lies inside 0..w × 0..h.
+    fn inside:boolean (d:string w:double h:double) {
+        def parts:[string] (strsplit d " ")
+        def k:int 0
+        def isX:boolean true
+        def i:int 0
+        while (i < (array_length parts)) {
+            def p:string (itemAt parts i)
+            if ((strlen p) > 0) {
+                def t:string p
+                if (((substring p 0 1) == "M") || ((substring p 0 1) == "L")) {
+                    t = (substring p 1 (strlen p))
+                    isX = true
+                }
+                if (t != "Z") {
+                    def v@(optional):double (to_double t)
+                    if (null? v) {
+                        return false
+                    }
+                    def lim:double h
+                    if isX {
+                        lim = w
+                    }
+                    def vv:double (unwrap v)
+                    if ((vv < -0.001) || (vv > (lim + 0.001))) {
+                        return false
+                    }
+                    isX = (isX == false)
+                    k = (k + 1)
+                }
+            }
+            i = (i + 1)
+        }
+        return (k > 0)
+    }
+
+    fn hatch:void () {
+        def d:string (UiShapes.hatch(40.0 10.0 3.0 5.0))
+        ; x + y runs 0..50; stripes start at -3, 5, 13 … 45: seven of them
+        this.ok(((this.count(d "M")) == 7) ("seven stripes across 40×10: " + (to_string (this.count(d "M")))))
+        this.ok(((this.count(d "M")) == (this.count(d "Z"))) "each stripe closed")
+        this.ok((this.inside(d 40.0 10.0)) ("stripes cut at the box: " + d))
+        ; the first one is the corner triangle 0,0 – 0,0 cut: starts at the origin
+        this.ok((startsWith d "M0 0 ") ("the first stripe at the corner: " + d))
+        this.ok(((UiShapes.hatch(0.0 10.0 3.0 5.0)) == "") "an empty box has no stripes")
+        this.ok(((UiShapes.hatch(10.0 10.0 0.0 5.0)) == "") "no thickness, no stripes")
+        def thin:string (UiShapes.hatch(2.0 200.0 3.0 5.0))
+        this.ok((this.inside(thin 2.0 200.0)) "a thin tall band is cut too")
+    }
+
+    fn tab:void () {
+        def up:string (UiShapes.tab(80.0 22.0 6.0 false))
+        this.ok((up == "M0 22 L0 0 L74 0 L80 6 L80 22 Z ") ("standing tab: " + up))
+        def dn:string (UiShapes.tab(80.0 22.0 6.0 true))
+        this.ok((dn == "M0 0 L80 0 L80 16 L74 22 L0 22 Z ") ("hanging tab: " + dn))
+        def big:string (UiShapes.tab(4.0 22.0 6.0 false))
+        this.ok((this.inside(big 4.0 22.0)) ("a cut longer than the tab is kept inside: " + big))
+    }
+
+    fn num:void () {
+        this.ok(((UiShapes.num(3.0)) == "3") "3")
+        this.ok(((UiShapes.num(2.5)) == "2.5") ("2.5: " + (UiShapes.num(2.5))))
+        this.ok(((UiShapes.num(0.125)) == "0.13") ("0.125: " + (UiShapes.num(0.125))))
+        this.ok(((UiShapes.num(1.05)) == "1.05") ("1.05: " + (UiShapes.num(1.05))))
+        this.ok(((UiShapes.num(-4.2)) == "-4.2") ("-4.2: " + (UiShapes.num(-4.2))))
+    }
+
+    sfn main:void () {
+        def c (new UiShapesCheck())
+        c.hatch()
+        c.tab()
+        c.num()
+        print ("UiShapes: " + (to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
+    }
+}
