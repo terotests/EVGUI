@@ -196,6 +196,18 @@ ok("a reader hears the subtitle and the buttons", tr.includes("ch-sub") && tr.in
 c.clearActions();
 c.readOnly = false;
 
+// --- bare ----------------------------------------------------------------------
+console.log("bare");
+d = fresh();
+c = d.chat;
+c.setOpen(true);
+c.bare = true;
+c.add("1", "zebra", "Anonymous Zebra", "#ea580c", "In a callout", "09:00", false);
+d.rebuild();
+ok("bare: no head, no ×", rect("ch-head") === null && rect("ch-close") === null && !c.owns("ch-close"));
+ok("bare: the messages and the composer still", rect(c.msgTid(0)) !== null && rect("ch-composer") !== null);
+ok("bare: a reader hears no close button", !c.rows().some((r) => r.tid === "ch-close"));
+
 // --- a pin --------------------------------------------------------------------
 console.log("pin");
 d = fresh();

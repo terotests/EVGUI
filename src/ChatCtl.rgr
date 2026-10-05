@@ -109,6 +109,8 @@ class ChatCtl extends UiCtl {
     def texts:[TextCtl]
     def textIds:[string]
     def selIn:int -1
+    ; no head (title and ×): the host frames it (a callout's head, say)
+    def bare:boolean false
 
     Constructor () {
     }
@@ -284,6 +286,9 @@ class ChatCtl extends UiCtl {
     ; subtitle and the buttons leave the messages
     fn chromeH:double () {
         def used:double 84.0
+        if bare {
+            used = (used - 36.0)
+        }
         if ((strlen subtitle) > 0) {
             used = (used + 22.0)
         }
@@ -557,10 +562,12 @@ class ChatCtl extends UiCtl {
     fn build:void () {
         this.keepTexts()
         def root:EVGElement (UiTree.div(tid "chat-panel"))
-        def head:EVGElement (UiTree.div((tid + "-head") "chat-head"))
-        head.addChild((UiTree.label((tid + "-title") "chat-title" title)))
-        head.addChild((UiTree.label((tid + "-close") "chat-close" "×")))
-        root.addChild(head)
+        if (bare == false) {
+            def head:EVGElement (UiTree.div((tid + "-head") "chat-head"))
+            head.addChild((UiTree.label((tid + "-title") "chat-title" title)))
+            head.addChild((UiTree.label((tid + "-close") "chat-close" "×")))
+            root.addChild(head)
+        }
         if ((strlen subtitle) > 0) {
             root.addChild((UiTree.label((tid + "-sub") "chat-sub" subtitle)))
         }
@@ -650,7 +657,9 @@ class ChatCtl extends UiCtl {
     fn tids:[string] () {
         def a:[string]
         push a tid
-        push a (tid + "-close")
+        if (bare == false) {
+            push a (tid + "-close")
+        }
         if ((strlen subtitle) > 0) {
             push a (tid + "-sub")
         }
@@ -697,11 +706,13 @@ class ChatCtl extends UiCtl {
     fn rows:[UiRow] () {
         def out:[UiRow]
         push out (UiRow.of(tid (EVGA11yRole.region()) title))
-        def close:UiRow (UiRow.of((tid + "-close") (EVGA11yRole.button()) closeText))
-        close.parentTid = tid
-        close.focusable = true
-        close.tabStop = true
-        push out close
+        if (bare == false) {
+            def close:UiRow (UiRow.of((tid + "-close") (EVGA11yRole.button()) closeText))
+            close.parentTid = tid
+            close.focusable = true
+            close.tabStop = true
+            push out close
+        }
         if ((strlen subtitle) > 0) {
             def sub:UiRow (UiRow.of((tid + "-sub") (EVGA11yRole.text()) subtitle))
             sub.parentTid = tid
