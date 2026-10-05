@@ -20,6 +20,12 @@
 ; reader is at the end (`follow`), and a reader who scrolled up is left where
 ; they are with a "N new" button that jumps to the end.
 ;
+; A THREAD (one conversation of several, such as a comment pinned to a
+; slide): `subtitle` is a line under the title ("Slide 3 · resolved"),
+; `addAction` puts buttons in a row under it (`<tid>-act-<value>`; a press
+; leaves the value in `acted` for the host to `takeAction`), and `readOnly`
+; shows `readOnlyText` where the composer was (a closed thread).
+;
 ; KEYS (the host sends them while the composer has focus): Enter sends,
 ; Escape closes, PageUp/PageDown scroll; typing and every other key are the
 ; text field's (caret, selection, Ctrl+A, Backspace a whole emoji). POINTER:
@@ -80,6 +86,17 @@ class ChatCtl extends UiCtl {
     def height:double 0.0
     ; arrived while the reader was scrolled up
     def unseenBelow:int 0
+    ; a line under the title ("" none)
+    def subtitle:string ""
+    ; the buttons under the title: value, label, variant ("", "primary",
+    ; "danger"); the last one pressed, until the host takes it
+    def actValues:[string]
+    def actLabels:[string]
+    def actVariants:[string]
+    def acted:string ""
+    ; no composer: `readOnlyText` in its place
+    def readOnly:boolean false
+    def readOnlyText:string ""
 
     Constructor () {
     }
@@ -223,9 +240,53 @@ class ChatCtl extends UiCtl {
         }
     }
 
+    ; --- the buttons under the title ---------------------------------------------------
+
+    fn clearActions:void () {
+        def none:[string]
+        actValues = none
+        def none2:[string]
+        actLabels = none2
+        def none3:[string]
+        actVariants = none3
+    }
+
+    fn addAction:void (value:string label:string variant:string) {
+        push actValues value
+        push actLabels label
+        push actVariants variant
+    }
+
+    fn actionTid:string (value:string) {
+        return (tid + "-act-" + value)
+    }
+
+    ; the value of the button last pressed, once
+    fn takeAction:string () {
+        def a:string acted
+        acted = ""
+        return a
+    }
+
+    ; what the title bar and the composer (or the line in its place), the
+    ; subtitle and the buttons leave the messages
+    fn chromeH:double () {
+        def used:double 84.0
+        if ((strlen subtitle) > 0) {
+            used = (used + 22.0)
+        }
+        if ((array_length actValues) > 0) {
+            used = (used + 40.0)
+        }
+        return used
+    }
+
     ; --- the draft -------------------------------------------------------------------
 
     fn typeChar:boolean (target:string ch:string) {
+        if readOnly {
+            return false
+        }
         input.maxLength = maxLength
         input.insertText(ch)
         return true
@@ -237,6 +298,9 @@ class ChatCtl extends UiCtl {
 
     ; the draft goes to `sent` (the host posts it); "" sends nothing
     fn send:boolean () {
+        if readOnly {
+            return false
+        }
         def t:string (trim input.value)
         if ((strlen t) == 0) {
             return false
@@ -263,7 +327,9 @@ class ChatCtl extends UiCtl {
     fn keyDownWith:string (target:string key:string shift:boolean ctrl:boolean) {
         def mine:boolean ((((key == "Enter") || (key == "Escape")) || (key == "PageUp")) || (key == "PageDown"))
         if (mine == false) {
-            input.keyDownWith(input.tid key shift ctrl)
+            if (readOnly == false) {
+                input.keyDownWith(input.tid key shift ctrl)
+            }
             return ""
         }
         if (key == "Enter") {
@@ -295,6 +361,14 @@ class ChatCtl extends UiCtl {
         if (target == (tid + "-jump")) {
             this.toEnd()
             return target
+        }
+        def k:int 0
+        while (k < (array_length actValues)) {
+            if (target == (this.actionTid((itemAt actValues k)))) {
+                acted = (itemAt actValues k)
+                return target
+            }
+            k = (k + 1)
         }
         return ""
     }
@@ -336,10 +410,27 @@ class ChatCtl extends UiCtl {
         head.addChild((UiTree.label((tid + "-title") "chat-title" title)))
         head.addChild((UiTree.label((tid + "-close") "chat-close" "×")))
         root.addChild(head)
+        if ((strlen subtitle) > 0) {
+            root.addChild((UiTree.label((tid + "-sub") "chat-sub" subtitle)))
+        }
+        if ((array_length actValues) > 0) {
+            def acts:EVGElement (UiTree.div((tid + "-acts") "chat-acts"))
+            def a:int 0
+            while (a < (array_length actValues)) {
+                def acls:string "chat-act"
+                def av:string (itemAt actVariants a)
+                if ((strlen av) > 0) {
+                    acls = (acls + " chat-act-" + av)
+                }
+                acts.addChild((UiTree.label((this.actionTid((itemAt actValues a))) acls (itemAt actLabels a))))
+                a = (a + 1)
+            }
+            root.addChild(acts)
+        }
         def list:EVGElement (UiTree.div((tid + "-log") "chat-log"))
         if (height > 0.0) {
             UiTree.inline(root "height" ((to_string height) + "px"))
-            def lh:double (height - 84.0)
+            def lh:double (height - (this.chromeH()))
             if (lh < 40.0) {
                 lh = 40.0
             }
@@ -373,6 +464,13 @@ class ChatCtl extends UiCtl {
         if (unseenBelow > 0) {
             root.addChild((UiTree.label((tid + "-jump") "chat-jump" (((to_string unseenBelow) + " ") + newText))))
         }
+        if readOnly {
+            def ro:EVGElement (UiTree.div((tid + "-composer") "chat-composer chat-readonly"))
+            ro.addChild((UiTree.label((tid + "-ro") "chat-ro-text" readOnlyText)))
+            root.addChild(ro)
+            rootEl = root
+            return
+        }
         def composer:EVGElement (UiTree.div((tid + "-composer") "chat-composer"))
         input.tid = (this.fieldTid())
         input.name = placeholder
@@ -398,6 +496,14 @@ class ChatCtl extends UiCtl {
         def a:[string]
         push a tid
         push a (tid + "-close")
+        if ((strlen subtitle) > 0) {
+            push a (tid + "-sub")
+        }
+        def b:int 0
+        while (b < (array_length actValues)) {
+            push a (this.actionTid((itemAt actValues b)))
+            b = (b + 1)
+        }
         push a (tid + "-log")
         def i:int top
         while ((i < (top + shown)) && (i < (array_length messages))) {
@@ -406,6 +512,10 @@ class ChatCtl extends UiCtl {
         }
         if (unseenBelow > 0) {
             push a (tid + "-jump")
+        }
+        if readOnly {
+            push a (tid + "-ro")
+            return a
         }
         def inner:[string] (input.tids())
         def k:int 0
@@ -418,6 +528,9 @@ class ChatCtl extends UiCtl {
     }
 
     fn isFocusable:boolean (target:string) {
+        if ((indexOf target (tid + "-act-")) == 0) {
+            return true
+        }
         return (((target == (tid + "-field")) || (target == (tid + "-send"))) || (target == (tid + "-close")))
     }
 
@@ -429,6 +542,20 @@ class ChatCtl extends UiCtl {
         close.focusable = true
         close.tabStop = true
         push out close
+        if ((strlen subtitle) > 0) {
+            def sub:UiRow (UiRow.of((tid + "-sub") (EVGA11yRole.text()) subtitle))
+            sub.parentTid = tid
+            push out sub
+        }
+        def b:int 0
+        while (b < (array_length actValues)) {
+            def ar:UiRow (UiRow.of((this.actionTid((itemAt actValues b))) (EVGA11yRole.button()) (itemAt actLabels b)))
+            ar.parentTid = tid
+            ar.focusable = true
+            ar.tabStop = true
+            push out ar
+            b = (b + 1)
+        }
         def log:UiRow (UiRow.of((tid + "-log") (EVGA11yRole.log()) title))
         log.parentTid = tid
         push out log
@@ -448,6 +575,12 @@ class ChatCtl extends UiCtl {
             def j:UiRow (UiRow.of((tid + "-jump") (EVGA11yRole.button()) (((to_string unseenBelow) + " ") + newText)))
             j.parentTid = tid
             push out j
+        }
+        if readOnly {
+            def ro:UiRow (UiRow.of((tid + "-ro") (EVGA11yRole.text()) readOnlyText))
+            ro.parentTid = tid
+            push out ro
+            return out
         }
         def f:UiRow (UiRow.of((tid + "-field") (EVGA11yRole.textField()) placeholder))
         f.parentTid = tid
