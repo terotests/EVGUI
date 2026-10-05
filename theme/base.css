@@ -1760,5 +1760,12 @@
 .ui-doctab-name { font-size: 13px; color: #52525b; white-space: nowrap; height: 18px; line-height: 18px; flex-shrink: 1; }
 .ui-doctab-name-state-active { color: #09090b; }
 .ui-doctab-close { width: 16px; min-width: 16px; height: 16px; line-height: 16px; border-radius: 8px; text-align: center; font-size: 12px; color: #ffffff; background-color: #a1a1aa; }
-.ui-doctab-dragging { opacity: 0.75; }
+/* a tab dragged: its place an empty slot where it lands, a see-through copy following the pointer */
+.ui-doctab-wing-state-slot { fill: rgba(0,0,0,0); }
+.ui-doctab-body-state-slot { background-color: rgba(0,0,0,0); border: 2px dashed #a1a1aa; border-radius: 6px; }
+.ui-doctab-name-state-slot { color: rgba(0,0,0,0); }
+.ui-doctab-wing-state-ghost { fill: #bfdbfe; }
+.ui-doctab-body-state-ghost { background-color: #bfdbfe; shadow-color: rgba(30, 64, 175, 0.35); shadow-radius: 10px; shadow-offset-y: 3px; }
+.ui-doctab-name-state-ghost { color: #1e3a8a; }
+.ui-doctab-ghost { opacity: 0.8; }
 .ui-doctab-add { width: 22px; height: 22px; line-height: 22px; border-radius: 11px; margin: 0 0 5px 8px; text-align: center; font-size: 16px; color: #ffffff; background-color: #a1a1aa; cursor: pointer; }
