@@ -62,6 +62,26 @@ class ChatDemo {
         return p
     }
 
+    ; A press (and a drag to `x2`) on whatever is at the point, the way a
+    ; host selects text; -> what Ctrl+C copies then.
+    fn selectAt:string (x:double y:double x2:double clicks:int) {
+        def t:string (host.hitTest(x y))
+        host.textPressAt(t x y clicks false)
+        if (x2 != x) {
+            host.textDragToAt(x2 y)
+        }
+        host.textRelease()
+        def got:string (host.copyText())
+        this.rebuild()
+        return got
+    }
+
+    ; what Ctrl+C copies once the host was built again (it keeps no
+    ; selection; the chat does)
+    fn copyText:string () {
+        return (chat.selectedText())
+    }
+
     fn key:void (k:string shift:boolean) {
         chat.keyDownWith(chat.tid k shift false)
         this.rebuild()

@@ -1718,3 +1718,47 @@
 .pin-closed { opacity: 0.25; }
 .pin-on { border-width: 2.5px; }
 .pin:hover { border-width: 2.5px; }
+
+/* --- callout ----------------------------------------------------------------------
+ * CalloutCtl: a box beside a point with a wedge to it, draggable by its head.
+ * Plain: a white card. The "glass" look (`<part>-glass`): dark and
+ * see-through, the page behind it blurred (a comment over a slide being
+ * presented). */
+.callout {
+  display: flex; flex-direction: column;
+  background-color: #ffffff;
+  border: 1px solid #e4e4e7;
+  border-radius: 14px;
+  shadow-color: rgba(0, 0, 0, 0.22); shadow-radius: 22px; shadow-offset-y: 8px;
+}
+.callout-tail { fill: #ffffff; }
+.callout-head { display: flex; flex-direction: row; align-items: center; padding: 8px 10px 4px 14px; }
+.callout-title { flex-grow: 1; font-size: 12px; font-weight: bold; color: #52525b; }
+.callout-close { font-size: 15px; color: #71717a; padding: 0 4px; }
+.callout-body { display: flex; flex-direction: column; }
+.callout-glass {
+  background-color: rgba(15, 18, 30, 0.62);
+  border-color: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(14px);
+}
+.callout-head-glass { border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+.callout-title-glass { color: rgba(255, 255, 255, 0.72); }
+.callout-close-glass { color: rgba(255, 255, 255, 0.8); }
+.callout-tail-glass { fill: rgba(15, 18, 30, 0.62); }
+
+/* --- document tabs (DocTabsCtl): slanted edges, a light shadow ------------ */
+.ui-doctabs { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: flex-end; gap: 0; height: 38px; padding: 0 10px; }
+.ui-doctab { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: flex-end; height: 32px; flex-shrink: 1; cursor: pointer; }
+.ui-doctab-wing { width: 12px; min-width: 12px; height: 32px; fill: #e4e4e7; }
+.ui-doctab-wing-state-active { fill: #ffffff; }
+.ui-doctab-body {
+  display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 8px;
+  height: 32px; padding: 0 6px 0 4px; min-width: 60px; max-width: 200px;
+  background-color: #e4e4e7;
+}
+.ui-doctab-body-state-active { background-color: #ffffff; shadow-color: rgba(0, 0, 0, 0.12); shadow-radius: 4px; shadow-offset-y: -1px; }
+.ui-doctab-name { font-size: 13px; color: #52525b; white-space: nowrap; height: 18px; line-height: 18px; flex-shrink: 1; }
+.ui-doctab-name-state-active { color: #09090b; }
+.ui-doctab-close { width: 16px; min-width: 16px; height: 16px; line-height: 16px; border-radius: 8px; text-align: center; font-size: 12px; color: #ffffff; background-color: #a1a1aa; }
+.ui-doctab-dragging { opacity: 0.75; }
+.ui-doctab-add { width: 22px; height: 22px; line-height: 22px; border-radius: 11px; margin: 0 0 5px 8px; text-align: center; font-size: 16px; color: #ffffff; background-color: #a1a1aa; cursor: pointer; }

@@ -1,0 +1,249 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; CalloutCtl — a small box beside a point, with a wedge pointing at it, that
+; can be dragged somewhere else by its head
+; =============================================================================
+; For a word about one spot on a page: a comment being written over a slide,
+; a note on a picture. The box is as big as what is in it (the caller fills
+; `bodyEl`; `build()` makes the frame around it and leaves its children
+; alone), sits beside the point (`setPoint`) where it fits on the page, and
+; a wedge runs from its edge to the point (UiCallout has the numbers).
+;
+; A head with a title and × is optional (`title`, `closeLabel`); it is the
+; handle: `grab` on it, `dragTo` while the pointer moves, `release`. A box
+; that was dragged stays where it was put, and the wedge follows the point.
+;
+; SIZE AND PLACE: the box's size is known only after layout, so a host lays
+; the page out, calls `fit(w, h)` with the frame's laid-out size, and lays it
+; out once more (the frame and the wedge are free surfaces placed by
+; `overlayX/Y`, so the second pass moves them and nothing else).
+;
+; LOOK (base.css): `.callout` the frame, `.callout-head`/`-title`/`-close`,
+; `.callout-body`, `.callout-tail` the wedge (a path: `fill`). `look` is a
+; word that each part also gets as `<part>-<look>` (a stylesheet has no
+; descendant rules to style the parts of one look): "glass" is dark and
+; see-through, the page behind it blurred. `frameClass` is the host's own.
+;
+; TO A READER: a group named by the title; its content as it is.
+; =============================================================================
+
+Import "UiCtl.rgr"
+Import "UiTree.rgr"
+Import "UiCallout.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGUnit.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+
+class CalloutCtl extends UiCtl {
+    def geo:UiCallout (new UiCallout())
+    def title:string ""
+    def closeLabel:string ""
+    ; "" or a look's word ("glass"), and the host's own classes on the frame
+    def look:string ""
+    def frameClass:string ""
+    ; how wide the box is (its height is its content's)
+    def width:double 300.0
+    def dragging:boolean false
+    def lastX:double 0.0
+    def lastY:double 0.0
+    def frameEl:EVGElement
+    def tailEl:EVGElement
+    def bodyEl:EVGElement
+    ; the close × was pressed (the host takes it)
+    def closed:boolean false
+
+    Constructor () {
+        rootEl = (EVGElement.createDiv())
+        frameEl = (EVGElement.createDiv())
+        tailEl = (EVGElement.createPath())
+        bodyEl = (EVGElement.createDiv())
+    }
+
+    sfn make:CalloutCtl (tid:string) {
+        def c (new CalloutCtl())
+        c.tid = tid
+        return c
+    }
+
+    fn frameTid:string () {
+        return (tid + "-frame")
+    }
+
+    fn headTid:string () {
+        return (tid + "-head")
+    }
+
+    fn closeTid:string () {
+        return (tid + "-close")
+    }
+
+    fn bodyTid:string () {
+        return (tid + "-body")
+    }
+
+    fn tailTid:string () {
+        return (tid + "-tail")
+    }
+
+    fn setPoint:void (x:double y:double) {
+        geo.setPoint(x y)
+    }
+
+    fn setPage:void (w:double h:double) {
+        geo.setPage(w h)
+    }
+
+    ; the head (title bar) is the handle; the × is not
+    fn isHandle:boolean (target:string) {
+        return ((target == (this.headTid())) || (target == (tid + "-title")))
+    }
+
+    ; --- drawing -------------------------------------------------------------
+
+    fn build:void () {
+        def root:EVGElement (unwrap rootEl)
+        root.id = tid
+        root.className = "callout-root"
+        UiTree.clearChildren(root)
+        def tl:EVGElement (unwrap tailEl)
+        tl.id = (this.tailTid())
+        tl.className = (this.cls("callout-tail"))
+        tl.a11yHidden = true
+        UiTree.surface(tl "free" "start")
+        this.shapeTail()
+        root.addChild(tl)
+        def fr:EVGElement (unwrap frameEl)
+        fr.id = (this.frameTid())
+        fr.className = (trim ((this.cls("callout")) + " " + frameClass))
+        if dragging {
+            UiTree.addClass(fr "callout-dragging")
+        }
+        UiTree.clearChildren(fr)
+        UiTree.surface(fr "free" "start")
+        fr.width = (EVGUnit.px(width))
+        fr.overlayX = geo.x
+        fr.overlayY = geo.y
+        if (((strlen title) > 0) || ((strlen closeLabel) > 0)) {
+            def head:EVGElement (UiTree.div((this.headTid()) (this.cls("callout-head"))))
+            head.addChild((UiTree.label((tid + "-title") (this.cls("callout-title")) title)))
+            if ((strlen closeLabel) > 0) {
+                head.addChild((UiTree.label((this.closeTid()) (this.cls("callout-close")) "×")))
+            }
+            fr.addChild(head)
+        }
+        def body:EVGElement (unwrap bodyEl)
+        body.id = (this.bodyTid())
+        UiTree.addClass(body "callout-body")
+        fr.addChild(body)
+        root.addChild(fr)
+    }
+
+    ; a part's class, and its look's
+    fn cls:string (base:string) {
+        if ((strlen look) == 0) {
+            return base
+        }
+        return (base + " " + base + "-" + look)
+    }
+
+    ; the wedge's element as `geo` has it now
+    fn shapeTail:void () {
+        def tl:EVGElement (unwrap tailEl)
+        if geo.hasTail {
+            tl.svgPath = (geo.tailPath())
+            tl.viewBox = ("0 0 " + (to_string geo.tailBoxW) + " " + (to_string geo.tailBoxH))
+            tl.width = (EVGUnit.px(geo.tailBoxW))
+            tl.height = (EVGUnit.px(geo.tailBoxH))
+            tl.overlayX = geo.tailX
+            tl.overlayY = geo.tailY
+        } {
+            tl.svgPath = ""
+            tl.width = (EVGUnit.px(0.0))
+            tl.height = (EVGUnit.px(0.0))
+        }
+    }
+
+    ; The frame was laid out `w` × `h`: where it goes, and the wedge; the
+    ; host lays the page out again.
+    fn fit:void (w:double h:double) {
+        geo.setSize(w h)
+        geo.place()
+        def fr:EVGElement (unwrap frameEl)
+        fr.overlayX = geo.x
+        fr.overlayY = geo.y
+        this.shapeTail()
+    }
+
+    ; --- the pointer --------------------------------------------------------------
+
+    ; a press on the head starts a drag; -> true when it did
+    fn grab:boolean (target:string px:double py:double) {
+        if ((this.isHandle(target)) == false) {
+            return false
+        }
+        dragging = true
+        lastX = px
+        lastY = py
+        return true
+    }
+
+    fn dragTo:void (px:double py:double) {
+        if (dragging == false) {
+            return
+        }
+        geo.dragBy((px - lastX) (py - lastY))
+        lastX = px
+        lastY = py
+        def fr:EVGElement (unwrap frameEl)
+        fr.overlayX = geo.x
+        fr.overlayY = geo.y
+        this.shapeTail()
+    }
+
+    fn release:void () {
+        dragging = false
+    }
+
+    fn activate:string (target:string) {
+        if (target == (this.closeTid())) {
+            closed = true
+            return target
+        }
+        return ""
+    }
+
+    fn isFocusable:boolean (target:string) {
+        return (target == (this.closeTid()))
+    }
+
+    ; --- to a reader ---------------------------------------------------------------
+
+    fn tids:[string] () {
+        def a:[string]
+        push a tid
+        push a (this.frameTid())
+        push a (this.tailTid())
+        if (((strlen title) > 0) || ((strlen closeLabel) > 0)) {
+            push a (this.headTid())
+            push a (tid + "-title")
+            if ((strlen closeLabel) > 0) {
+                push a (this.closeTid())
+            }
+        }
+        push a (this.bodyTid())
+        return a
+    }
+
+    fn rows:[UiRow] () {
+        def out:[UiRow]
+        def r:UiRow (UiRow.of(tid (EVGA11yRole.group()) title))
+        push out r
+        if ((strlen closeLabel) > 0) {
+            def c:UiRow (UiRow.of((this.closeTid()) (EVGA11yRole.button()) closeLabel))
+            c.focusable = true
+            push out c
+        }
+        return out
+    }
+}
