@@ -80,6 +80,8 @@ SUITES=(
   # document tab row (src/DocTabsCtl.rgr).
   ui:pick:check
   ui:doctabs:check
+  # The left icon rail (src/RailCtl.rgr).
+  ui:rail:check
   ui:input:field
   ui:text:select
   # A callout beside its point (src/UiCallout.rgr, src/CalloutCtl.rgr).

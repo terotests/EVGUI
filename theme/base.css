@@ -1746,6 +1746,21 @@
 .callout-close-glass { color: rgba(255, 255, 255, 0.8); }
 .callout-tail-glass { fill: rgba(15, 18, 30, 0.62); }
 
+/* --- rail (RailCtl): a column of places, an icon over its name ------------ */
+.ui-rail { display: flex; flex-direction: column; flex-wrap: nowrap; align-items: center; justify-content: space-between; width: 72px; padding: 6px 0 10px 0; }
+.ui-rail-group { display: flex; flex-direction: column; flex-wrap: nowrap; align-items: center; gap: 4px; }
+.ui-rail-item { display: flex; flex-direction: column; flex-wrap: nowrap; align-items: center; gap: 2px; width: 64px; padding: 4px 0 5px 0; border-radius: 10px; cursor: pointer; }
+.ui-rail-item:hover { background-color: rgba(9, 9, 11, 0.05); }
+.ui-rail-item:focus { background-color: rgba(9, 9, 11, 0.05); }
+.ui-rail-item-disabled { opacity: 0.45; }
+.ui-rail-pad { display: flex; flex-direction: row; align-items: center; justify-content: center; width: 40px; height: 30px; border-radius: 9px; }
+.ui-rail-pad-state-active { background-color: #e0e7ff; }
+.ui-rail-icon { width: 20px; height: 20px; stroke: #52525b; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ui-rail-icon-state-active { stroke: #4338ca; }
+.ui-rail-label { font-size: 11px; line-height: 14px; height: 14px; color: #52525b; white-space: nowrap; }
+.ui-rail-label-state-active { color: #312e81; font-weight: 600; }
+.ui-rail-badge { position: absolute; left: 28px; top: -4px; font-size: 14px; line-height: 14px; color: #dc2626; }
+
 /* --- document tabs (DocTabsCtl): slanted edges, a light shadow ------------ */
 .ui-doctabs { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: flex-end; gap: 0; height: 38px; padding: 0 10px; }
 .ui-doctab { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: flex-end; height: 32px; flex-shrink: 1; cursor: pointer; }

@@ -1,0 +1,104 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; The left icon rail (RailCtl), on Node: `ui:rail:check`.
+Import "../src/RailCtl.rgr"
+
+class RailCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    fn rail:RailCtl () {
+        def r (new RailCtl())
+        r.tid = "rail"
+        r.name = "Places"
+        r.addItem("home" "Home" "M4 4h16v16H4z")
+        r.addItem("files" "Files" "M3 6h18")
+        r.addItem("off" "Off" "M3 6h18")
+        r.setDisabled("off" true)
+        r.addBottom("settings" "Settings" "M4 6h16")
+        r.value = "home"
+        r.build()
+        return r
+    }
+
+    fn structure:void () {
+        def r:RailCtl (this.rail())
+        def root:EVGElement (unwrap r.rootEl)
+        this.ok(((root.getChildCount()) == 2) "two groups: the top places and the foot")
+        def head:EVGElement (root.getChild(0))
+        def foot:EVGElement (root.getChild(1))
+        this.ok(((head.getChildCount()) == 3) "three places on top")
+        this.ok(((foot.getChildCount()) == 1) "settings at the foot")
+        def first:EVGElement (head.getChild(0))
+        this.ok((first.id == "rail-home") ("item id: " + first.id))
+        this.ok(((indexOf first.className "ui-rail-item-state-active") >= 0) ("the open one is active: " + first.className))
+        def second:EVGElement (head.getChild(1))
+        this.ok(((indexOf second.className "ui-rail-item-state-inactive") >= 0) "the others are not")
+        this.ok(((array_length r.itemEls) == 4) "every item kept for the host")
+    }
+
+    fn pressing:void () {
+        def r:RailCtl (this.rail())
+        this.ok(((r.hitFocusId("rail-files-icon")) == "rail-files") "a press on the icon is the item's")
+        this.ok(((r.hitFocusId("rail-files-label")) == "rail-files") "a press on the name is the item's")
+        r.activate("rail-files")
+        this.ok((r.value == "files") "activating opens the place")
+        this.ok(((r.takePressed()) == "files") "the host reads what was pressed")
+        this.ok(((r.takePressed()) == "") "once")
+        r.activate("rail-off")
+        this.ok((r.value == "files") "a disabled place does not open")
+        this.ok(((r.takePressed()) == "") "nor is it pressed")
+    }
+
+    fn keys:void () {
+        def r:RailCtl (this.rail())
+        this.ok(((r.keyDown("rail-home" "ArrowDown")) == "rail-files") "Down: the next place")
+        this.ok(((r.keyDown("rail-files" "ArrowDown")) == "rail-settings") "Down skips a disabled one, top then foot")
+        this.ok(((r.keyDown("rail-settings" "ArrowDown")) == "rail-home") "and wraps")
+        this.ok(((r.keyDown("rail-home" "ArrowUp")) == "rail-settings") "Up wraps back")
+        this.ok(((r.keyDown("rail-files" "Home")) == "rail-home") "Home: the first")
+        this.ok(((r.keyDown("rail-home" "End")) == "rail-settings") "End: the last")
+        r.keyDown("rail-files" "Enter")
+        this.ok((r.value == "files") "Enter opens the focused place")
+    }
+
+    fn a11y:void () {
+        def r:RailCtl (this.rail())
+        r.setBadge("files" "3")
+        def rows:[UiRow] (r.rows())
+        this.ok(((array_length rows) == 5) ("rows: the rail and four places, got " + (to_string (array_length rows))))
+        def root:UiRow (itemAt rows 0)
+        this.ok((root.role == (EVGA11yRole.navigation())) "the rail is a navigation")
+        this.ok((root.name == "Places") "named")
+        def home:UiRow (itemAt rows 1)
+        this.ok((home.current == "page") "the open place is aria-current page")
+        this.ok(home.tabStop "and the tab stop")
+        def files:UiRow (itemAt rows 2)
+        this.ok((files.name == "Files (3)") ("a badge is read with the name: " + files.name))
+        this.ok((files.current == "") "another place is not current")
+        def off:UiRow (itemAt rows 3)
+        this.ok((off.disabled && (off.focusable == false)) "a disabled place cannot take focus")
+        def last:UiRow (itemAt rows 4)
+        this.ok((last.tid == "rail-settings") "the foot's places come last")
+    }
+
+    sfn main:void () {
+        def c (new RailCheck())
+        c.structure()
+        c.pressing()
+        c.keys()
+        c.a11y()
+        print ((to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
+        if (c.fails > 0) {
+            print "RESULT FAIL"
+        }
+    }
+}

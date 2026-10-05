@@ -1,0 +1,404 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; RailCtl — an app's left icon rail (Slack's, Teams', VS Code's activity bar)
+; =============================================================================
+; A narrow column of places: each an icon with its name under it, the one
+; open now highlighted. Items go at the top (`addItem`) or the bottom
+; (`addBottom`: settings, the account), with the space between them empty.
+;
+;   root      role navigation, named `name`
+;   items     role button; the open one `aria-current="page"`; a roving tab
+;             stop (the open one, else the first)
+;   arrows    Up / Down move focus, skip disabled, wrap; Home / End
+;   activate  makes the item the open one (`value`) and records it in
+;             `pressed`, which the host reads and clears: a place that opens
+;             a window rather than a view sets `value` back itself
+;
+; An icon is an SVG path on a 24×24 grid, stroked (`.ui-rail-icon` sets the
+; stroke): the rail stays one colour per state in every theme. A badge (a
+; count, or "•") sits on the icon's corner.
+;
+; Element ids: `<tid>-<value>` an item, `<tid>-<value>-icon` its icon,
+; `<tid>-<value>-label` its name, `<tid>-<value>-badge` its badge.
+; =============================================================================
+
+Import "UiCtl.rgr"
+Import "UiTree.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+
+class RailItem {
+    def value:string ""
+    def name:string ""
+    def icon:string ""
+    def badge:string ""
+    def bottom:boolean false
+    def disabled:boolean false
+}
+
+class RailCtl extends UiCtl {
+    def items:[RailItem]
+    ; the open place
+    def value:string ""
+    ; the last item activated, "" once the host has read it (`takePressed`)
+    def pressed:string ""
+    def rovingValue:string ""
+    ; the items' elements as the last build made them, in `items`' order
+    def itemEls:[EVGElement]
+
+    Constructor () {
+        rootEl = (EVGElement.createDiv())
+        def empty:[RailItem]
+        items = empty
+        def e:[EVGElement]
+        itemEls = e
+    }
+
+    fn add:RailItem (itemValue:string itemName:string iconPath:string) {
+        def it (new RailItem())
+        it.value = itemValue
+        it.name = itemName
+        it.icon = iconPath
+        push items it
+        return it
+    }
+
+    fn addItem:void (itemValue:string itemName:string iconPath:string) {
+        this.add(itemValue itemName iconPath)
+    }
+
+    ; An item kept at the bottom of the rail.
+    fn addBottom:void (itemValue:string itemName:string iconPath:string) {
+        def it:RailItem (this.add(itemValue itemName iconPath))
+        it.bottom = true
+    }
+
+    fn itemFor@(optional):RailItem (itemValue:string) {
+        def found@(optional):RailItem
+        def i:int 0
+        while (i < (array_length items)) {
+            def it:RailItem (itemAt items i)
+            if (it.value == itemValue) {
+                found = it
+            }
+            i = (i + 1)
+        }
+        return found
+    }
+
+    ; A count or a dot on an item's icon; "" takes it off.
+    fn setBadge:void (itemValue:string words:string) {
+        def m@(optional):RailItem (this.itemFor(itemValue))
+        if (!null? m) {
+            def it:RailItem (unwrap m)
+            it.badge = words
+        }
+    }
+
+    fn setDisabled:void (itemValue:string off:boolean) {
+        def m@(optional):RailItem (this.itemFor(itemValue))
+        if (!null? m) {
+            def it:RailItem (unwrap m)
+            it.disabled = off
+        }
+    }
+
+    ; The item activated since the last call, "" for none.
+    fn takePressed:string () {
+        def p:string pressed
+        pressed = ""
+        return p
+    }
+
+    fn itemTid:string (itemValue:string) {
+        return (tid + "-" + itemValue)
+    }
+
+    ; The item whose element is (or holds) `hit`, "" for none.
+    fn valueOf:string (hit:string) {
+        def i:int 0
+        while (i < (array_length items)) {
+            def it:RailItem (itemAt items i)
+            def t:string (this.itemTid(it.value))
+            if ((hit == t) || ((indexOf hit (t + "-")) == 0)) {
+                return it.value
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    sfn iconEl:EVGElement (id:string path:string) {
+        def m (EVGElement.createDiv())
+        m.id = id
+        m.className = "ui-rail-icon"
+        m.tagName = "path"
+        m.elementType = 3
+        m.viewBox = "0 0 24 24"
+        m.svgPath = path
+        m.a11yHidden = true
+        return m
+    }
+
+    fn itemEl:EVGElement (it:RailItem) {
+        def el (EVGElement.createDiv())
+        def t:string (this.itemTid(it.value))
+        el.id = t
+        el.className = "ui-rail-item"
+        def word:string "inactive"
+        if (it.value == value) {
+            word = "active"
+        }
+        UiTree.setState(el "ui-rail-item" word)
+        if it.disabled {
+            UiTree.addClass(el "ui-rail-item-disabled")
+        }
+        def pad (EVGElement.createDiv())
+        pad.id = (t + "-pad")
+        pad.className = "ui-rail-pad"
+        UiTree.setState(pad "ui-rail-pad" word)
+        def ic:EVGElement (RailCtl.iconEl((t + "-icon") it.icon))
+        UiTree.setState(ic "ui-rail-icon" word)
+        pad.addChild(ic)
+        if ((strlen it.badge) > 0) {
+            def b:EVGElement (UiTree.label((t + "-badge") "ui-rail-badge" it.badge))
+            b.a11yHidden = true
+            pad.addChild(b)
+        }
+        el.addChild(pad)
+        def lb:EVGElement (UiTree.label((t + "-label") "ui-rail-label" it.name))
+        UiTree.setState(lb "ui-rail-label" word)
+        el.addChild(lb)
+        return el
+    }
+
+    fn build:void () {
+        def root:EVGElement (unwrap rootEl)
+        root.id = tid
+        root.className = "ui-rail"
+        UiTree.clearChildren(root)
+        ; two groups, the root spreading them apart: the top places and,
+        ; at the foot, the bottom ones
+        def head (EVGElement.createDiv())
+        head.id = (tid + "-head")
+        head.className = "ui-rail-group"
+        def foot (EVGElement.createDiv())
+        foot.id = (tid + "-foot")
+        foot.className = "ui-rail-group"
+        def els:[EVGElement]
+        def i:int 0
+        while (i < (array_length items)) {
+            def it:RailItem (itemAt items i)
+            def el:EVGElement (this.itemEl(it))
+            push els el
+            if it.bottom {
+                foot.addChild(el)
+            } {
+                head.addChild(el)
+            }
+            i = (i + 1)
+        }
+        root.addChild(head)
+        root.addChild(foot)
+        itemEls = els
+    }
+
+    fn hitFocusId:string (hit:string) {
+        def v:string (this.valueOf(hit))
+        if ((strlen v) == 0) {
+            return ""
+        }
+        return (this.itemTid(v))
+    }
+
+    fn activate:string (target:string) {
+        if disabled {
+            return ""
+        }
+        def v:string (this.valueOf(target))
+        def m@(optional):RailItem (this.itemFor(v))
+        if (null? m) {
+            return ""
+        }
+        def it:RailItem (unwrap m)
+        if it.disabled {
+            return ""
+        }
+        value = v
+        pressed = v
+        rovingValue = v
+        this.build()
+        return ""
+    }
+
+    ; Items in the order the rail shows them: the top ones, then the bottom.
+    fn shown:[RailItem] () {
+        def out:[RailItem]
+        def i:int 0
+        while (i < (array_length items)) {
+            def it:RailItem (itemAt items i)
+            if (it.bottom == false) {
+                push out it
+            }
+            i = (i + 1)
+        }
+        def j:int 0
+        while (j < (array_length items)) {
+            def it2:RailItem (itemAt items j)
+            if it2.bottom {
+                push out it2
+            }
+            j = (j + 1)
+        }
+        return out
+    }
+
+    ; From `from` (an index into `shown`), `delta` steps over enabled items,
+    ; wrapping; -1 when none is enabled.
+    sfn stepShown:int (list:[RailItem] from:int delta:int) {
+        def n:int (array_length list)
+        if (n == 0) {
+            return -1
+        }
+        def k:int from
+        def tries:int 0
+        while (tries < n) {
+            k = (k + delta)
+            if (k < 0) {
+                k = (n - 1)
+            }
+            if (k >= n) {
+                k = 0
+            }
+            def it:RailItem (itemAt list k)
+            if (it.disabled == false) {
+                return k
+            }
+            tries = (tries + 1)
+        }
+        return -1
+    }
+
+    fn keyDown:string (target:string key:string) {
+        if disabled {
+            return ""
+        }
+        def list:[RailItem] (this.shown())
+        def v:string (this.valueOf(target))
+        def from:int -1
+        def i:int 0
+        while (i < (array_length list)) {
+            def it:RailItem (itemAt list i)
+            if (it.value == v) {
+                from = i
+            }
+            i = (i + 1)
+        }
+        if (from < 0) {
+            return ""
+        }
+        def landed:int -1
+        if (key == "ArrowDown") {
+            landed = (RailCtl.stepShown(list from 1))
+        }
+        if (key == "ArrowUp") {
+            landed = (RailCtl.stepShown(list from -1))
+        }
+        if (key == "Home") {
+            landed = (RailCtl.stepShown(list -1 1))
+        }
+        if (key == "End") {
+            landed = (RailCtl.stepShown(list (array_length list) -1))
+        }
+        if (landed < 0) {
+            if (UiCtl.activatesOn(key)) {
+                this.activate(target)
+            }
+            return ""
+        }
+        def to:RailItem (itemAt list landed)
+        rovingValue = to.value
+        return (this.itemTid(to.value))
+    }
+
+    fn tids:[string] () {
+        def a:[string]
+        push a tid
+        def i:int 0
+        while (i < (array_length items)) {
+            def it:RailItem (itemAt items i)
+            push a (this.itemTid(it.value))
+            i = (i + 1)
+        }
+        return a
+    }
+
+    fn isFocusable:boolean (target:string) {
+        if disabled {
+            return false
+        }
+        def m@(optional):RailItem (this.itemFor((this.valueOf(target))))
+        if (null? m) {
+            return false
+        }
+        def it:RailItem (unwrap m)
+        return ((it.disabled == false) && (target == (this.itemTid(it.value))))
+    }
+
+    fn onFocus:void (target:string) {
+        def v:string (this.valueOf(target))
+        if ((strlen v) > 0) {
+            rovingValue = v
+        }
+    }
+
+    ; The roving tab stop: the one focused last, else the open one, else the
+    ; first enabled.
+    fn stopValue:string () {
+        if (!null? (this.itemFor(rovingValue))) {
+            return rovingValue
+        }
+        if (!null? (this.itemFor(value))) {
+            return value
+        }
+        def list:[RailItem] (this.shown())
+        def k:int (RailCtl.stepShown(list -1 1))
+        if (k < 0) {
+            return ""
+        }
+        def it:RailItem (itemAt list k)
+        return it.value
+    }
+
+    fn rows:[UiRow] () {
+        def out:[UiRow]
+        def rootRow:UiRow (UiRow.of(tid (EVGA11yRole.navigation()) name))
+        rootRow.orientation = "vertical"
+        push out rootRow
+        def stop:string (this.stopValue())
+        def list:[RailItem] (this.shown())
+        def i:int 0
+        while (i < (array_length list)) {
+            def it:RailItem (itemAt list i)
+            def label:string it.name
+            if ((strlen it.badge) > 0) {
+                label = (label + " (" + it.badge + ")")
+            }
+            def row:UiRow (UiRow.of((this.itemTid(it.value)) (EVGA11yRole.button()) label))
+            row.parentTid = tid
+            if (it.value == value) {
+                row.current = "page"
+                row.state = "active"
+            } {
+                row.state = "inactive"
+            }
+            row.disabled = it.disabled
+            row.focusable = (it.disabled == false)
+            row.tabStop = ((it.value == stop) && (it.disabled == false))
+            push out row
+            i = (i + 1)
+        }
+        return out
+    }
+}
