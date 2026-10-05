@@ -1,0 +1,113 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; The warm cast of a light sheet, on Node: `ui:tone:check`.
+;
+; The colour map (UiTone.warm) keeps every contrast ratio, warms the greys
+; and white, leaves saturated colours their hue and keeps alpha; and the
+; sheet keeps its text but for the colours of its host's rules, leaves other
+; themes' rules and palettes alone and reads back without an error, also
+; under UiDark's overlay.
+Import "../src/UiTone.rgr"
+
+class UiToneCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    sfn hex:EVGColor (s:string) {
+        return (EVGColor.parse(s))
+    }
+
+    ; red above blue by at least `d` (0..255): a warm colour
+    sfn warmish:boolean (c:EVGColor d:int) {
+        return (((c.red()) - (c.blue())) >= d)
+    }
+
+    fn colors:void () {
+        def ramp:[string] ([] _:string ("#ffffff" "#f8fafc" "#f1f5f9" "#e2e8f0" "#cbd5e1" "#94a3b8" "#64748b" "#475569" "#334155" "#1e293b" "#0f172a" "#000000" "#2563eb" "#4f46e5" "#dc2626" "#16a34a" "#f59e0b" "#dbeafe" "#fef2f2"))
+        def i:int 0
+        def n:int (array_length ramp)
+        while (i < n) {
+            def j:int 0
+            while (j < n) {
+                def a:EVGColor (UiToneCheck.hex((itemAt ramp i)))
+                def b:EVGColor (UiToneCheck.hex((itemAt ramp j)))
+                def before:double (UiDark.contrast(a b))
+                def after:double (UiDark.contrast((UiTone.warm(a)) (UiTone.warm(b))))
+                ; equal but for rounding to 8 bits, and for pure black,
+                ; which stays black: there a ratio loses the factor's 6 %
+                def want:double (before * 0.97)
+                if (((itemAt ramp i) == "#000000") || ((itemAt ramp j) == "#000000")) {
+                    want = (before * 0.93)
+                }
+                this.ok((after >= want) ((((itemAt ramp i) + " on ") + (itemAt ramp j)) + ((" " + (to_string before)) + (" -> " + (to_string after)))))
+                j = (j + 1)
+            }
+            i = (i + 1)
+        }
+        def white:EVGColor (UiTone.warm((UiToneCheck.hex("#ffffff"))))
+        this.ok((UiToneCheck.warmish(white 12)) ("white turns paper: " + (white.toHexString())))
+        this.ok(((UiDark.luminance(white)) > 0.9) ("...still light: " + (white.toHexString())))
+        def slate:EVGColor (UiTone.warm((UiToneCheck.hex("#64748b"))))
+        this.ok((UiToneCheck.warmish(slate 8)) ("a slate grey turns a warm stone: " + (slate.toHexString())))
+        def ink:EVGColor (UiTone.warm((UiToneCheck.hex("#1e293b"))))
+        this.ok((UiToneCheck.warmish(ink 1)) ("dark slate ink turns warm: " + (ink.toHexString())))
+        def blue:EVGColor (UiTone.warm((UiToneCheck.hex("#2563eb"))))
+        this.ok((((blue.blue()) > (blue.red())) && ((blue.blue()) > (blue.green()))) ("blue stays blue: " + (blue.toHexString())))
+        def wash:EVGColor (UiTone.warm((UiToneCheck.hex("#dbeafe"))))
+        this.ok(((wash.blue()) > (wash.red())) ("a pale blue selection stays bluish: " + (wash.toHexString())))
+        def red:EVGColor (UiTone.warm((UiToneCheck.hex("#dc2626"))))
+        this.ok(((red.red()) > ((red.green()) + 100)) ("red stays red: " + (red.toHexString())))
+        def tint:EVGColor (UiTone.warm((UiToneCheck.hex("rgba(0, 0, 0, 0.08)"))))
+        this.ok(((tint.a > 0.079) && (tint.a < 0.081)) ("alpha kept: " + (tint.toCSSString())))
+        def l1:double (UiDark.luminance((UiTone.warm((UiToneCheck.hex("#f1f5f9"))))))
+        def l2:double (UiDark.luminance((UiTone.warm((UiToneCheck.hex("#e2e8f0"))))))
+        this.ok((l1 > l2) "the order of the greys is kept")
+    }
+
+    fn sheets:void () {
+        def css:string "/* a #ffffff comment */\n@vars { --bg: #ffffff; --pad: 4px; }\n@vars retro { --x: #ffffff; }\n.a { color: #000000; padding: 4px; shadow-color: rgba(15,23,42,0.2); }\n.theme-tb .a { color: #ffffff; }\n.b:hover { background-color: #f4f4f5; /* #f4f4f5 */ }\n.theme-retro .c { color: #ffffff; }\n.theme-dark .g { color: #ffffff; }\n.d { background: linear-gradient(180deg, #ffffff, #f1f5f9); border: 1px solid #e2e8f0; }\n@media (max-width: 600px) { .f { color: #ffffff; } }\n.e { width: 10px; }"
+        def o:string (UiTone.warmSheet(css "tb"))
+        def w:string ((UiTone.warm((UiToneCheck.hex("#ffffff")))).toHexString())
+        this.ok(((indexOf o "/* a #ffffff comment */\n@vars {") == 0) ("comments and order are kept: " + o))
+        this.ok(((indexOf o ("--bg: " + w)) >= 0) ("the palette warms: " + o))
+        this.ok(((indexOf o "--pad: 4px;") >= 0) "a variable with no colour stays as it is")
+        this.ok(((indexOf o "@vars retro { --x: #ffffff; }") >= 0) "another theme's palette stays")
+        this.ok(((indexOf o ".a { color: #") >= 0) "the unscoped rule is in")
+        this.ok(((indexOf o "padding: 4px;") >= 0) "other properties stay")
+        this.ok(((indexOf o "rgba(15,23,42,0.2)") < 0) "shadows warm too")
+        this.ok(((indexOf o (".theme-tb .a { color: " + w)) >= 0) ("the host's own rule warms: " + o))
+        this.ok(((indexOf o "/* #f4f4f5 */") >= 0) "a comment in a rule is kept")
+        this.ok(((indexOf o ".theme-retro .c { color: #ffffff; }") >= 0) "a skin's rule stays")
+        this.ok(((indexOf o ".theme-dark .g { color: #ffffff; }") >= 0) "a hand-written dark rule stays")
+        this.ok(((indexOf o "#f1f5f9") < 0) "a gradient's stops warm")
+        this.ok(((indexOf o "border: 1px solid #") >= 0) "a border keeps its width and style")
+        this.ok(((indexOf o ("@media (max-width: 600px) { .f { color: " + w)) >= 0) ("a media rule warms: " + o))
+        this.ok(((indexOf o ".e { width: 10px; }") >= 0) "a rule with no colour stays")
+        def back (new EVGStyleSheet())
+        back.parse(o)
+        this.ok(((back.getErrorCount()) == 0) "the warm sheet reads back without errors")
+        def dark (new EVGStyleSheet())
+        dark.parse((UiDark.overlay(o "tb")))
+        this.ok(((dark.getErrorCount()) == 0) "its dark overlay reads back without errors")
+        this.ok(((UiTone.warmSheet("" "")) == "") "an empty sheet stays empty")
+    }
+
+    fn main:void () {
+        this.colors()
+        this.sheets()
+        print ((("UiToneCheck: " + (to_string passes)) + " passed, ") + ((to_string fails) + " failed"))
+    }
+
+    sfn main:void () {
+        def c (new UiToneCheck())
+        c.main()
+    }
+}

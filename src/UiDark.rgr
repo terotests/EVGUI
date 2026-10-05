@@ -247,6 +247,14 @@ class UiDark {
     ; `rgb()`, `rgba()`, `hsl()`, `hsla()`, `white` and `black`. A colour
     ; built from var() is left as it is (its variable is mapped instead).
     sfn value:string (v:string) {
+        return (UiDark.mapValue(v (fn:EVGColor (c:EVGColor) {
+            return (UiDark.color(c))
+        })))
+    }
+
+    ; `value` with any colour map: every colour in `v` through `map`. UiTone
+    ; reads sheets with it too.
+    sfn mapValue:string (v:string map:(fn:EVGColor (c:EVGColor))) {
         def out:string ""
         def n:int (strlen v)
         def i:int 0
@@ -259,7 +267,7 @@ class UiDark {
                 }
                 def len:int ((j - i) - 1)
                 if ((((len == 3) || (len == 4)) || (len == 6)) || (len == 8)) {
-                    out = (out + (UiDark.colorText((UiDark.color((EVGColor.parse((substring v i j))))))))
+                    out = (out + (UiDark.colorText((map((EVGColor.parse((substring v i j))))))))
                 } {
                     out = (out + (substring v i j))
                 }
@@ -282,13 +290,13 @@ class UiDark {
                             if ((indexOf whole "var(") >= 0) {
                                 out = (out + whole)
                             } {
-                                out = (out + (UiDark.colorText((UiDark.color((EVGColor.parse(whole)))))))
+                                out = (out + (UiDark.colorText((map((EVGColor.parse(whole)))))))
                             }
                             i = (close + 1)
                         }
                     } {
                         if ((word == "white") || (word == "black")) {
-                            out = (out + (UiDark.colorText((UiDark.color((EVGColor.parse(word)))))))
+                            out = (out + (UiDark.colorText((map((EVGColor.parse(word)))))))
                         } {
                             out = (out + word)
                         }
