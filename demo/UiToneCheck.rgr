@@ -41,19 +41,25 @@ class UiToneCheck {
                 def b:EVGColor (UiToneCheck.hex((itemAt ramp j)))
                 def before:double (UiDark.contrast(a b))
                 def after:double (UiDark.contrast((UiTone.warm(a)) (UiTone.warm(b))))
+                def afterPaper:double (UiDark.contrast((UiTone.paper(a)) (UiTone.paper(b))))
                 ; equal but for rounding to 8 bits, and for pure black,
                 ; which stays black: there a ratio loses the factor's 6 %
                 def want:double (before * 0.97)
                 if (((itemAt ramp i) == "#000000") || ((itemAt ramp j) == "#000000")) {
                     want = (before * 0.93)
                 }
-                this.ok((after >= want) ((((itemAt ramp i) + " on ") + (itemAt ramp j)) + ((" " + (to_string before)) + (" -> " + (to_string after)))))
+                this.ok((after >= (before * 0.97)) ((((itemAt ramp i) + " on ") + (itemAt ramp j)) + ((" warm " + (to_string before)) + (" -> " + (to_string after)))))
+                this.ok((afterPaper >= want) ((((itemAt ramp i) + " on ") + (itemAt ramp j)) + ((" paper " + (to_string before)) + (" -> " + (to_string afterPaper)))))
                 j = (j + 1)
             }
             i = (i + 1)
         }
-        def white:EVGColor (UiTone.warm((UiToneCheck.hex("#ffffff"))))
-        this.ok((UiToneCheck.warmish(white 12)) ("white turns paper: " + (white.toHexString())))
+        def kept:EVGColor (UiTone.warm((UiToneCheck.hex("#ffffff"))))
+        this.ok(((kept.toHexString()) == ((UiToneCheck.hex("#ffffff")).toHexString())) ("the warm cast keeps white white: " + (kept.toHexString())))
+        def grey:EVGColor (UiTone.warm((UiToneCheck.hex("#f4f4f5"))))
+        this.ok((UiToneCheck.warmish(grey 6)) ("...and warms a light grey: " + (grey.toHexString())))
+        def white:EVGColor (UiTone.paper((UiToneCheck.hex("#ffffff"))))
+        this.ok((UiToneCheck.warmish(white 12)) ("the paper cast turns white paper: " + (white.toHexString())))
         this.ok(((UiDark.luminance(white)) > 0.9) ("...still light: " + (white.toHexString())))
         def slate:EVGColor (UiTone.warm((UiToneCheck.hex("#64748b"))))
         this.ok((UiToneCheck.warmish(slate 8)) ("a slate grey turns a warm stone: " + (slate.toHexString())))
@@ -74,8 +80,8 @@ class UiToneCheck {
 
     fn sheets:void () {
         def css:string "/* a #ffffff comment */\n@vars { --bg: #ffffff; --pad: 4px; }\n@vars retro { --x: #ffffff; }\n.a { color: #000000; padding: 4px; shadow-color: rgba(15,23,42,0.2); }\n.theme-tb .a { color: #ffffff; }\n.b:hover { background-color: #f4f4f5; /* #f4f4f5 */ }\n.theme-retro .c { color: #ffffff; }\n.theme-dark .g { color: #ffffff; }\n.d { background: linear-gradient(180deg, #ffffff, #f1f5f9); border: 1px solid #e2e8f0; }\n@media (max-width: 600px) { .f { color: #ffffff; } }\n.e { width: 10px; }"
-        def o:string (UiTone.warmSheet(css "tb"))
-        def w:string ((UiTone.warm((UiToneCheck.hex("#ffffff")))).toHexString())
+        def o:string (UiTone.paperSheet(css "tb"))
+        def w:string ((UiTone.paper((UiToneCheck.hex("#ffffff")))).toHexString())
         this.ok(((indexOf o "/* a #ffffff comment */\n@vars {") == 0) ("comments and order are kept: " + o))
         this.ok(((indexOf o ("--bg: " + w)) >= 0) ("the palette warms: " + o))
         this.ok(((indexOf o "--pad: 4px;") >= 0) "a variable with no colour stays as it is")
@@ -97,7 +103,7 @@ class UiToneCheck {
         def dark (new EVGStyleSheet())
         dark.parse((UiDark.overlay(o "tb")))
         this.ok(((dark.getErrorCount()) == 0) "its dark overlay reads back without errors")
-        this.ok(((UiTone.warmSheet("" "")) == "") "an empty sheet stays empty")
+        this.ok(((UiTone.paperSheet("" "")) == "") "an empty sheet stays empty")
     }
 
     fn main:void () {

@@ -5,7 +5,8 @@
 ; The kit's light colours are cool: white paper, slate greys with a blue
 ; cast, a bright blue accent. An app that wants its chrome warmer would have
 ; to restate every colour of every sheet, and miss the next one added. So
-; the cast is DERIVED, like UiDark's dark look: `sheet(css theme)` gives the
+; the cast is DERIVED, like UiDark's dark look: `warmSheet(css theme)` (white
+; kept) and `paperSheet(css theme)` (white to paper) give the
 ; same sheet with every colour it sets moved into the cast, and the dark
 ; look is then derived from that (`UiDark.overlay(UiTone.sheet(...))`).
 ;
@@ -14,8 +15,9 @@
 ;     Y' + 0.05 = f * (Y + 0.05)
 ;
 ; which multiplies both sides of every WCAG ratio (Y1 + 0.05) / (Y2 + 0.05)
-; by f and so keeps it; f < 1 lets white come down to paper. Only the black
-; end is clamped (Y' = 0), where the loss is a hundredth of a ratio.
+; by f and so keeps it. With f = 1 (`warm`) white stays white and every
+; colour keeps its luminance; f < 1 (`paper`) brings white down to paper,
+; and only the black end is clamped (Y' = 0), losing 1 - f of a ratio there.
 ; Chromaticity moves towards the paper's by how neutral the colour is: a
 ; grey (HSL saturation under about 35 %) takes the paper's cast fully, so
 ; slate becomes a warm stone; a saturated colour (60 % and up) takes only
@@ -37,8 +39,8 @@ class UiTone {
         return (EVGColor.rgb(238 231 221))
     }
 
-    ; White comes down to about #fef7ec, slate #f1f5f9 to #f2ede5; every
-    ; ratio stays.
+    ; How far the paper look brings white down: to about #fef7ec, slate
+    ; #f1f5f9 to #f2ede5; every ratio stays.
     sfn warmFactor:double () {
         return 0.94
     }
@@ -48,16 +50,32 @@ class UiTone {
         return 0.15
     }
 
-    ; A colour of the light look in the warm cast.
+    ; A colour of the light look in the warm cast, white kept white: the
+    ; greys turn warm stone at their own lightness (f = 1), so what reads on
+    ; white still reads on white. For content surfaces (editors, panels,
+    ; windows).
     sfn warm:EVGColor (c:EVGColor) {
+        return (UiTone.tone(c (UiTone.warmPaper()) 1.0 (UiTone.warmCast())))
+    }
+
+    ; A colour in the warm cast with white brought down to paper too. For
+    ; the frame around the content (a top bar, a ground).
+    sfn paper:EVGColor (c:EVGColor) {
         return (UiTone.tone(c (UiTone.warmPaper()) (UiTone.warmFactor()) (UiTone.warmCast())))
     }
 
-    ; A light sheet in the warm cast, for a host applied with `theme` (its
-    ; own theme name, "" for none).
+    ; A light sheet in the warm cast (`warm`), for a host applied with
+    ; `theme` (its own theme name, "" for none).
     sfn warmSheet:string (css:string theme:string) {
         return (UiTone.sheet(css theme (fn:EVGColor (c:EVGColor) {
             return (UiTone.warm(c))
+        })))
+    }
+
+    ; A light sheet in the paper cast (`paper`).
+    sfn paperSheet:string (css:string theme:string) {
+        return (UiTone.sheet(css theme (fn:EVGColor (c:EVGColor) {
+            return (UiTone.paper(c))
         })))
     }
 
