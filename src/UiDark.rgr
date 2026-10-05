@@ -18,7 +18,7 @@
 ;
 ; turns every ratio upside down and keeps its size: text that read at 7:1 on
 ; its background reads at 7:1 after, with light and dark swapped. K is chosen
-; so white becomes a near-black ground (Y' = 0.012, about #1c1c1e) rather
+; so white becomes a near-black ground (Y' = 0.0037, about #0c0c0c) rather
 ; than pure black; the only loss is at the black end, where Y' is clamped to
 ; 1 (white). The colour keeps its chromaticity: its linear RGB is scaled to
 ; the new luminance, and what would overflow is mixed towards white.
@@ -136,7 +136,7 @@ class UiDark {
 
     ; The luminance a colour of luminance `y` takes in the dark look.
     sfn darkLuminance:double (y:double) {
-        def t:double ((0.0651 / (y + 0.05)) - 0.05)
+        def t:double ((0.0564 / (y + 0.05)) - 0.05)
         if (t < 0.0) {
             return 0.0
         }
