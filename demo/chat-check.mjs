@@ -141,5 +141,50 @@ ok("the draft is a text field", byTid.get("ch-field").role === R.textField() && 
 ok("Send is off with nothing written", byTid.get("ch-send").disabled === true);
 ok("owns its ids", c.owns(c.msgTid(2)) && c.owns("ch-send") && !c.owns("ch-m-99"));
 
+// --- a thread ------------------------------------------------------------------
+console.log("thread");
+d = fresh();
+c = d.chat;
+c.setOpen(true);
+c.subtitle = "Slide 3";
+c.addAction("resolve", "Resolve", "primary");
+c.addAction("delete", "Delete", "danger");
+c.add("1", "zebra", "Anonymous Zebra", "#ea580c", "Bigger font here", "09:00", false);
+c.height = 400;
+d.rebuild();
+const sub = rect("ch-sub");
+const acts = [rect("ch-act-resolve"), rect("ch-act-delete")];
+ok("a subtitle under the title", sub && sub[1] >= rect("ch-head")[1] + rect("ch-head")[3] - 0.5, sub);
+ok("the buttons in a row under it", acts.every(Boolean) && Math.abs(acts[0][1] - acts[1][1]) < 0.5 && acts[0][1] >= sub[1] + sub[3] - 0.5, acts);
+const comp3 = rect("ch-composer");
+const p3 = rect("ch");
+ok("the composer still at the foot", Math.abs(comp3[1] + comp3[3] - (p3[1] + p3[3])) < 2, [comp3, p3]);
+d.pressAt(acts[0][0] + 4, acts[0][1] + 4);
+ok("a press leaves its value for the host", c.takeAction() === "resolve" && c.takeAction() === "");
+c.readOnly = true;
+c.readOnlyText = "Resolved";
+d.rebuild();
+d.type("x");
+ok("read only: nothing is typed", c.draft() === "");
+ok("read only: no field, its line instead", rect("ch-field") === null && rect("ch-ro") !== null);
+ok("read only: nothing is sent", c.send() === false);
+const tr = c.rows().map((r) => r.tid);
+ok("a reader hears the subtitle and the buttons", tr.includes("ch-sub") && tr.includes("ch-act-delete") && !tr.includes("ch-field"), tr);
+c.clearActions();
+c.readOnly = false;
+
+// --- a pin --------------------------------------------------------------------
+console.log("pin");
+d = fresh();
+const pin = d.pinPage(100, 200, "2", false);
+const pr = rect("pin1");
+ok("the bubble sits above and right of its point", pr && Math.abs(pr[0] - 100) < 1 && Math.abs(pr[1] + pr[3] - 200) < 2, pr);
+ok("has: on the bubble", pin.has(110, 190));
+ok("has: not far from it", !pin.has(160, 190) && !pin.has(110, 230));
+ok("the fill is the host's colour", /253[^0-9]+224[^0-9]+71|fde047|0\.99/i.test(d.displayListJson()));
+const closedPin = d.pinPage(100, 200, "1", true);
+ok("closed: faint", closedPin.classes().includes("pin-closed"));
+ok("a pin is a button to a reader", pin.rows()[0].role === M.EVGA11yRole.button());
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

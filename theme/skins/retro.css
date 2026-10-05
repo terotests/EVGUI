@@ -335,3 +335,9 @@
   color: var(--retro-btn-ink);
 }
 .theme-retro .chat-send-off { background: linear-gradient(180deg, var(--retro-screen-3), var(--retro-screen-2)); color: var(--retro-ink-dim); }
+.theme-retro .chat-sub { color: var(--retro-ink-dim); border-color: var(--retro-screen-3); }
+.theme-retro .chat-acts { border-color: var(--retro-screen-3); }
+.theme-retro .chat-act { background: linear-gradient(180deg, var(--retro-screen-3), var(--retro-screen-2)); color: var(--retro-ink); border-color: var(--retro-edge); }
+.theme-retro .chat-act-primary { background: linear-gradient(180deg, var(--retro-play-a), var(--retro-play-b)); color: var(--retro-btn-ink); }
+.theme-retro .chat-act-danger { background: linear-gradient(180deg, #f87171, #b91c1c); color: #ffffff; }
+.theme-retro .chat-ro-text { color: var(--retro-ink-dim); }

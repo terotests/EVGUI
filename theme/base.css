@@ -1677,3 +1677,44 @@
 .chat-draft { color: #0f172a; font-size: 13px; }
 .chat-send { height: 30px; line-height: 30px; padding: 0 12px; font-size: 13px; color: #ffffff; background-color: #2563eb; border-radius: 6px; }
 .chat-send-off { background-color: #93c5fd; }
+/* A thread (ChatCtl.subtitle, addAction, readOnly): a line under the title,
+ * a row of buttons under it, and a line where the composer was. */
+.chat-sub { flex-shrink: 0; height: 22px; line-height: 22px; padding: 0 10px; font-size: 11px; color: #64748b; border-bottom: 1px solid #e2e8f0; }
+.chat-acts {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 10px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.chat-act { height: 26px; line-height: 26px; padding: 0 10px; font-size: 12px; color: #0f172a; background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; }
+.chat-act:hover { background-color: #e2e8f0; }
+.chat-act-primary { color: #ffffff; background-color: #2563eb; border-color: #2563eb; }
+.chat-act-primary:hover { background-color: #1d4ed8; }
+.chat-act-danger { color: #ffffff; background-color: #dc2626; border-color: #dc2626; }
+.chat-act-danger:hover { background-color: #b91c1c; }
+.chat-readonly { height: 47px; }
+.chat-ro-text { font-size: 12px; color: #64748b; }
+
+/* --- pin -------------------------------------------------------------------------
+ * PinCtl: a speech bubble pinned to a point (a comment on a slide). Its
+ * lower-left corner is the point; the fill is the host's colour (inline), the
+ * edge thin and dark. Closed: faint. On: the one open. */
+.pin {
+  width: 26px;
+  height: 22px;
+  line-height: 22px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: bold;
+  color: #111111;
+  background-color: #fde047;
+  border: 1.5px solid #111111;
+  border-radius: 11px 11px 11px 2px;
+}
+.pin-closed { opacity: 0.25; }
+.pin-on { border-width: 2.5px; }
+.pin:hover { border-width: 2.5px; }

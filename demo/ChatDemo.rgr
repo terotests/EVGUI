@@ -9,6 +9,7 @@
 ; =============================================================================
 
 Import "../src/ChatCtl.rgr"
+Import "../src/PinCtl.rgr"
 Import "../src/UiHost.rgr"
 Import "pkg:evg/EVGElement.rgr"
 
@@ -44,6 +45,21 @@ class ChatDemo {
         chat.activate(t)
         this.rebuild()
         return t
+    }
+
+    ; A pin alone on the page (PinCtl), laid out like the chat.
+    fn pinPage:PinCtl (x:double y:double label:string closed:boolean) {
+        def h (new UiHost())
+        host = h
+        host.addStyleSheet(css)
+        host.setTheme(theme)
+        host.setPageSize(320.0 440.0)
+        def p:PinCtl (PinCtl.make("pin1" x y label))
+        p.closed = closed
+        p.build()
+        host.add(p)
+        host.layout()
+        return p
     }
 
     fn key:void (k:string shift:boolean) {

@@ -1,0 +1,110 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; PinCtl — a speech bubble pinned to a point: a comment on a picture or a page
+; =============================================================================
+; A small bubble whose lower-left corner is the point it is about (`x`, `y`
+; on the page), with a short label in it (how many messages it holds). The
+; fill is the host's colour (`color`, a review's own yellow by default), the
+; edge thin and dark. A closed one (a comment that was dealt with) is faint
+; but still there; the one open beside it (`active`) has a heavier edge.
+;
+; The host places pins over what they are about and asks `has` which one a
+; press landed on; the bubble is a free surface of its own, so pins are laid
+; out wherever their points are, over each other when they are close (the
+; one added last on top).
+;
+; TO A READER: a button, "<info>" (the host says what it is: "Comment 2,
+; resolved, 3 messages"); pressing it opens the conversation.
+; =============================================================================
+
+Import "UiCtl.rgr"
+Import "UiTree.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+
+class PinCtl extends UiCtl {
+    ; the point, on the page
+    def x:double 0.0
+    def y:double 0.0
+    ; the bubble's size (base.css .pin)
+    def w:double 26.0
+    def h:double 22.0
+    def label:string ""
+    def color:string "#fde047"
+    def closed:boolean false
+    def active:boolean false
+    ; what a reader is told
+    def info:string ""
+
+    Constructor () {
+    }
+
+    sfn make:PinCtl (tid:string x:double y:double label:string) {
+        def p (new PinCtl())
+        p.tid = tid
+        p.x = x
+        p.y = y
+        p.label = label
+        return p
+    }
+
+    ; the bubble's box: it sits above and to the right of its point
+    fn left:double () {
+        return x
+    }
+
+    fn top:double () {
+        return (y - h)
+    }
+
+    ; A press on the bubble, with a few pixels to spare round it for a finger.
+    fn has:boolean (px:double py:double) {
+        def pad:double 3.0
+        return ((((px >= ((this.left()) - pad)) && (px <= (((this.left()) + w) + pad))) && (py >= ((this.top()) - pad))) && (py <= (y + pad)))
+    }
+
+    fn classes:string () {
+        def cls:string "pin"
+        if closed {
+            cls = (cls + " pin-closed")
+        }
+        if active {
+            cls = (cls + " pin-on")
+        }
+        return cls
+    }
+
+    fn build:void () {
+        def b:EVGElement (UiTree.label(tid (this.classes()) label))
+        UiTree.surface(b "free" "start")
+        b.overlayX = (this.left())
+        b.overlayY = (this.top())
+        UiTree.inline(b "background-color" color)
+        rootEl = b
+    }
+
+    fn activate:string (target:string) {
+        if (target == tid) {
+            return target
+        }
+        return ""
+    }
+
+    fn isFocusable:boolean (target:string) {
+        return (target == tid)
+    }
+
+    fn rows:[UiRow] () {
+        def out:[UiRow]
+        def said:string info
+        if ((strlen said) == 0) {
+            said = label
+        }
+        def r:UiRow (UiRow.of(tid (EVGA11yRole.button()) said))
+        r.focusable = true
+        r.tabStop = true
+        push out r
+        return out
+    }
+}
