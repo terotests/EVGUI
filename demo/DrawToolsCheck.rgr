@@ -1,0 +1,96 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; The drawing palette (DrawToolsCtl), on Node: `ui:drawtools:check`.
+Import "../src/DrawToolsCtl.rgr"
+Import "../src/UiHost.rgr"
+
+class DrawToolsCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    sfn palette:DrawToolsCtl () {
+        def p:DrawToolsCtl (DrawToolsCtl.make("dt"))
+        p.name = "Drawing"
+        p.addTool("select" "↖" "Select")
+        p.addTool("pen" "✎" "Pen")
+        p.addTool("text" "T" "Text")
+        p.addColor("#facc15" "Yellow")
+        p.addColor("#ef4444" "Red")
+        return p
+    }
+
+    fn run:void () {
+        def p:DrawToolsCtl (DrawToolsCheck.palette())
+        this.ok((p.tool == "select") "the first tool is on to begin with")
+        this.ok((p.color == "#facc15") "…and the first colour")
+        this.ok(((p.activate("dt-tool-pen")) == "tool:pen") "a tool pressed says so")
+        this.ok((p.tool == "pen") "…and is the one on")
+        this.ok(((p.activate("dt-color-1-dot")) == "color:#ef4444") "a press on a swatch's dot is the swatch")
+        this.ok((p.color == "#ef4444") "…and its colour is on")
+        this.ok(((p.activate("dt-size-3")) == "size:3") "a size pressed")
+        this.ok((p.size == 3) "…is the one on")
+        this.ok(((p.activate("dt-done")) == "done") "done")
+        this.ok(((p.activate("dt-sep1")) == "") "a separator is nothing")
+        this.ok(((p.partOf("dt-tool-text")) == "tool:text") "what a part is, asked")
+        this.ok((p.tool == "pen") "…changes nothing")
+        this.ok(((p.setTool("laser")) == false) "a tool it does not have is refused")
+        this.ok(((p.setSize(9)) == false) "…and a size past the last")
+        this.ok((p.isFocusable("dt-tool-text") && ((p.isFocusable("dt")) == false)) "the parts are focusable, the bar is not")
+
+        this.ok(((p.owns("dt-color-0-dot")) && (p.owns("dt-done"))) "it answers for its parts")
+        this.ok(((p.owns("dt-sep1")) == false) "…not for a separator")
+        p.x = 20.0
+        p.y = 40.0
+        p.build()
+        def root:EVGElement p.rootEl
+        this.ok((root.isOverlay && ((root.overlayX == 20.0) && (root.overlayY == 40.0))) "a free surface at its point")
+        ; 3 tools, sep, 2 swatches, sep, 3 sizes, sep, done
+        this.ok(((root.getChildCount()) == 12) ("its parts: " + (to_string (root.getChildCount()))))
+        def on:EVGElement (root.getChild(1))
+        this.ok((UiTree.hasClass(on "drawtools-on")) "the tool on is marked")
+        def off:EVGElement (root.getChild(0))
+        this.ok(((UiTree.hasClass(off "drawtools-on")) == false) "…the others not")
+
+        def rows:[UiRow] (p.rows())
+        def bar:UiRow (itemAt rows 0)
+        this.ok((bar.role == (EVGA11yRole.toolbar())) "a toolbar to a reader")
+        def pen:UiRow (itemAt rows 2)
+        this.ok((((pen.role == (EVGA11yRole.radio())) && (pen.checked == 1)) && (pen.name == "Pen")) "the pen is a checked radio")
+        def last:UiRow (itemAt rows ((array_length rows) - 1))
+        this.ok(((last.role == (EVGA11yRole.button())) && (last.name == "Done")) "Done is a button")
+
+        ; laid out as a row: its own separator class, the chosen size's dot
+        ; marked (the sheet has no descendant selectors)
+        p.vertical = false
+        p.build()
+        def rowRoot:EVGElement p.rootEl
+        def sep:EVGElement (rowRoot.getChild(3))
+        this.ok((UiTree.hasClass(sep "drawtools-sep-row")) "a row's separator is marked as one")
+        ; the theme's rules read without errors (run from Ranger's root, or
+        ; from EVGUI's)
+        def css:string (?? (read_file "." "gallery/evgui/theme/base.css") "")
+        if ((strlen css) == 0) {
+            css = (?? (read_file "." "theme/base.css") "")
+        }
+        def h (new UiHost())
+        h.addStyleSheet(css)
+        this.ok((((strlen css) > 0) && ((h.styleErrorCount()) == 0)) ("the theme reads without errors: " + (to_string (h.styleErrorCount()))))
+    }
+
+    sfn main:void () {
+        def c (new DrawToolsCheck())
+        c.run()
+        print ((to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
+        if (c.fails > 0) {
+            print "RESULT FAIL"
+        }
+    }
+}

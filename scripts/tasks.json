@@ -31,6 +31,7 @@
   "ui:input:bench:record": "npm run ui:demo:build --silent && node gallery/evgui/demo/build.mjs && node gallery/evgui/demo/input-bench.mjs --record",
   "ui:input:field": "node dist/rgrc.js -es6 gallery/evgui/demo/InputFieldCheck.rgr -d=gallery/evgui/bin -o=InputFieldCheck.js -nodecli && node gallery/evgui/bin/InputFieldCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
   "ui:text:select": "node dist/rgrc.js -es6 gallery/evgui/demo/TextSelectCheck.rgr -d=gallery/evgui/bin -o=TextSelectCheck.js -nodecli && node gallery/evgui/bin/TextSelectCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
+  "ui:drawtools:check": "node dist/rgrc.js -es6 gallery/evgui/demo/DrawToolsCheck.rgr -d=gallery/evgui/bin -o=DrawToolsCheck.js -nodecli && node gallery/evgui/bin/DrawToolsCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
   "ui:pick:check": "node dist/rgrc.js -es6 gallery/evgui/demo/UiPickCheck.rgr -d=gallery/evgui/bin -o=UiPickCheck.js -nodecli && node gallery/evgui/bin/UiPickCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
   "ui:doctabs:check": "node dist/rgrc.js -es6 gallery/evgui/demo/DocTabsCheck.rgr -d=gallery/evgui/bin -o=DocTabsCheck.js -nodecli && node gallery/evgui/bin/DocTabsCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
   "ui:button:check": "node dist/rgrc.js -es6 gallery/evgui/demo/ButtonCheck.rgr -d=gallery/evgui/bin -o=ButtonCheck.js -nodecli && node gallery/evgui/bin/ButtonCheck.js | tee /dev/stderr | grep -q ' 0 failed'",

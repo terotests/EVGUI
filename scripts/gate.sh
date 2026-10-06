@@ -80,6 +80,8 @@ SUITES=(
   # A table's ticks, open tabs (src/UiPick.rgr, src/UiOpenTabs.rgr) and the
   # document tab row (src/DocTabsCtl.rgr).
   ui:pick:check
+  # The drawing palette (src/DrawToolsCtl.rgr).
+  ui:drawtools:check
   ui:doctabs:check
   # The left icon rail (src/RailCtl.rgr).
   ui:rail:check
