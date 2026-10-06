@@ -385,6 +385,7 @@
 .theme-retro .ch-thread,
 .theme-retro .ch-tcount,
 .theme-retro .ch-day { border-color: var(--retro-screen-3); }
+.theme-retro .ch-split { background-color: var(--retro-screen-3); }
 .theme-retro .ch-title,
 .theme-retro .ch-ttitle,
 .theme-retro .ch-name,

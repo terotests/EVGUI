@@ -264,12 +264,18 @@ class ChannelCheck {
         this.ok(((indexOf ids "|ch-r6-reply|") < 0) "a reply has no thread of its own")
         def mainEl@(optional):EVGElement (UiTree.findById(r2 "ch-main"))
         this.ok(((unwrap mainEl).display != "none") "a wide channel keeps both")
+        def top:string ""
+        for r2.children k:EVGElement ki {
+            top = (top + "|" + k.id)
+        }
+        this.ok(((indexOf top "|ch-main|ch-split|ch-thread") >= 0) ("a line between the messages and the thread: " + top))
         c.width = 600.0
         c.build()
         def r3:EVGElement (unwrap c.rootEl)
         def main3@(optional):EVGElement (UiTree.findById(r3 "ch-main"))
         def hidden:boolean ((unwrap main3).display == "none")
         this.ok(hidden "a narrow one shows only the thread")
+        this.ok(((indexOf (this.ids(r3)) "|ch-split|") < 0) "with no line beside it")
         c.keyDownWith("" "Escape" false false)
         this.ok(((c.threadId == "") && (c.keys == "main")) "Escape closes the thread")
         c.activate("ch-m1-reply")

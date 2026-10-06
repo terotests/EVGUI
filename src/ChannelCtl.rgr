@@ -1410,9 +1410,15 @@ class ChannelCtl extends UiCtl {
         root.addChild(main)
         if threadOpen {
             def pane:EVGElement (this.threadEl())
+            ; the line between the messages and the thread (EVG strokes a
+            ; box's border on all four sides, so the edge is its own element)
+            if (narrow == false) {
+                def split:EVGElement (UiTree.div((tid + "-split") "ch-split"))
+                UiTree.inline(split "height" ((to_string height) + "px"))
+                root.addChild(split)
+            }
             if narrow {
                 UiTree.inline(pane "width" ((to_string width) + "px"))
-                UiTree.inline(pane "border-left-width" "0px")
             } {
                 UiTree.inline(pane "width" ((to_string threadW) + "px"))
             }
@@ -1564,7 +1570,8 @@ class ChannelCtl extends UiCtl {
         }
         def hovered:boolean ((hoverSeq == m.seq) && (hoverWhere == where))
         if hovered {
-            cls = (cls + " ch-msg-hover")
+            ; the thread's pane is tinted: its rows light up a shade deeper
+            cls = (cls + (? (where == "m") " ch-msg-hover" " ch-msg-hover ch-msg-thover"))
         }
         def row:EVGElement (UiTree.div(id cls))
         def gutter:EVGElement (UiTree.div((id + "-g") "ch-gutter"))
