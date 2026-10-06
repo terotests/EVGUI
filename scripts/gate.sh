@@ -73,6 +73,7 @@ SUITES=(
   # The dark look derived from a light sheet (src/UiDark.rgr).
   ui:dark:check
   ui:tone:check
+  ui:muted:check
   # Hatch stripes and tab outlines as paths (src/UiShapes.rgr).
   ui:shapes:check
   ui:menufit:check

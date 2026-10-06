@@ -517,10 +517,39 @@ class ColorPickerDemo {
         p.addChild(tools)
 
         p.addChild((this.fields(c)))
+        p.addChild((this.mutedRow(c)))
         if ((c.swatchCount()) > 0) {
             p.addChild((this.presetRow(c)))
         }
         return p
+    }
+
+    ; The colour's muted tones (ColorPickerCtl.mutedAt): the hue kept, the
+    ; saturation down a step each; the first is the colour itself.
+    fn mutedRow:EVGElement (c:ColorPickerCtl) {
+        def box (tree Cp (Presets (props (id (c.tid + "-muted")) (a11yLabel (c.name + ", muted tones")))))
+        box.addChild((tree Cp (PTitle (props (id (c.tid + "-muted-title"))) "Muted")))
+        def row (tree Cp (PRow (props (id (c.tid + "-muted-row")))))
+        def now:string (c.hex6())
+        def i:int 0
+        while (i < (c.mutedCount())) {
+            def hx:string (c.mutedAt(i))
+            def p (tree Cp (Preset (props (id (c.mutedTid(i))) (a11yLabel hx))))
+            p.a11yFocusable = true
+            p.a11yPosInSet = (i + 1)
+            p.a11ySetSize = (c.mutedCount())
+            if (hx == now) {
+                p.a11yChecked = (EVGA11yTri.yes())
+                p.className = "cp-preset cp-preset-on"
+            } {
+                p.a11yChecked = (EVGA11yTri.no())
+            }
+            UiTree.inline(p "background-color" hx)
+            row.addChild(p)
+            i = (i + 1)
+        }
+        box.addChild(row)
+        return box
     }
 
     fn trigger:EVGElement (c:ColorPickerCtl wide:boolean) {

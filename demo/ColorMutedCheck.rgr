@@ -1,0 +1,75 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; The colour picker's muted tones, on Node: `ui:muted:check`.
+;
+; A muted tone keeps the hue, has less saturation the further along the row
+; it is, and its first chip is the colour itself; picking one after another
+; keeps the row made from the colour before the first pick.
+Import "../src/ColorPickerCtl.rgr"
+
+class ColorMutedCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    sfn hsvOf:[double] (hex:string) {
+        return (ColorPickerCtl.parse(hex))
+    }
+
+    fn run:void () {
+        def cols:[string] ([] _:string ("#b96926" "#59c3c4" "#a321d9" "#4949ff" "#c2291b" "#e9f6b3"))
+        def i:int 0
+        while (i < (array_length cols)) {
+            def c:string (itemAt cols i)
+            this.ok(((ColorPickerCtl.mutedHex(c 0.0)) == c) (c + ": no muting is the colour itself, got " + (ColorPickerCtl.mutedHex(c 0.0))))
+            def h0:double (itemAt (ColorMutedCheck.hsvOf(c)) 0)
+            def lastS:double 2.0
+            def k:int 1
+            while (k < 5) {
+                def m:string (ColorPickerCtl.mutedHex(c (ColorPickerCtl.mutedAmount(k))))
+                def p:[double] (ColorMutedCheck.hsvOf(m))
+                def dh:double ((itemAt p 0) - h0)
+                if (dh < 0.0) {
+                    dh = (0.0 - dh)
+                }
+                if (dh > 180.0) {
+                    dh = (360.0 - dh)
+                }
+                this.ok((dh <= 4.0) (c + " step " + (to_string k) + ": the hue stays (" + m + ")"))
+                def hsl:[double] (ColorPickerCtl.hsvToHsl((itemAt p 0) (itemAt p 1) (itemAt p 2)))
+                this.ok(((itemAt hsl 1) < lastS) (c + " step " + (to_string k) + ": less saturated (" + m + ")"))
+                lastS = (itemAt hsl 1)
+                k = (k + 1)
+            }
+            i = (i + 1)
+        }
+        this.ok(((ColorPickerCtl.mutedHex("not a colour" 0.5)) == "not a colour") "what is not a colour is left as it is")
+
+        def c (new ColorPickerCtl())
+        c.setup("cp" "Color" "#b96926" false)
+        c.inline = true
+        this.ok(((c.mutedAt(0)) == "#b96926") ("the row starts with the colour: " + (c.mutedAt(0))))
+        def second:string (c.mutedAt(2))
+        c.activate((c.mutedTid(2)))
+        this.ok(((c.hex()) == second) ("a muted chip sets the colour: " + (c.hex())))
+        this.ok(((c.mutedAt(0)) == "#b96926") ("…and the row is still made from the colour before: " + (c.mutedAt(0))))
+        this.ok(((c.mutedAt(2)) == second) "…so the same chip is the same tone")
+        c.activate((c.mutedTid(0)))
+        this.ok(((c.hex()) == "#b96926") ("the first chip goes back: " + (c.hex())))
+        c.setFromString("#4949ff")
+        this.ok(((c.mutedAt(0)) == "#4949ff") ("a colour set otherwise starts a new row: " + (c.mutedAt(0))))
+    }
+
+    sfn main:void () {
+        def t (new ColorMutedCheck())
+        t.run()
+        print ((to_string t.passes) + " passed, " + (to_string t.fails) + " failed")
+    }
+}
