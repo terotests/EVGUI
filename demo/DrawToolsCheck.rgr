@@ -83,6 +83,47 @@ class DrawToolsCheck {
         def h (new UiHost())
         h.addStyleSheet(css)
         this.ok((((strlen css) > 0) && ((h.styleErrorCount()) == 0)) ("the theme reads without errors: " + (to_string (h.styleErrorCount()))))
+        this.compact()
+    }
+
+    ; the pill at the foot of the stage, with menus opening upward
+    fn compact:void () {
+        def p:DrawToolsCtl (DrawToolsCtl.make("pk"))
+        p.compact = true
+        p.addTool("select" "↖" "Select")
+        p.addTool("pen" "✎" "Pen")
+        p.addTool("arrow" "↗" "Arrow")
+        p.addColor("#facc15" "Yellow")
+        p.addColor("#ef4444" "Red")
+        p.build()
+        def root:EVGElement p.rootEl
+        this.ok(((root.getChildCount()) == 3) ("compact: three buttons: " + (to_string (root.getChildCount()))))
+        this.ok(((p.activate("pk-pen")) == "toggle") "compact: the pen turns drawing on")
+        this.ok(p.active "…and it is on")
+        this.ok(((p.activate("pk-kind")) == "menu:tool") "compact: the tool button opens its menu")
+        this.ok((p.menu == "tool") "…the tool menu")
+        p.build()
+        def withMenu:EVGElement p.rootEl
+        this.ok(((withMenu.getChildCount()) == 4) "compact: the open menu is drawn")
+        this.ok(((indexOf (p.tids()) "pk-tool-arrow") >= 0) "compact: its choices are hit")
+        this.ok(((p.activate("pk-tool-arrow")) == "tool:arrow") "compact: a tool chosen")
+        this.ok((((p.tool == "arrow") && (p.menu == "")) && p.active) "…closes the menu, drawing on")
+        this.ok(((p.activate("pk-kind")) == "menu:tool") "compact: opened again")
+        this.ok(((p.activate("pk-kind")) == "menu:tool") "…and pressed again")
+        this.ok((p.menu == "") "…closes it")
+        p.activate("pk-hue-dot")
+        this.ok((p.menu == "color") "compact: the colour dot opens the colour menu")
+        this.ok(((indexOf (p.tids()) "pk-tool-arrow") < 0) "…where the tools are not hit")
+        this.ok(((p.activate("pk-color-1")) == "color:#ef4444") "compact: a colour chosen")
+        this.ok(((p.color == "#ef4444") && (p.menu == "")) "…closes the menu")
+        p.activate("pk-hue")
+        this.ok(((p.activate("pk-size-3-dot")) == "size:3") "compact: a size chosen")
+        this.ok((p.size == 3) "…is on")
+        p.activate("pk-pen")
+        this.ok((p.active == false) "compact: the pen again turns drawing off")
+        def rows:[UiRow] (p.rows())
+        def pen:UiRow (itemAt rows 1)
+        this.ok(((pen.role == (EVGA11yRole.button())) && (pen.pressed == 0)) "compact: the pen is a toggle button to a reader")
     }
 
     sfn main:void () {
