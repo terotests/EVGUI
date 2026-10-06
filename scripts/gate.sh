@@ -73,12 +73,15 @@ SUITES=(
   # The dark look derived from a light sheet (src/UiDark.rgr).
   ui:dark:check
   ui:tone:check
+  ui:muted:check
   # Hatch stripes and tab outlines as paths (src/UiShapes.rgr).
   ui:shapes:check
   ui:menufit:check
   # A table's ticks, open tabs (src/UiPick.rgr, src/UiOpenTabs.rgr) and the
   # document tab row (src/DocTabsCtl.rgr).
   ui:pick:check
+  # The drawing palette (src/DrawToolsCtl.rgr).
+  ui:drawtools:check
   ui:doctabs:check
   # The left icon rail (src/RailCtl.rgr).
   ui:rail:check

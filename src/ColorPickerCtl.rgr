@@ -84,6 +84,8 @@ class ColorPickerCtl extends UiCtl {
     ; The eyedropper.
     def picking:boolean false
     def screenAsk:boolean false
+    ; the colour a muted tone was made from ("" none picked yet)
+    def mutedFrom:string ""
     ; Presets, or the recent colours when `recent` is set (a commit then puts
     ; the colour at the front).
     def swatches:[string]
@@ -99,10 +101,45 @@ class ColorPickerCtl extends UiCtl {
     ; Pixel widths of the text run in a hex box and a number box.
     def hexBoxW:double 120.0
     def numBoxW:double 28.0
+    ; The picker's words in the host's language: each English phrase of
+    ; `phrases()` to what is said instead (one left out stays English). A
+    ; host with its own translations fills it, so it needs no copy of this
+    ; control to change what the fields and the screen reader say.
+    def words:[string:string]
 
     Constructor () {
         def e:[string]
         swatches = e
+    }
+
+    ; `s` in the host's words (`words`), or as it is.
+    fn say:string (s:string) {
+        if (has words s) {
+            return (unwrap (get words s))
+        }
+        return s
+    }
+
+    ; Every English phrase the picker says, for a host to translate into
+    ; `words`. "Presets" is `swatchTitle`'s default, which a host sets itself.
+    sfn phrases:[string] () {
+        def out:[string]
+        push out "Saturation "
+        push out "%, Brightness "
+        push out " degrees"
+        push out "Hex"
+        push out "Alpha, percent"
+        push out "Red"
+        push out "Green"
+        push out "Blue"
+        push out "Hue, degrees"
+        push out "Saturation, percent"
+        push out "Lightness, percent"
+        push out ", saturation and brightness"
+        push out "2D slider"
+        push out ", hue"
+        push out ", alpha"
+        return out
     }
 
     ; tid, label, initial colour (anything `parse` reads) and alpha.
@@ -782,11 +819,11 @@ class ColorPickerCtl extends UiCtl {
     }
 
     fn svText:string () {
-        return ("Saturation " + (to_string (ColorPickerCtl.roundi((sat * 100.0)))) + "%, Brightness " + (to_string (ColorPickerCtl.roundi((val * 100.0)))) + "%")
+        return ((this.say("Saturation ")) + (to_string (ColorPickerCtl.roundi((sat * 100.0)))) + (this.say("%, Brightness ")) + (to_string (ColorPickerCtl.roundi((val * 100.0)))) + "%")
     }
 
     fn hueText:string () {
-        return ((to_string (ColorPickerCtl.roundi(hue))) + " degrees")
+        return ((to_string (ColorPickerCtl.roundi(hue))) + (this.say(" degrees")))
     }
 
     fn alphaText:string () {
@@ -868,27 +905,27 @@ class ColorPickerCtl extends UiCtl {
 
     fn fieldName:string (i:int) {
         if (format == 0) {
-            return "Hex"
+            return (this.say("Hex"))
         }
         if (i == 3) {
-            return "Alpha, percent"
+            return (this.say("Alpha, percent"))
         }
         if (format == 1) {
             if (i == 0) {
-                return "Red"
+                return (this.say("Red"))
             }
             if (i == 1) {
-                return "Green"
+                return (this.say("Green"))
             }
-            return "Blue"
+            return (this.say("Blue"))
         }
         if (i == 0) {
-            return "Hue, degrees"
+            return (this.say("Hue, degrees"))
         }
         if (i == 1) {
-            return "Saturation, percent"
+            return (this.say("Saturation, percent"))
         }
-        return "Lightness, percent"
+        return (this.say("Lightness, percent"))
     }
 
     fn fieldMax:int (i:int) {
@@ -1110,6 +1147,92 @@ class ColorPickerCtl extends UiCtl {
         }
         format = (((format + dir) + 3) % 3)
         editing = ""
+        this.syncFields()
+    }
+
+    ; =========================================================================
+    ; muted tones
+    ; =========================================================================
+    ;
+    ; The colour with its hue kept and its saturation taken down, a step at a
+    ; time, and its lightness drawn a little toward the middle: the "broken"
+    ; tones a palette of strong colours wants beside them. The row starts
+    ; from the colour as it was before a muted tone was picked, so picking
+    ; one after another does not keep muting, and its first chip is that
+    ; colour itself.
+
+    sfn mutedHex:string (hex:string amount0:double) {
+        def p:[double] (ColorPickerCtl.parse(hex))
+        if ((array_length p) == 0) {
+            return hex
+        }
+        def amount:double (ColorPickerCtl.clampd(amount0 0.0 1.0))
+        def h:double (itemAt p 0)
+        if (h < 0.0) {
+            h = 0.0
+        }
+        def s0:double (itemAt p 1)
+        if (s0 < 0.0) {
+            s0 = 0.0
+        }
+        def hsl:[double] (ColorPickerCtl.hsvToHsl(h s0 (itemAt p 2)))
+        def sl:double ((itemAt hsl 1) * (1.0 - amount))
+        def l0:double (itemAt hsl 2)
+        def l:double (l0 + (((0.55 - l0) * amount) * 0.3))
+        def hsv:[double] (ColorPickerCtl.hslToHsv(h sl l))
+        def c:[double] (ColorPickerCtl.hsvToRgb(h (itemAt hsv 1) (itemAt hsv 2)))
+        return (ColorPickerCtl.hexOf((ColorPickerCtl.roundi((itemAt c 0))) (ColorPickerCtl.roundi((itemAt c 1))) (ColorPickerCtl.roundi((itemAt c 2)))))
+    }
+
+    fn mutedCount:int () {
+        return 5
+    }
+
+    sfn mutedAmount:double (i:int) {
+        return ((to_double i) * 0.2)
+    }
+
+    fn mutedTid:string (i:int) {
+        return (tid + "-muted-" + (to_string i))
+    }
+
+    ; The colour the row is made from.
+    fn mutedBase:string () {
+        def now:string (this.hex6())
+        if ((strlen mutedFrom) > 0) {
+            def i:int 0
+            while (i < (this.mutedCount())) {
+                if ((ColorPickerCtl.mutedHex(mutedFrom (ColorPickerCtl.mutedAmount(i)))) == now) {
+                    return mutedFrom
+                }
+                i = (i + 1)
+            }
+        }
+        return now
+    }
+
+    fn mutedAt:string (i:int) {
+        return (ColorPickerCtl.mutedHex((this.mutedBase()) (ColorPickerCtl.mutedAmount(i))))
+    }
+
+    fn mutedIndex:int (target:string) {
+        def i:int 0
+        while (i < (this.mutedCount())) {
+            if (target == (this.mutedTid(i))) {
+                return i
+            }
+            i = (i + 1)
+        }
+        return -1
+    }
+
+    fn applyMuted:void (i:int) {
+        def base:string (this.mutedBase())
+        def keep:double alpha
+        editing = ""
+        this.setFromString((ColorPickerCtl.mutedHex(base (ColorPickerCtl.mutedAmount(i)))))
+        alpha = keep
+        mutedFrom = base
         this.syncFields()
     }
 
@@ -1497,6 +1620,11 @@ class ColorPickerCtl extends UiCtl {
             this.applySwatch(si)
             return target
         }
+        def mi:int (this.mutedIndex(target))
+        if (mi >= 0) {
+            this.applyMuted(mi)
+            return target
+        }
         return ""
     }
 
@@ -1521,8 +1649,8 @@ class ColorPickerCtl extends UiCtl {
     fn applySV:void (el:EVGElement) {
         el.id = (this.svTid())
         el.role = "slider"
-        el.a11yLabel = (name + ", saturation and brightness")
-        el.a11yRoleDescription = "2D slider"
+        el.a11yLabel = (name + (this.say(", saturation and brightness")))
+        el.a11yRoleDescription = (this.say("2D slider"))
         el.a11yFocusable = true
         el.a11yHasValue = true
         el.a11yValueNow = (ColorPickerCtl.roundi((sat * 100.0)))
@@ -1535,7 +1663,7 @@ class ColorPickerCtl extends UiCtl {
     fn applyHue:void (el:EVGElement) {
         el.id = (this.hueTid())
         el.role = "slider"
-        el.a11yLabel = (name + ", hue")
+        el.a11yLabel = (name + (this.say(", hue")))
         el.a11yFocusable = true
         el.a11yOrientation = "horizontal"
         el.a11yHasValue = true
@@ -1549,7 +1677,7 @@ class ColorPickerCtl extends UiCtl {
     fn applyAlpha:void (el:EVGElement) {
         el.id = (this.alphaTid())
         el.role = "slider"
-        el.a11yLabel = (name + ", alpha")
+        el.a11yLabel = (name + (this.say(", alpha")))
         el.a11yFocusable = true
         el.a11yOrientation = "horizontal"
         el.a11yHasValue = true
