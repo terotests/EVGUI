@@ -154,6 +154,17 @@ class ChannelCtl extends UiCtl {
     def requests:[string]
     def quick:[string]
 
+    ; --- files ------------------------------------------------------------------------------
+    ; files waiting to go with the next message (the host puts them in the
+    ; room's files first: addPending), and how many are still on the way
+    def pendMain:[UiFeedFile]
+    def pendThread:[UiFeedFile]
+    def upMain:int 0
+    def upThread:int 0
+    ; where an embedded presentation's slide is drawn from, with {deck} and
+    ; {slide} put in ("" no picture, only its card)
+    def embedPicture:string ""
+
     ; --- words (the host's language) ----------------------------------------------------
     def placeholderText:string "Message"
     def threadPlaceholder:string "Reply…"
@@ -196,6 +207,9 @@ class ChannelCtl extends UiCtl {
     def strikeText:string "Strikethrough"
     def codeText:string "Code"
     def codeBlockText:string "Code block"
+    def attachText:string "Attach a file"
+    def uploadingText:string "Uploading…"
+    def removeText:string "Remove"
 
     Constructor () {
         def q:[string] ([] _:string ("👍" "❤️" "😂" "🎉" "👀" "✅"))
@@ -322,6 +336,11 @@ class ChannelCtl extends UiCtl {
         this.closeSug()
         input.setValue("")
         input.moveTo(0 false)
+        ; files waiting were put in the other room's files
+        this.clearPending(false)
+        this.clearPending(true)
+        upMain = 0
+        upThread = 0
         if (keys == "thread") {
             keys = "main"
         }
@@ -416,6 +435,7 @@ class ChannelCtl extends UiCtl {
         tScroll = 0.0
         tinput.setValue("")
         tinput.moveTo(0 false)
+        this.clearPending(true)
         keys = "thread"
         this.ask(("thread\t" + root))
     }
@@ -471,6 +491,71 @@ class ChannelCtl extends UiCtl {
         return true
     }
 
+    ; --- files waiting to be sent ---------------------------------------------------------
+
+    fn pending:[UiFeedFile] (inThread:boolean) {
+        if inThread {
+            return pendThread
+        }
+        return pendMain
+    }
+
+    fn uploading:int (inThread:boolean) {
+        if inThread {
+            return upThread
+        }
+        return upMain
+    }
+
+    ; a file the host put into the room's files, to go with the next message
+    fn addPending:void (inThread:boolean name:string url:string type:string size:int w:int h:int) {
+        def f (new UiFeedFile())
+        f.name = name
+        f.url = url
+        f.type = type
+        f.size = size
+        f.w = w
+        f.h = h
+        if inThread {
+            push pendThread f
+        } {
+            push pendMain f
+        }
+    }
+
+    ; how many files are still being put into the room's files
+    fn setUploading:void (inThread:boolean n:int) {
+        if inThread {
+            upThread = n
+        } {
+            upMain = n
+        }
+    }
+
+    fn dropPending:void (inThread:boolean k:int) {
+        def was:[UiFeedFile] (this.pending(inThread))
+        def kept:[UiFeedFile]
+        for was f:UiFeedFile i {
+            if (i != k) {
+                push kept f
+            }
+        }
+        if inThread {
+            pendThread = kept
+        } {
+            pendMain = kept
+        }
+    }
+
+    fn clearPending:void (inThread:boolean) {
+        def none:[UiFeedFile]
+        if inThread {
+            pendThread = none
+        } {
+            pendMain = none
+        }
+    }
+
     fn send:boolean (inThread:boolean) {
         if readOnly {
             return false
@@ -480,14 +565,27 @@ class ChannelCtl extends UiCtl {
             f = tinput
         }
         def t:string (trim f.value)
-        if ((strlen t) == 0) {
+        def pend:[UiFeedFile] (this.pending(inThread))
+        if (((strlen t) == 0) && ((array_length pend) == 0)) {
+            return false
+        }
+        ; not before the files are in the room
+        if ((this.uploading(inThread)) > 0) {
             return false
         }
         def th:string ""
         if inThread {
             th = threadId
         }
-        this.ask(("send\t" + th + "\t" + t))
+        def names:string ""
+        for pend pf:UiFeedFile pi {
+            if (pi > 0) {
+                names = (names + "\n")
+            }
+            names = (names + pf.name)
+        }
+        this.ask(("send\t" + th + "\t" + names + "\t" + t))
+        this.clearPending(inThread)
         f.setValue("")
         f.moveTo(0 false)
         f.scrollX = 0.0
@@ -517,7 +615,7 @@ class ChannelCtl extends UiCtl {
         if (mark == "```") {
             open = "```\n"
             close = "\n```"
-            if (((strlen head) > 0) && ((ChannelCtl.endsWith(head "\n")) == false)) {
+            if (((strlen head) > 0) && ((ChannelCtl.endsIn(head "\n")) == false)) {
                 open = ("\n" + open)
             }
         }
@@ -972,6 +1070,23 @@ class ChannelCtl extends UiCtl {
             this.ask("close")
             return target
         }
+        if ((target == (t + "attach")) || (target == (t + "tattach"))) {
+            if (readOnly == false) {
+                def th:boolean (target == (t + "tattach"))
+                keys = (? th "thread" "main")
+                this.ask((? th "attach\tthread" "attach\tmain"))
+            }
+            return target
+        }
+        if (((indexOf target (t + "pend-")) == 0) || ((indexOf target (t + "tpend-")) == 0)) {
+            def inTh:boolean ((indexOf target (t + "tpend-")) == 0)
+            def at:string (substring target (strlen (t + (? inTh "tpend-" "pend-"))) (strlen target))
+            def dash:int (indexOf at "-")
+            if ((dash > 0) && ((substring at dash (strlen at)) == "-x")) {
+                this.dropPending(inTh (ChannelCtl.digits((substring at 0 dash))))
+            }
+            return target
+        }
         if (target == (t + "latest")) {
             this.toLatest()
             return target
@@ -1126,6 +1241,22 @@ class ChannelCtl extends UiCtl {
         }
         if (part == "more") {
             m.unfolded = (m.unfolded == false)
+            return target
+        }
+        if ((indexOf part "lk") == 0) {
+            def k:int (ChannelCtl.digits((substring part 2 (strlen part))))
+            if ((k >= 0) && (k < (array_length m.links))) {
+                def l:UiFeedLink (itemAt m.links k)
+                this.ask(("link\t" + l.url))
+            }
+            return target
+        }
+        if ((indexOf part "f") == 0) {
+            def k:int (ChannelCtl.digits((substring part 1 (strlen part))))
+            if ((k >= 0) && (k < (array_length m.files))) {
+                def fl:UiFeedFile (itemAt m.files k)
+                this.ask(("file\t" + fl.url + "\t" + fl.name))
+            }
             return target
         }
         ; a span: b<block>-s<span>, an embed: b<block>-emb
@@ -1401,6 +1532,8 @@ class ChannelCtl extends UiCtl {
             if m.edited {
                 body.addChild((UiTree.label((id + "-ed") "ch-edited" editedText)))
             }
+            this.filesInto(body m id)
+            this.linksInto(body m id)
         }
         if ((array_length m.reactEmoji) > 0) {
             def rx:EVGElement (UiTree.div((id + "-rxs") "ch-rxs"))
@@ -1459,6 +1592,119 @@ class ChannelCtl extends UiCtl {
         return bar
     }
 
+    ; the message's files: pictures as they are (made smaller to fit), the
+    ; others as a card with the name and size; pressed, the host opens one
+    fn filesInto:void (body:EVGElement m:UiFeedMsg id:string) {
+        if ((array_length m.files) == 0) {
+            return
+        }
+        def pics:EVGElement (UiTree.div("" "ch-pics"))
+        def docs:EVGElement (UiTree.div("" "ch-docs"))
+        def np:int 0
+        def nd:int 0
+        for m.files f:UiFeedFile k {
+            def fid:string (id + "-f" + (to_string k))
+            if (f.isPicture()) {
+                def im (EVGElement.createImg())
+                im.id = fid
+                im.className = "ch-pic"
+                im.src = f.url
+                im.objectFit = "contain"
+                if ((f.w > 0) && (f.h > 0)) {
+                    im.sourceWidth = (to_double f.w)
+                    im.sourceHeight = (to_double f.h)
+                }
+                im.width = (EVGUnit.px((f.fitW(360.0 240.0))))
+                im.height = (EVGUnit.px((f.fitH(360.0 240.0))))
+                pics.addChild(im)
+                np = (np + 1)
+            } {
+                docs.addChild((this.fileCard(f fid)))
+                nd = (nd + 1)
+            }
+        }
+        if (np > 0) {
+            body.addChild(pics)
+        }
+        if (nd > 0) {
+            body.addChild(docs)
+        }
+    }
+
+    fn fileCard:EVGElement (f:UiFeedFile fid:string) {
+        def card:EVGElement (UiTree.div(fid "ch-doc"))
+        card.addChild((UiTree.label("" "ch-doc-i" (ChannelCtl.fileGlyph(f.type f.name)))))
+        def info:EVGElement (UiTree.div("" "ch-doc-t"))
+        info.addChild((UiTree.label("" "ch-doc-n" f.name)))
+        info.addChild((UiTree.label("" "ch-doc-s" (UiFeedFile.sizeText(f.size)))))
+        card.addChild(info)
+        return card
+    }
+
+    ; a file's picture by its type or name
+    sfn fileGlyph:string (type:string name:string) {
+        def n:string (to_lowercase name)
+        if ((indexOf type "image/") == 0) {
+            return "🖼"
+        }
+        if ((indexOf type "video/") == 0) {
+            return "🎬"
+        }
+        if ((indexOf type "audio/") == 0) {
+            return "🎵"
+        }
+        if (((ChannelCtl.endsIn(n ".xlsx")) || (ChannelCtl.endsIn(n ".csv"))) || (ChannelCtl.endsIn(n ".xls"))) {
+            return "📊"
+        }
+        if (((ChannelCtl.endsIn(n ".zip")) || (ChannelCtl.endsIn(n ".gz"))) || (ChannelCtl.endsIn(n ".tar"))) {
+            return "📦"
+        }
+        if (ChannelCtl.endsIn(n ".pdf")) {
+            return "📕"
+        }
+        return "📄"
+    }
+
+    ; every `what` in s put as `put`
+    sfn fill:string (s:string what:string put:string) {
+        def out:string ""
+        def rest:string s
+        def at:int (indexOf rest what)
+        while (at >= 0) {
+            out = (out + (substring rest 0 at) + put)
+            rest = (substring rest (at + (strlen what)) (strlen rest))
+            at = (indexOf rest what)
+        }
+        return (out + rest)
+    }
+
+    sfn endsIn:boolean (s:string ending:string) {
+        def n:int (strlen s)
+        def k:int (strlen ending)
+        if (k > n) {
+            return false
+        }
+        return ((substring s (n - k) n) == ending)
+    }
+
+    ; what the message's links lead to: the site, the page's title and its
+    ; summary, as the server read them
+    fn linksInto:void (body:EVGElement m:UiFeedMsg id:string) {
+        for m.links l:UiFeedLink k {
+            def card:EVGElement (UiTree.div((id + "-lk" + (to_string k)) "ch-lk"))
+            if ((strlen l.site) > 0) {
+                card.addChild((UiTree.label("" "ch-lk-s" l.site)))
+            }
+            if ((strlen l.title) > 0) {
+                card.addChild((UiTree.label("" "ch-lk-t" l.title)))
+            }
+            if ((strlen l.desc) > 0) {
+                card.addChild((UiTree.label("" "ch-lk-d" l.desc)))
+            }
+            body.addChild(card)
+        }
+    }
+
     ; the message's words: one element per block, the spans of a line as
     ; words that wrap (a line of plain words is one wrapping run)
     fn textInto:void (body:EVGElement m:UiFeedMsg id:string) {
@@ -1492,7 +1738,27 @@ class ChannelCtl extends UiCtl {
         }
         if (b.kind == "embed") {
             def card:EVGElement (UiTree.div((id + "-emb") "ch-emb"))
-            card.addChild((UiTree.label((id + "-emb-i") "ch-emb-i" "▶")))
+            def row:EVGElement card
+            if ((strlen embedPicture) > 0) {
+                ; the slide itself above the presentation's name
+                card.className = "ch-emb ch-emb-big"
+                def sl:int (? (b.slide > 0) b.slide 1)
+                def src:string (ChannelCtl.fill(embedPicture "{deck}" b.deck))
+                src = (ChannelCtl.fill(src "{slide}" (to_string sl)))
+                def im (EVGElement.createImg())
+                im.id = (id + "-emb-p")
+                im.className = "ch-emb-pic"
+                im.src = src
+                im.objectFit = "contain"
+                im.sourceWidth = 1280.0
+                im.sourceHeight = 720.0
+                im.width = (EVGUnit.px(320.0))
+                im.height = (EVGUnit.px(180.0))
+                card.addChild(im)
+                row = (UiTree.div("" "ch-emb-row"))
+                card.addChild(row)
+            }
+            row.addChild((UiTree.label((id + "-emb-i") "ch-emb-i" "▶")))
             def info:EVGElement (UiTree.div((id + "-emb-t") "ch-emb-t"))
             def t:string (this.deckTitle(b.deck))
             if ((strlen t) == 0) {
@@ -1504,8 +1770,8 @@ class ChannelCtl extends UiCtl {
                 sub = (sub + " · " + slideText + " " + (to_string b.slide))
             }
             info.addChild((UiTree.label((id + "-emb-s") "ch-emb-s" sub)))
-            card.addChild(info)
-            card.addChild((UiTree.label((id + "-emb-open") "ch-btn" openText)))
+            row.addChild(info)
+            row.addChild((UiTree.label((id + "-emb-open") "ch-btn" openText)))
             return card
         }
         def cls:string "ch-line"
@@ -1634,7 +1900,10 @@ class ChannelCtl extends UiCtl {
             box.addChild((UiTree.label((tid + "-" + pre + "ro") "ch-ro" readOnlyText)))
             return box
         }
-        UiTree.inline(box "height" ((to_string (ChannelCtl.composerH(f.sizedLines))) + "px"))
+        def pend:[UiFeedFile] (this.pending(inThread))
+        def up:int (this.uploading(inThread))
+        def withFiles:boolean (((array_length pend) > 0) || (up > 0))
+        UiTree.inline(box "height" ((to_string (ChannelCtl.composerHeight(f.sizedLines withFiles))) + "px"))
         def mineKeys:boolean ((keys == "thread") == inThread)
         if ((this.sugOpen()) && mineKeys) {
             box.addChild((this.sugEl()))
@@ -1648,8 +1917,12 @@ class ChannelCtl extends UiCtl {
         f.textClass = "ch-draft"
         f.placeholderClass = "ch-ph"
         f.build()
+        if withFiles {
+            frame.addChild((this.pendingEl(pre pend up)))
+        }
         frame.addChild((unwrap f.rootEl))
         def tools:EVGElement (UiTree.div((tid + "-" + pre + "tools") "ch-tools"))
+        tools.addChild((UiTree.label((tid + "-" + pre + "attach") "ch-tool ch-attach" "📎")))
         tools.addChild((UiTree.label((tid + "-fmt-" + pre + "b") "ch-tool ch-b" "B")))
         tools.addChild((UiTree.label((tid + "-fmt-" + pre + "i") "ch-tool ch-i" "I")))
         tools.addChild((UiTree.label((tid + "-fmt-" + pre + "s") "ch-tool ch-s" "S")))
@@ -1657,7 +1930,7 @@ class ChannelCtl extends UiCtl {
         tools.addChild((UiTree.label((tid + "-fmt-" + pre + "k") "ch-tool" "{ }")))
         tools.addChild((UiTree.div("" "ch-grow")))
         def scls:string "ch-sendb"
-        if ((strlen (trim f.value)) == 0) {
+        if ((((strlen (trim f.value)) == 0) && ((array_length pend) == 0)) || (up > 0)) {
             scls = "ch-sendb ch-sendb-off"
         }
         tools.addChild((UiTree.label((tid + "-" + pre + "send") scls "➤")))
@@ -1666,9 +1939,37 @@ class ChannelCtl extends UiCtl {
         return box
     }
 
+    ; the files waiting in the composer: each one's name and size with a ×,
+    ; and how many are still being put in
+    fn pendingEl:EVGElement (pre:string pend:[UiFeedFile] up:int) {
+        def row:EVGElement (UiTree.div((tid + "-" + pre + "pends") "ch-pends"))
+        for pend f:UiFeedFile k {
+            def pid:string (tid + "-" + pre + "pend-" + (to_string k))
+            def chip:EVGElement (UiTree.div(pid "ch-pend"))
+            chip.addChild((UiTree.label("" "ch-pend-i" (ChannelCtl.fileGlyph(f.type f.name)))))
+            chip.addChild((UiTree.label("" "ch-pend-n" f.name)))
+            chip.addChild((UiTree.label("" "ch-pend-s" (UiFeedFile.sizeText(f.size)))))
+            chip.addChild((UiTree.label((pid + "-x") "ch-pend-x" "×")))
+            row.addChild(chip)
+        }
+        if (up > 0) {
+            row.addChild((UiTree.label("" "ch-pend ch-pend-up" (uploadingText + " " + (to_string up)))))
+        }
+        return row
+    }
+
+    ; the composer's height with a row of files waiting (36px) or not
+    sfn composerHeight:double (lines:int withFiles:boolean) {
+        def h:double (ChannelCtl.composerH(lines))
+        if withFiles {
+            return (h + 36.0)
+        }
+        return h
+    }
+
     ; the composer's height for a draft of `lines` lines: the field (8px
     ; above the text, 20px a line, at least 36px), the tools' 32px, the
-    ; frame's border and 14px under it (theme/base.css, .ch-composer …)
+    ; frame's border and 20px under it (theme/base.css, .ch-composer …)
     sfn composerH:double (lines:int) {
         def n:int lines
         if (n < 1) {
@@ -1678,7 +1979,7 @@ class ChannelCtl extends UiCtl {
         if (field < 36.0) {
             field = 36.0
         }
-        return (((14.0 + 2.0) + field) + 32.0)
+        return (((20.0 + 2.0) + field) + 32.0)
     }
 
     fn sugEl:EVGElement () {
@@ -1815,6 +2116,7 @@ class ChannelCtl extends UiCtl {
         push a (tid + "-desc")
         push a (tid + "-here")
         push a (tid + "-me")
+        push a (tid + "-attach")
         push a input.tid
         push a (tid + "-send")
         return a
@@ -1885,6 +2187,13 @@ class ChannelCtl extends UiCtl {
             if (m.replies > 0) {
                 push out (this.btnRow(((this.msgTid("m" m.seq)) + "-thr") (threadText + ": " + (to_string m.replies) + " " + repliesText) (tid + "-feed")))
             }
+            ; its files and its links' pages, each a button
+            for m.files fl:UiFeedFile fk {
+                push out (this.btnRow(((this.msgTid("m" m.seq)) + "-f" + (to_string fk)) (fl.name + ", " + (UiFeedFile.sizeText(fl.size))) (tid + "-feed")))
+            }
+            for m.links lk:UiFeedLink lki {
+                push out (this.btnRow(((this.msgTid("m" m.seq)) + "-lk" + (to_string lki)) (? ((strlen lk.title) > 0) lk.title lk.url) (tid + "-feed")))
+            }
         }
         if (feed.atEnd == false) {
             push out (this.btnRow((tid + "-latest") latestText tid))
@@ -1897,6 +2206,10 @@ class ChannelCtl extends UiCtl {
             f.focusable = true
             f.tabStop = true
             push out f
+            for pendMain pf:UiFeedFile pk {
+                push out (this.btnRow((tid + "-pend-" + (to_string pk) + "-x") (removeText + " " + pf.name) tid))
+            }
+            push out (this.btnRow((tid + "-attach") attachText tid))
             push out (this.btnRow((tid + "-send") sendText tid))
         }
         if ((strlen threadId) > 0) {

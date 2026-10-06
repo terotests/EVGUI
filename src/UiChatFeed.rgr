@@ -31,6 +31,79 @@
 
 Import "UiDate.rgr"
 
+; a file shown with a message: its name, address, type and size, and a
+; picture's size in pixels (0 when not known)
+class UiFeedFile {
+    def name:string ""
+    def url:string ""
+    def type:string ""
+    def size:int 0
+    def w:int 0
+    def h:int 0
+
+    Constructor () {
+    }
+
+    fn isPicture:boolean () {
+        return ((indexOf type "image/") == 0)
+    }
+
+    ; "820 B", "12 KB", "3.4 MB"
+    sfn sizeText:string (n:int) {
+        if (n < 1024) {
+            return ((to_string n) + " B")
+        }
+        if (n < (1024 * 1024)) {
+            return ((to_string (idiv (n + 512) 1024)) + " KB")
+        }
+        def tenths:int (idiv ((n * 10) + (512 * 1024)) (1024 * 1024))
+        def whole:int (idiv tenths 10)
+        if (whole >= 10) {
+            return ((to_string whole) + " MB")
+        }
+        return ((to_string whole) + "." + (to_string (tenths - (whole * 10))) + " MB")
+    }
+
+    ; the size a picture is drawn at: its own, made smaller to fit in
+    ; maxW × maxH; unknown sizes take a 4:3 box
+    fn fitW:double (maxW:double maxH:double) {
+        return (this.fit(maxW maxH true))
+    }
+
+    fn fitH:double (maxW:double maxH:double) {
+        return (this.fit(maxW maxH false))
+    }
+
+    fn fit:double (maxW:double maxH:double wide:boolean) {
+        def pw:double (to_double w)
+        def ph:double (to_double h)
+        if ((w <= 0) || (h <= 0)) {
+            pw = maxW
+            ph = (maxW * 0.75)
+        }
+        def k:double 1.0
+        if (pw > maxW) {
+            k = (maxW / pw)
+        }
+        if ((ph * k) > maxH) {
+            k = (maxH / ph)
+        }
+        def out:double (? wide (pw * k) (ph * k))
+        return (? (out < 1.0) 1.0 out)
+    }
+}
+
+; what a link of a message leads to, as the server read it
+class UiFeedLink {
+    def url:string ""
+    def site:string ""
+    def title:string ""
+    def desc:string ""
+
+    Constructor () {
+    }
+}
+
 class UiFeedMsg {
     def id:string ""
     def seq:int 0
@@ -57,6 +130,9 @@ class UiFeedMsg {
     def reactWho:[string]
     ; folded open by the reader ("Show more")
     def unfolded:boolean false
+    ; files of the room shown with it, and its links' previews
+    def files:[UiFeedFile]
+    def links:[UiFeedLink]
 
     Constructor () {
     }
@@ -119,6 +195,8 @@ class UiFeedMsg {
         reactCount = o.reactCount
         reactMine = o.reactMine
         reactWho = o.reactWho
+        files = o.files
+        links = o.links
     }
 }
 
