@@ -345,6 +345,13 @@
 .theme-retro .emoji-foot { border-color: var(--retro-edge); }
 .theme-retro .emoji-name { color: var(--retro-ink); }
 
+/* the call: the same screen, the speaker's row lit */
+.theme-retro .call-panel { background-color: var(--retro-screen-2); border-color: var(--retro-screen-3); }
+.theme-retro .call-head, .theme-retro .call-foot { border-color: var(--retro-screen-3); }
+.theme-retro .call-title, .theme-retro .call-name { color: var(--retro-ink); }
+.theme-retro .call-row-speaking { background-color: var(--retro-screen-3); }
+.theme-retro .call-tag { color: var(--retro-ink-dim); background-color: var(--retro-screen-3); }
+
 /* the chat: the player's screen, one's own messages lit */
 .theme-retro .chat-panel {
   background: linear-gradient(180deg, var(--retro-screen-2), var(--retro-screen));

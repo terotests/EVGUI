@@ -1715,6 +1715,64 @@
 .chat-readonly { height: 47px; }
 .chat-ro-text { font-size: 12px; color: #64748b; }
 
+/* --- call ------------------------------------------------------------------------
+ * ParticipantsCtl: who is in a call. A title, a row per person (a dot in their
+ * colour, ringed while they speak; the name; "host"; a muted mark or, for the
+ * host, a Mute button on someone else's row), then one's own Mute / Unmute
+ * and Leave. Its height is the host's to give (needH). */
+.call-panel {
+  display: flex;
+  flex-direction: column;
+  width: 300px;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+.call-head {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: row;
+  align-items: center;
+  height: 36px;
+  padding: 0 10px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.call-title { color: #0f172a; font-size: 13px; font-weight: bold; }
+.call-list { display: flex; flex-direction: column; flex-grow: 1; padding: 2px 0; overflow: hidden; }
+.call-empty { height: 32px; line-height: 32px; padding: 0 10px; color: #94a3b8; font-size: 12px; }
+.call-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 10px;
+}
+.call-row-speaking { background-color: #f0fdf4; }
+.call-dot { flex-shrink: 0; width: 12px; height: 12px; border-radius: 7px; border: 2px solid #ffffff; }
+.call-dot-speaking { width: 14px; height: 14px; border-width: 3px; }
+.call-name { flex-grow: 1; color: #0f172a; font-size: 13px; }
+.call-tag { height: 18px; line-height: 18px; padding: 0 6px; font-size: 11px; color: #475569; background-color: #f1f5f9; border-radius: 9px; }
+.call-muted { font-size: 13px; color: #94a3b8; }
+.call-mute-other { height: 22px; line-height: 22px; padding: 0 8px; font-size: 11px; color: #0f172a; background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; }
+.call-mute-other:hover { background-color: #e2e8f0; }
+.call-foot {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 10px;
+  border-top: 1px solid #e2e8f0;
+}
+.call-mic { height: 30px; line-height: 30px; padding: 0 14px; font-size: 13px; color: #0f172a; background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; }
+.call-mic:hover { background-color: #e2e8f0; }
+.call-mic-off { color: #ffffff; background-color: #475569; border-color: #475569; }
+.call-mic-off:hover { background-color: #334155; }
+.call-leave { height: 30px; line-height: 30px; padding: 0 14px; font-size: 13px; color: #ffffff; background-color: #dc2626; border-radius: 6px; }
+.call-leave:hover { background-color: #b91c1c; }
+
 /* --- pin -------------------------------------------------------------------------
  * PinCtl: a speech bubble pinned to a point (a comment on a slide). Its
  * lower-left corner is the point; the fill is the host's colour (inline), the
