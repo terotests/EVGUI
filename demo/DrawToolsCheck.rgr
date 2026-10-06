@@ -44,6 +44,8 @@ class DrawToolsCheck {
         this.ok(((p.setSize(9)) == false) "…and a size past the last")
         this.ok((p.isFocusable("dt-tool-text") && ((p.isFocusable("dt")) == false)) "the parts are focusable, the bar is not")
 
+        this.ok(((p.owns("dt-color-0-dot")) && (p.owns("dt-done"))) "it answers for its parts")
+        this.ok(((p.owns("dt-sep1")) == false) "…not for a separator")
         p.x = 20.0
         p.y = 40.0
         p.build()
