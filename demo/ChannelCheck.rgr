@@ -1,0 +1,479 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; A room's channel (ChannelCtl), on Node: `ui:channel:check`.
+;
+; What the reader does and what the host is asked for: writing and sending,
+; the ":", "@" and "#" suggestions, formatting, reactions, threads, links,
+; embedded presentations, folding, the description and the profile; then
+; the channel laid out by a UiHost: the messages fill what the head and the
+; composer leave, stay at the end as they come, and a reader scrolled up is
+; left there with the "Latest messages" button.
+Import "../src/UiHost.rgr"
+Import "../src/ChannelCtl.rgr"
+
+class ChannelCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    ; 2026-10-06 10:00 local
+    fn base:double () {
+        return ((to_double (UiDate.toDays(2026 10 6))) * 86400000.0 + 36000000.0)
+    }
+
+    fn msg:UiFeedMsg (seq:int who:string nm:string text:string mins:int) {
+        def m (new UiFeedMsg())
+        m.id = ("id" + (to_string seq))
+        m.seq = seq
+        m.who = who
+        m.name = nm
+        m.avatar = "knight"
+        if ((indexOf who "bot-") == 0) {
+            m.kind = "bot"
+        }
+        m.color = "#2563eb"
+        m.text = text
+        m.at = ((this.base()) + ((to_double mins) * 60000.0))
+        return m
+    }
+
+    fn channel:ChannelCtl () {
+        def c (new ChannelCtl())
+        c.setup("ch" "PAY-817")
+        c.title = "PAY-817"
+        c.description = "Checkout retry"
+        c.setMe("p-ada" "Ada Lovelace" "knight" "#ea580c")
+        c.setPerson("p-ada" "Ada Lovelace" "person" "knight" "#ea580c" true)
+        c.setPerson("p-bob" "Bob" "person" "ghost" "#2563eb" true)
+        c.setPerson("bot-claude" "Claude" "bot" "robot" "#7c3aed" false)
+        push c.channels "general"
+        push c.channels "playground"
+        c.here = 2
+        c.now = ((this.base()) + 3600000.0)
+        c.feed.put((this.msg(1 "p-bob" "Bob" "Hi all" 0)))
+        c.feed.put((this.msg(2 "p-ada" "Ada Lovelace" "see https://example.com/x now" 1)))
+        c.feed.put((this.msg(3 "p-bob" "Bob" "[[slides:abc123#2]]" 2)))
+        c.feed.put((this.msg(4 "bot-claude" "Claude" "Done in #general" 30)))
+        c.build()
+        return c
+    }
+
+    fn type:void (c:ChannelCtl s:string) {
+        def i:int 0
+        while (i < (strlen s)) {
+            c.typeChar("" (substring s i (i + 1)))
+            i = (i + 1)
+        }
+    }
+
+    fn writing:void () {
+        def c:ChannelCtl (this.channel())
+        this.type(c "hello")
+        this.ok((c.input.value == "hello") ("typed into the composer: " + c.input.value))
+        c.keyDownWith("" "Enter" true false)
+        this.type(c "there")
+        this.ok((c.input.value == "hello\nthere") ("Shift+Enter breaks the line: " + c.input.value))
+        c.keyDownWith("" "Enter" false false)
+        this.ok(((c.take()) == "send\t\thello\nthere") "Enter sends to the channel")
+        this.ok(((c.take()) == "") "once")
+        this.ok((c.input.value == "") "the composer is empty again")
+        c.keyDownWith("" "Enter" false false)
+        this.ok(((c.take()) == "") "an empty composer sends nothing")
+        this.type(c "x ")
+        c.input.applyEdit("make it bold" 8 12)
+        c.activate("ch-fmt-b")
+        this.ok((c.input.value == "make it *bold*") ("B wraps the selection: " + c.input.value))
+        c.input.applyEdit("" 0 0)
+        c.activate("ch-fmt-c")
+        this.ok(((c.input.value == "``") && (c.input.caret == 1)) "with nothing selected the caret goes between the marks")
+        c.input.applyEdit("line" 4 4)
+        c.activate("ch-fmt-k")
+        this.ok((c.input.value == "line\n```\n\n```") ("a code block on lines of its own: " + c.input.value))
+        c.readOnly = true
+        c.input.applyEdit("" 0 0)
+        this.ok(((c.typeChar("" "a")) == false) "an archived room takes no typing")
+    }
+
+    fn suggestions:void () {
+        def c:ChannelCtl (this.channel())
+        this.type(c "nice :thu")
+        this.ok((c.sugOpen()) "':thu' lists emojis")
+        def first:string (itemAt c.sugItems 0)
+        this.ok(((indexOf first "👍") == 0) ("thumbs up first: " + first))
+        c.keyDownWith("" "Enter" false false)
+        this.ok(((indexOf c.input.value "nice 👍") == 0) ("Enter puts it in, Enter does not send: " + c.input.value))
+        this.ok(((c.take()) == "") "nothing was sent")
+        this.ok(((c.sugOpen()) == false) "the list closes")
+        this.type(c ":t")
+        this.ok(((c.sugOpen()) == false) "one letter after ':' is not enough")
+        c.input.applyEdit("" 0 0)
+        this.type(c "hey @b")
+        this.ok(((array_length c.sugItems) == 1) "'@b' lists Bob")
+        c.keyDownWith("" "Tab" false false)
+        this.ok((c.input.value == "hey @Bob ") ("Tab puts the name in: " + c.input.value))
+        c.input.applyEdit("" 0 0)
+        this.type(c "@")
+        this.ok(((array_length c.sugItems) == 2) ("'@' lists the others, not oneself: " + (to_string (array_length c.sugItems))))
+        c.keyDownWith("" "ArrowDown" false false)
+        this.ok((c.sugAt == 1) "Down moves")
+        c.keyDownWith("" "ArrowDown" false false)
+        this.ok((c.sugAt == 0) "and wraps")
+        c.keyDownWith("" "Escape" false false)
+        this.ok(((c.sugOpen()) == false) "Escape closes the list")
+        c.input.applyEdit("" 0 0)
+        this.type(c "see #pl")
+        this.ok(((array_length c.sugItems) == 1) "'#pl' lists playground")
+        c.activate("ch-sug-0")
+        this.ok((c.input.value == "see #playground ") ("a press puts it in: " + c.input.value))
+        this.ok(((ChannelCtl.handleOf("Ada Lovelace")) == "Ada_Lovelace") "a name with spaces is @Ada_Lovelace")
+        c.build()
+        def root:EVGElement (unwrap c.rootEl)
+        this.ok(((indexOf (this.ids(root)) "|ch-sugs|") < 0) "no list drawn while closed")
+        this.type(c ":fir")
+        c.build()
+        def root2:EVGElement (unwrap c.rootEl)
+        this.ok(((indexOf (this.ids(root2)) "|ch-sugs|") >= 0) "the list drawn above the composer")
+    }
+
+    fn ids:string (el:EVGElement) {
+        def out:string ("|" + el.id + "|")
+        for el.children k:EVGElement i {
+            out = (out + (this.ids(k)))
+        }
+        return out
+    }
+
+    fn classes:string (el:EVGElement) {
+        def out:string ("|" + el.className + "|")
+        for el.children k:EVGElement i {
+            out = (out + (this.classes(k)))
+        }
+        return out
+    }
+
+    fn messages:void () {
+        def c:ChannelCtl (this.channel())
+        def root:EVGElement (unwrap c.rootEl)
+        def ids:string (this.ids(root))
+        this.ok(((indexOf ids "|ch-m1-av|") >= 0) "a writer's first message has its character")
+        this.ok(((indexOf ids "|ch-m2-av|") >= 0) "another writer: a head again")
+        this.ok(((indexOf ids "|ch-m4-bot|") >= 0) "an assistant is marked BOT")
+        def cls:string (this.classes(root))
+        this.ok(((indexOf cls "|ch-day|") >= 0) "a day line")
+        this.ok(((indexOf cls "|ch-w ch-link ch-sp|") >= 0) ("a link among words: " + cls))
+        this.ok(((indexOf cls "|ch-w ch-channel ch-sp|") < 0) "#general ends the line")
+        this.ok(((indexOf cls "|ch-w ch-channel|") >= 0) "#general is a channel link")
+        this.ok(((indexOf ids "|ch-m3-b0-emb|") >= 0) "an embedded presentation is a card")
+        this.ok(((indexOf ids "|ch-m1-b0-s0|") >= 0) "plain words are one run")
+        ; presses
+        c.activate("ch-m2-b0-s1")
+        this.ok(((c.take()) == "link\thttps://example.com/x") "a link opens")
+        c.activate("ch-m3-b0-emb-open")
+        this.ok(((c.take()) == "deck\tabc123\t2") "Open on the card opens the deck at its slide")
+        c.activate("ch-m4-b0-s1")
+        this.ok(((c.take()) == "channel\tgeneral") "#general opens that room")
+        c.setDeckTitle("abc123" "Retry plan")
+        c.build()
+        def r2:EVGElement (unwrap c.rootEl)
+        def el@(optional):EVGElement (UiTree.findById(r2 "ch-m3-b0-emb-n"))
+        this.ok(((!null? el) && ((unwrap el).textContent == "Retry plan")) "the card shows the deck's title when known")
+        ; the hover bar
+        c.hover("ch-m2-b0-s0")
+        this.ok(((c.hoverSeq == 2) && (c.hoverWhere == "m")) "the pointer over a message")
+        c.build()
+        def r3:EVGElement (unwrap c.rootEl)
+        def hid:string (this.ids(r3))
+        this.ok(((indexOf hid "|ch-m2-acts|") >= 0) "its actions show")
+        this.ok(((indexOf hid "|ch-m2-del|") >= 0) "one's own can be deleted")
+        c.hover("ch-m1-b0-s0")
+        c.build()
+        def r4:EVGElement (unwrap c.rootEl)
+        this.ok(((indexOf (this.ids(r4)) "|ch-m1-del|") < 0) "another's cannot")
+        c.activate("ch-m1-q-0")
+        this.ok(((c.take()) == "react\tid1\t👍") "a quick reaction")
+        c.activate("ch-m1-del")
+        this.ok(((c.take()) == "") "deleting another's asks nothing")
+        c.activate("ch-m2-del")
+        this.ok(((c.take()) == "delete\tid2") "deleting one's own")
+        c.activate("ch-m1-copy")
+        this.ok(((c.take()) == "copy\tHi all") "copy takes the message's text")
+        ; reactions on the message
+        def m1:UiFeedMsg (c.feed.find("id1"))
+        m1.setReactions("🎉\tp-bob,p-ada" "p-ada")
+        c.build()
+        def r5:EVGElement (unwrap c.rootEl)
+        this.ok(((indexOf (this.classes(r5)) "|ch-rx ch-rx-mine|") >= 0) "one's own reaction is marked")
+        c.activate("ch-m1-rx-0")
+        this.ok(((c.take()) == "react\tid1\t🎉") "pressing a reaction toggles it")
+        c.unhover()
+        this.ok((c.hoverSeq == 0) "the pointer left")
+        ; folding
+        def long:string "l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\nl10\nl11\nl12\nl13\nl14"
+        c.feed.put((this.msg(5 "p-bob" "Bob" long 31)))
+        c.build()
+        def r6:EVGElement (unwrap c.rootEl)
+        def more@(optional):EVGElement (UiTree.findById(r6 "ch-m5-more"))
+        this.ok(((!null? more) && ((unwrap more).textContent == "Show more")) "a long message is folded")
+        this.ok(((indexOf (this.ids(r6)) "|ch-m5-b13|") < 0) "its last lines hidden")
+        c.activate("ch-m5-more")
+        c.build()
+        def r7:EVGElement (unwrap c.rootEl)
+        this.ok(((indexOf (this.ids(r7)) "|ch-m5-b13|") >= 0) "Show more shows them")
+        ; a deleted message
+        def gone:UiFeedMsg (this.msg(2 "p-ada" "Ada Lovelace" "" 1))
+        gone.deleted = true
+        c.feed.put(gone)
+        c.build()
+        def r8:EVGElement (unwrap c.rootEl)
+        this.ok(((indexOf (this.ids(r8)) "|ch-m2-gone|") >= 0) "a deleted message says so")
+    }
+
+    fn threads:void () {
+        def c:ChannelCtl (this.channel())
+        def m1:UiFeedMsg (c.feed.find("id1"))
+        m1.replies = 2
+        m1.lastReply = ((this.base()) + 600000.0)
+        push m1.repliers "bot-claude"
+        c.build()
+        def r:EVGElement (unwrap c.rootEl)
+        def n@(optional):EVGElement (UiTree.findById(r "ch-m1-thr-n"))
+        this.ok(((!null? n) && ((unwrap n).textContent == "2 replies")) "a root shows its replies")
+        c.activate("ch-m1-thr")
+        this.ok(((c.take()) == "thread\tid1") "pressing it opens the thread")
+        this.ok(((c.threadId == "id1") && (c.keys == "thread")) "the thread's composer has the keys")
+        def reply:UiFeedMsg (this.msg(6 "bot-claude" "Claude" "On it" 5))
+        reply.thread = "id1"
+        this.ok((c.tfeed.put(reply)) "a reply goes in the thread")
+        this.ok(((c.feed.put(reply)) == false) "not in the channel")
+        this.type(c "thanks")
+        c.keyDownWith("" "Enter" false false)
+        this.ok(((c.take()) == "send\tid1\tthanks") "sent to the thread")
+        c.width = 1000.0
+        c.build()
+        def r2:EVGElement (unwrap c.rootEl)
+        def ids:string (this.ids(r2))
+        this.ok((((indexOf ids "|ch-thread|") >= 0) && ((indexOf ids "|ch-o1|") >= 0)) "the pane shows the root")
+        this.ok(((indexOf ids "|ch-r6|") >= 0) "and the reply")
+        this.ok(((indexOf ids "|ch-r6-reply|") < 0) "a reply has no thread of its own")
+        def mainEl@(optional):EVGElement (UiTree.findById(r2 "ch-main"))
+        this.ok(((unwrap mainEl).display != "none") "a wide channel keeps both")
+        c.width = 600.0
+        c.build()
+        def r3:EVGElement (unwrap c.rootEl)
+        def main3@(optional):EVGElement (UiTree.findById(r3 "ch-main"))
+        def hidden:boolean ((unwrap main3).display == "none")
+        this.ok(hidden "a narrow one shows only the thread")
+        c.keyDownWith("" "Escape" false false)
+        this.ok(((c.threadId == "") && (c.keys == "main")) "Escape closes the thread")
+        c.activate("ch-m1-reply")
+        c.take()
+        c.activate("ch-tclose")
+        this.ok((c.threadId == "") "× closes it")
+    }
+
+    fn head:void () {
+        def c:ChannelCtl (this.channel())
+        c.activate("ch-desc")
+        this.ok((c.descOpen && (c.dinput.value == "Checkout retry")) "the description is edited in place")
+        c.typeChar("" "!")
+        c.keyDownWith("" "Enter" false false)
+        this.ok(((c.take()) == "describe\tCheckout retry!") "Enter saves it")
+        this.ok(((c.descOpen == false) && (c.keys == "main")) "and closes the field")
+        c.activate("ch-desc")
+        c.keyDownWith("" "Escape" false false)
+        this.ok(((c.take()) == "") "Escape keeps the old one")
+        c.activate("ch-here")
+        this.ok(c.peopleOpen "the count opens who is in the room")
+        c.build()
+        def r:EVGElement (unwrap c.rootEl)
+        this.ok(((indexOf (this.classes(r)) "|ch-dot ch-dot-on|") >= 0) "those here are marked")
+        c.activate("ch-here")
+        this.ok((c.peopleOpen == false) "and closes it")
+        ; the profile
+        c.activate("ch-me")
+        this.ok((c.profileOpen && (c.pAvatar == "knight")) "the reader's profile opens with their character")
+        c.activate("ch-pf-a-owl")
+        c.activate("ch-pf-c-4")
+        this.ok(((c.pAvatar == "owl") && (c.pColor == "#22c55e")) "a character and a colour picked")
+        c.pinput.applyEdit("Ada" 3 3)
+        c.activate("ch-pf-save")
+        this.ok(((c.take()) == "profile\tAda\towl\t#22c55e") "saved for the host")
+        this.ok((c.profileOpen == false) "the sheet closes")
+        c.activate("ch-me")
+        c.pinput.applyEdit("  " 2 2)
+        c.activate("ch-pf-save")
+        this.ok((c.profileOpen && ((c.take()) == "")) "a name is needed")
+        c.readOnly = true
+        c.descOpen = false
+        c.activate("ch-desc")
+        this.ok((c.descOpen == false) "an archived room's description stays")
+    }
+
+    fn a11y:void () {
+        def c:ChannelCtl (this.channel())
+        def rows:[UiRow] (c.rows())
+        def first:UiRow (itemAt rows 0)
+        this.ok(((first.role == (EVGA11yRole.region())) && (first.name == "# PAY-817")) "a region named by the channel")
+        def said:string ""
+        for rows r:UiRow i {
+            if (r.tid == "ch-m4") {
+                said = r.name
+            }
+        }
+        this.ok((said == "Claude, 10:30: Done in #general") ("a message as text: " + said))
+        this.ok((c.owns("ch-m1-b0-s0") && ((c.owns("chat-x")) == false)) "owns its parts")
+    }
+
+    ; a fresh host for the rebuilt control, laid out (as an app does)
+    fn lay:UiHost (c:ChannelCtl css:string) {
+        def h (new UiHost())
+        h.setPageSize(900.0 600.0)
+        h.addStyleSheet(css)
+        c.build()
+        h.add(c)
+        h.layout()
+        return h
+    }
+
+    fn feedOf:EVGElement (h:UiHost) {
+        def r:EVGElement (unwrap h.root)
+        def fe@(optional):EVGElement (h.findEl(r "ch-feed"))
+        if (null? fe) {
+            return (EVGElement.createDiv())
+        }
+        return (unwrap fe)
+    }
+
+    ; laid out on a page
+    fn laidOut:void () {
+        ; the theme's own rules (run from Ranger's root, or from EVGUI's)
+        def css:string (?? (read_file "." "gallery/evgui/theme/base.css") "")
+        if ((strlen css) == 0) {
+            css = (?? (read_file "." "theme/base.css") "")
+        }
+        this.ok(((strlen css) > 0) "the theme is read")
+        def c:ChannelCtl (this.channel())
+        c.width = 900.0
+        c.height = 600.0
+        c.feed.clear()
+        def k:int 10
+        while (k < 60) {
+            c.feed.put((this.msg(k (? ((k % 3) == 0) "p-ada" "p-bob") "Bob" ("message number " + (to_string k) + " with a few words in it") (k * 7))))
+            k = (k + 1)
+        }
+        def h:UiHost (this.lay(c css))
+        this.ok(((h.styleErrorCount()) == 0) ("the theme reads without errors: " + (to_string (h.styleErrorCount()))))
+        def retro:string (?? (read_file "." "gallery/evgui/theme/skins/retro.css") "")
+        if ((strlen retro) == 0) {
+            retro = (?? (read_file "." "theme/skins/retro.css") "")
+        }
+        def hr (new UiHost())
+        hr.addStyleSheet(retro)
+        this.ok((((strlen retro) > 0) && ((hr.styleErrorCount()) == 0)) ("the retro skin reads without errors: " + (to_string (hr.styleErrorCount()))))
+        def f:EVGElement (this.feedOf(h))
+        def r:EVGElement (unwrap h.root)
+        def head@(optional):EVGElement (h.findEl(r "ch-head"))
+        def comp@(optional):EVGElement (h.findEl(r "ch-composer"))
+        def used:double (((unwrap head).calculatedHeight + f.calculatedHeight) + (unwrap comp).calculatedHeight)
+        this.ok(((used > 598.0) && (used < 602.0)) ("head, messages and composer fill the height: " + (to_string used)))
+        this.ok((f.calculatedHeight > 400.0) ("the messages get the rest: " + (to_string f.calculatedHeight)))
+        def max:double (f.maxScrollTop())
+        this.ok((max > 100.0) ("more than fits: " + (to_string max)))
+        this.ok(((f.scrollTop >= (max - 1.0)) && (f.scrollTop <= (max + 1.0))) ("at the end: " + (to_string f.scrollTop) + " of " + (to_string max)))
+        c.laidOut(false f.scrollTop max)
+        this.ok(c.feed.atEnd "the reader is at the end")
+        c.scrollBy(false -300.0)
+        this.ok(((c.feed.atEnd == false) && (c.feedScroll < max)) "scrolled up")
+        c.feed.put((this.msg(70 "p-bob" "Bob" "new one" 500)))
+        this.ok((c.feed.unseen == 1) "what came is counted")
+        def h2:UiHost (this.lay(c css))
+        def f2:EVGElement (this.feedOf(h2))
+        this.ok(((f2.scrollTop > (max - 301.0)) && (f2.scrollTop < (max - 299.0))) ("the reader stays where they were: " + (to_string f2.scrollTop)))
+        c.laidOut(false f2.scrollTop (f2.maxScrollTop()))
+        def r2:EVGElement (unwrap h2.root)
+        def lb@(optional):EVGElement (h2.findEl(r2 "ch-latest"))
+        def lbText:string ""
+        if (!null? lb) {
+            lbText = lb.textContent
+        }
+        this.ok(((indexOf lbText "1 new messages") >= 0) ("the button counts it: " + lbText))
+        def lbx:double 0.0
+        def lby:double 0.0
+        if (!null? lb) {
+            def lbe:EVGElement (unwrap lb)
+            lbx = (lbe.calculatedX + 5.0)
+            lby = (lbe.calculatedY + 5.0)
+            this.ok(((lbe.calculatedY > f2.calculatedY) && (lbe.calculatedY < (f2.calculatedY + f2.calculatedHeight))) ("the button floats over the messages: " + (to_string lbe.calculatedY)))
+        }
+        this.ok(((h2.hitTest(lbx lby)) == "ch-latest") "the button is pressed where it is drawn")
+        c.activate("ch-latest")
+        def h3:UiHost (this.lay(c css))
+        def f3:EVGElement (this.feedOf(h3))
+        this.ok((f3.scrollTop >= ((f3.maxScrollTop()) - 1.0)) "Latest messages: back at the end")
+        c.laidOut(false f3.scrollTop (f3.maxScrollTop()))
+        ; the top: earlier ones are asked for, and the place is kept
+        c.hasOlder = true
+        c.scrollBy(false -100000.0)
+        this.ok(((c.take()) == "older\t\t10") "at the top, earlier messages are asked for")
+        this.ok(c.loading "while they load")
+        def h4:UiHost (this.lay(c css))
+        def f4:EVGElement (this.feedOf(h4))
+        c.laidOut(false f4.scrollTop (f4.maxScrollTop()))
+        def before:double ((f4.maxScrollTop()) - f4.scrollTop)
+        c.keepPlace(false)
+        c.feed.put((this.msg(5 "p-bob" "Bob" "an earlier one" -5)))
+        c.feed.put((this.msg(6 "p-bob" "Bob" "and another" -4)))
+        c.loading = false
+        c.hasOlder = false
+        def h5:UiHost (this.lay(c css))
+        def f5:EVGElement (this.feedOf(h5))
+        this.ok((c.laidOut(false f5.scrollTop (f5.maxScrollTop()))) "a kept place asks for another layout")
+        def h6:UiHost (this.lay(c css))
+        def f6:EVGElement (this.feedOf(h6))
+        def after:double ((f6.maxScrollTop()) - f6.scrollTop)
+        this.ok((((after - before) < 2.0) && ((before - after) < 2.0)) ("the same distance from the end: " + (to_string before) + " / " + (to_string after)))
+        this.ok((f6.scrollTop > 20.0) ("so the earlier ones are above, out of view: " + (to_string f6.scrollTop)))
+        ; the composer is the control's to press
+        def r6:EVGElement (unwrap h6.root)
+        def fld@(optional):EVGElement (h6.findEl(r6 "ch-in"))
+        def fe:EVGElement (unwrap fld)
+        def hit:string (h6.hitTest((fe.calculatedX + 20.0) (fe.calculatedY + 10.0)))
+        this.ok((c.input.owns(hit)) ("the field is hit: " + hit))
+        ; the hover bar, the people and the profile sit on the channel
+        c.hover("ch-m30-b0-s0")
+        c.peopleOpen = true
+        def h7:UiHost (this.lay(c css))
+        def r7:EVGElement (unwrap h7.root)
+        def acts@(optional):EVGElement (h7.findEl(r7 "ch-m30-acts"))
+        def row@(optional):EVGElement (h7.findEl(r7 "ch-m30"))
+        def ae:EVGElement (unwrap acts)
+        def re:EVGElement (unwrap row)
+        this.ok(((ae.calculatedY < re.calculatedY) && ((ae.calculatedX + ae.calculatedWidth) > 850.0)) ("the actions at the message's top right: " + (to_string ae.calculatedX) + "," + (to_string ae.calculatedY)))
+        this.ok(((h7.hitTest((ae.calculatedX + 6.0) (ae.calculatedY + 10.0))) == "ch-m30-q-0") "and pressed there")
+        def pp@(optional):EVGElement (h7.findEl(r7 "ch-people"))
+        def pe:EVGElement (unwrap pp)
+        this.ok(((pe.calculatedY > 60.0) && (pe.calculatedX > 600.0)) ("the people under the count: " + (to_string pe.calculatedX) + "," + (to_string pe.calculatedY)))
+    }
+
+    sfn main:void () {
+        def k (new ChannelCheck())
+        k.writing()
+        k.suggestions()
+        k.messages()
+        k.threads()
+        k.head()
+        k.a11y()
+        k.laidOut()
+        print ((to_string k.passes) + " passed, " + (to_string k.fails) + " failed")
+        if (k.fails > 0) {
+            print "RESULT FAIL"
+        }
+    }
+}

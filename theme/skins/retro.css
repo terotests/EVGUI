@@ -376,3 +376,90 @@
 .theme-retro .chat-act-primary { background: linear-gradient(180deg, var(--retro-play-a), var(--retro-play-b)); color: var(--retro-btn-ink); }
 .theme-retro .chat-act-danger { background: linear-gradient(180deg, #f87171, #b91c1c); color: #ffffff; }
 .theme-retro .chat-ro-text { color: var(--retro-ink-dim); }
+
+/* a room's channel (ChannelCtl): the player's screen, the characters lit on it */
+.theme-retro .ch-root,
+.theme-retro .ch-thread { background: linear-gradient(180deg, var(--retro-screen-2), var(--retro-screen)); }
+.theme-retro .ch-head,
+.theme-retro .ch-thead,
+.theme-retro .ch-thread,
+.theme-retro .ch-tcount,
+.theme-retro .ch-day { border-color: var(--retro-screen-3); }
+.theme-retro .ch-title,
+.theme-retro .ch-ttitle,
+.theme-retro .ch-name,
+.theme-retro .ch-run,
+.theme-retro .ch-w,
+.theme-retro .ch-bullet,
+.theme-retro .ch-me-n,
+.theme-retro .ch-here-n,
+.theme-retro .ch-pp-n,
+.theme-retro .ch-sug-t,
+.theme-retro .ch-emb-n,
+.theme-retro .ch-pf-title,
+.theme-retro .ch-pf-l,
+.theme-retro .ch-draft,
+.theme-retro .ch-desc-draft,
+.theme-retro .ch-code-l { color: var(--retro-ink); }
+.theme-retro .ch-desc,
+.theme-retro .ch-time,
+.theme-retro .ch-tsub,
+.theme-retro .ch-gtime,
+.theme-retro .ch-edited,
+.theme-retro .ch-deleted,
+.theme-retro .ch-empty,
+.theme-retro .ch-thr-l,
+.theme-retro .ch-emb-s,
+.theme-retro .ch-ro,
+.theme-retro .ch-tool,
+.theme-retro .ch-x { color: var(--retro-ink-dim); }
+.theme-retro .ch-day-t,
+.theme-retro .ch-newline-t { background-color: var(--retro-screen); border-color: var(--retro-screen-3); color: var(--retro-ink); }
+.theme-retro .ch-msg-hover,
+.theme-retro .ch-here:hover,
+.theme-retro .ch-me:hover,
+.theme-retro .ch-tool:hover,
+.theme-retro .ch-x:hover,
+.theme-retro .ch-act:hover { background-color: var(--retro-screen-3); }
+.theme-retro .ch-here { border-color: var(--retro-screen-3); }
+.theme-retro .ch-av,
+.theme-retro .ch-me-av,
+.theme-retro .ch-here-av,
+.theme-retro .ch-thr-av,
+.theme-retro .ch-pp-av,
+.theme-retro .ch-pf-big { background-color: var(--retro-screen-3); }
+.theme-retro .ch-link,
+.theme-retro .ch-channel,
+.theme-retro .ch-more,
+.theme-retro .ch-older,
+.theme-retro .ch-thr-n { color: var(--retro-hot-b); }
+.theme-retro .ch-mention { color: var(--retro-btn-ink); background-color: var(--retro-fill-b); }
+.theme-retro .ch-mention-me { color: #1c1917; background-color: #fbbf24; }
+.theme-retro .ch-icode,
+.theme-retro .ch-code { background-color: var(--retro-screen); border-color: var(--retro-screen-3); }
+.theme-retro .ch-icode { color: var(--retro-hot-b); }
+.theme-retro .ch-quote { border-color: var(--retro-ink-dim); }
+.theme-retro .ch-rx { background-color: var(--retro-screen-3); border-color: var(--retro-screen-3); color: var(--retro-ink); }
+.theme-retro .ch-rx-mine { border-color: var(--retro-hot-b); }
+.theme-retro .ch-acts,
+.theme-retro .ch-sugs,
+.theme-retro .ch-people,
+.theme-retro .ch-pf { background-color: var(--retro-screen-2); border-color: var(--retro-edge); }
+.theme-retro .ch-act { color: var(--retro-ink); }
+.theme-retro .ch-sug-on { background-color: var(--retro-fill-b); }
+.theme-retro .ch-sug-t-on { color: var(--retro-btn-ink); }
+.theme-retro .ch-frame,
+.theme-retro .ch-desc-field,
+.theme-retro .ch-pf-field { background-color: var(--retro-screen); border-color: var(--retro-edge); }
+.theme-retro .ch-emb { border-color: var(--retro-screen-3); }
+.theme-retro .ch-emb:hover { background-color: var(--retro-screen-3); }
+.theme-retro .ch-emb-i,
+.theme-retro .ch-sendb,
+.theme-retro .ch-latest,
+.theme-retro .ch-btn-primary { background: linear-gradient(180deg, var(--retro-play-a), var(--retro-play-b)); color: var(--retro-btn-ink); border-color: var(--retro-edge); }
+.theme-retro .ch-sendb-off { background: linear-gradient(180deg, var(--retro-screen-3), var(--retro-screen-2)); color: var(--retro-ink-dim); }
+.theme-retro .ch-btn { background: linear-gradient(180deg, var(--retro-screen-3), var(--retro-screen-2)); color: var(--retro-ink); border-color: var(--retro-edge); }
+.theme-retro .ch-pf-a { border-color: var(--retro-screen-3); }
+.theme-retro .ch-pf-on { border-color: var(--retro-hot-b); }
+.theme-retro .ch-pf-c { border-color: var(--retro-screen-2); }
+.theme-retro .ch-pf-c-on { border-color: var(--retro-ink); }

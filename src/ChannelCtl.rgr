@@ -1,0 +1,1898 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; ChannelCtl — a room's chat, the way Slack has one
+; =============================================================================
+; A channel fills the work area: a head with the channel's name, its
+; description (pressed: edited in place), how many are here and the reader's
+; own character; the messages, scrolled, newest at the bottom; and a composer
+; with a row of formatting buttons. A message's thread opens in a pane on the
+; right with its own composer.
+;
+; THE PARTS are models, checked on their own (ui:chatmodel:check):
+; UiChatText reads what was typed into blocks and spans (bold, links, code,
+; :emoji:, @mentions, #channels, a presentation embedded with
+; [[slides:<id>]]), UiPixelAvatar draws each writer's retro character in
+; their colour, and UiChatFeed keeps the messages in order and says where a
+; day, the "New" line and a writer's head go and whether the reader is at
+; the end. This control draws them and turns presses and keys into REQUESTS
+; for the host (`take`), one string each, TAB between the fields:
+;
+;   send     thread text           post (thread "" the channel)
+;   react    message-id emoji      add or take back a reaction
+;   delete   message-id            delete one's own message
+;   thread   root-id               a thread was opened: load its replies
+;   older    thread before-seq     the reader reached the top: earlier ones
+;   link     href                  open a link
+;   deck     deck-id slide         open an embedded presentation
+;   channel  name                  open the room called #name
+;   describe text                  the new description
+;   profile  name avatar color     the reader's new name and character
+;   copy     text                  put a message's text on the clipboard
+;
+; The host answers with what the server says (`feed.put`, `thread.put`):
+; nothing a request asks for is shown before the server has it, so every
+; reader sees the same channel.
+;
+; SCROLLING: the messages are one clipped box (`<tid>-feed`) whose
+; `scrollTop` the layout clamps; the host tells the control what it came to
+; (`laidOut`). At the end the newest stay in view as they come; scrolled up,
+; the reader stays where they are and a "Latest messages" button counts what
+; came meanwhile. Earlier messages put at the front (`keepPlace` first) keep
+; what the reader was looking at where it was.
+;
+; KEYS (the host sends them to whichever field has them, `keys`): Enter
+; sends, Shift+Enter breaks the line, Escape closes the thread or the
+; suggestions, PageUp/PageDown scroll. Typing ":", "@" or "#" and a few
+; letters lists emojis, people or channels above the composer: Up/Down
+; choose, Enter or Tab puts it in, Escape closes the list.
+;
+; NOT HERE: selecting part of a message's words (Copy takes the whole
+; message), a full emoji picker for reactions (six quick ones on the
+; hover bar; ":" in the composer finds any emoji).
+; =============================================================================
+
+Import "UiCtl.rgr"
+Import "InputCtl.rgr"
+Import "UiTree.rgr"
+Import "UiChatText.rgr"
+Import "UiChatFeed.rgr"
+Import "UiPixelAvatar.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+
+class UiChannelPerson {
+    def id:string ""
+    def name:string ""
+    ; person | bot
+    def kind:string "person"
+    def avatar:string ""
+    def color:string ""
+    def here:boolean false
+
+    Constructor () {
+    }
+}
+
+class ChannelCtl extends UiCtl {
+    ; --- the channel ----------------------------------------------------------------
+    def title:string ""
+    def description:string ""
+    def here:int 0
+    def people:[UiChannelPerson]
+    ; the other rooms, for #
+    def channels:[string]
+    ; presentations' titles by id, for embeds ("" unknown)
+    def deckIds:[string]
+    def deckTitles:[string]
+    ; no composer: `readOnlyText` in its place (an archived room)
+    def readOnly:boolean false
+    def readOnlyText:string "This room is archived."
+    ; a line under the head ("" none), e.g. why the channel is not live
+    def notice:string ""
+
+    ; --- the reader ---------------------------------------------------------------------
+    def me:string ""
+    def myName:string ""
+    def myAvatar:string ""
+    def myColor:string ""
+
+    ; --- the messages ----------------------------------------------------------------------
+    def feed:UiChatFeed (new UiChatFeed())
+    def tfeed:UiChatFeed (new UiChatFeed())
+    def text:UiChatText (new UiChatText())
+    ; the open thread's root ("" none)
+    def threadId:string ""
+    ; earlier messages to ask for at the top
+    def hasOlder:boolean false
+    def tHasOlder:boolean false
+    def loading:boolean false
+    ; the host's local clock in ms (UTC + offset), for "Today" and times
+    def now:double 0.0
+    def h24:boolean true
+
+    ; --- the size, and the scroll as the layout clamped it -----------------------------
+    def width:double 800.0
+    def height:double 600.0
+    def threadW:double 360.0
+    def feedScroll:double 0.0
+    def feedMax:double 0.0
+    def tScroll:double 0.0
+    def tMax:double 0.0
+    ; distance from the bottom to keep while earlier messages are put in
+    def anchorMain:double -1.0
+    def anchorThread:double -1.0
+
+    ; --- fields ------------------------------------------------------------------------------
+    def input:InputCtl (new InputCtl())
+    def tinput:InputCtl (new InputCtl())
+    def dinput:InputCtl (new InputCtl())
+    def pinput:InputCtl (new InputCtl())
+    ; which has the keys: main | thread | desc | profile | ""
+    def keys:string "main"
+    def descOpen:boolean false
+    def profileOpen:boolean false
+    def peopleOpen:boolean false
+    def pAvatar:string ""
+    def pColor:string ""
+
+    ; --- suggestions (":", "@", "#") ----------------------------------------------------
+    ; "insert TAB label TAB glyph"
+    def sugItems:[string]
+    def sugAt:int 0
+    ; where the word being completed starts in the field
+    def sugFrom:int -1
+
+    ; --- the pointer ---------------------------------------------------------------------------
+    ; the message the pointer is over: its seq and where (m, r, o)
+    def hoverSeq:int 0
+    def hoverWhere:string ""
+
+    def requests:[string]
+    def quick:[string]
+
+    ; --- words (the host's language) ----------------------------------------------------
+    def placeholderText:string "Message"
+    def threadPlaceholder:string "Reply…"
+    def sendText:string "Send"
+    def latestText:string "Latest messages"
+    def newMessagesText:string "new messages"
+    def newLineText:string "New"
+    def todayText:string "Today"
+    def yesterdayText:string "Yesterday"
+    def replyText:string "reply"
+    def repliesText:string "replies"
+    def lastReplyText:string "Last reply"
+    def threadText:string "Thread"
+    def showMoreText:string "Show more"
+    def showLessText:string "Show less"
+    def editedText:string "(edited)"
+    def deletedText:string "This message was deleted."
+    def botText:string "BOT"
+    def hereText:string "here"
+    def membersText:string "members"
+    def openText:string "Open"
+    def presentationText:string "Presentation"
+    def slideText:string "Slide"
+    def replyInThreadText:string "Reply in thread"
+    def copyText:string "Copy"
+    def deleteText:string "Delete"
+    def addDescText:string "Add a description"
+    def saveText:string "Save"
+    def cancelText:string "Cancel"
+    def profileText:string "Your profile"
+    def nameText:string "Name"
+    def characterText:string "Character"
+    def colorText:string "Colour"
+    def olderText:string "Show earlier messages"
+    def loadingText:string "Loading…"
+    def emptyText:string "No messages yet. Say hello!"
+    def closeText:string "Close"
+    def boldText:string "Bold"
+    def italicText:string "Italic"
+    def strikeText:string "Strikethrough"
+    def codeText:string "Code"
+    def codeBlockText:string "Code block"
+
+    Constructor () {
+        def q:[string] ([] _:string ("👍" "❤️" "😂" "🎉" "👀" "✅"))
+        quick = q
+    }
+
+    fn setup:void (id:string label:string) {
+        tid = id
+        name = label
+        input.tid = (id + "-in")
+        tinput.tid = (id + "-tin")
+        dinput.tid = (id + "-din")
+        pinput.tid = (id + "-pin")
+        input.multiline = true
+        input.maxLines = 8
+        tinput.multiline = true
+        tinput.maxLines = 6
+        input.maxLength = 40000
+        tinput.maxLength = 40000
+        dinput.maxLength = 500
+        pinput.maxLength = 40
+    }
+
+    ; --- the host's side ----------------------------------------------------------------------
+
+    ; the next request, "" none
+    fn take:string () {
+        if ((array_length requests) == 0) {
+            return ""
+        }
+        def r:string (itemAt requests 0)
+        remove_index requests 0
+        return r
+    }
+
+    fn ask:void (r:string) {
+        push requests r
+    }
+
+    fn setMe:void (id:string nm:string avatar:string color:string) {
+        me = id
+        myName = nm
+        myAvatar = avatar
+        myColor = color
+        feed.me = id
+        tfeed.me = id
+    }
+
+    fn clearPeople:void () {
+        def none:[UiChannelPerson]
+        people = none
+    }
+
+    fn setPerson:void (id:string nm:string kind:string avatar:string color:string isHere:boolean) {
+        for people p:UiChannelPerson i {
+            if (p.id == id) {
+                p.name = nm
+                p.kind = kind
+                p.avatar = avatar
+                p.color = color
+                p.here = isHere
+                return
+            }
+        }
+        def p (new UiChannelPerson())
+        p.id = id
+        p.name = nm
+        p.kind = kind
+        p.avatar = avatar
+        p.color = color
+        p.here = isHere
+        push people p
+    }
+
+    fn person:UiChannelPerson (id:string) {
+        for people p:UiChannelPerson i {
+            if (p.id == id) {
+                return p
+            }
+        }
+        return (new UiChannelPerson())
+    }
+
+    fn setDeckTitle:void (deck:string t:string) {
+        def i:int 0
+        while (i < (array_length deckIds)) {
+            if ((itemAt deckIds i) == deck) {
+                set deckTitles i t
+                return
+            }
+            i = (i + 1)
+        }
+        push deckIds deck
+        push deckTitles t
+    }
+
+    fn deckTitle:string (deck:string) {
+        def i:int 0
+        while (i < (array_length deckIds)) {
+            if ((itemAt deckIds i) == deck) {
+                return (itemAt deckTitles i)
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    ; Another room opens here: what was this one's goes.
+    fn reset:void () {
+        feed.clear()
+        tfeed.clear()
+        threadId = ""
+        tfeed.thread = ""
+        hasOlder = false
+        tHasOlder = false
+        loading = false
+        feedScroll = 0.0
+        tScroll = 0.0
+        anchorMain = -1.0
+        anchorThread = -1.0
+        descOpen = false
+        peopleOpen = false
+        hoverSeq = 0
+        this.closeSug()
+        input.setValue("")
+        input.moveTo(0 false)
+        if (keys == "thread") {
+            keys = "main"
+        }
+    }
+
+    ; Earlier messages are about to be put at the front of `inThread`'s
+    ; feed: what the reader sees stays where it is.
+    fn keepPlace:void (inThread:boolean) {
+        if inThread {
+            anchorThread = (tMax - tScroll)
+        } {
+            anchorMain = (feedMax - feedScroll)
+        }
+    }
+
+    ; The layout clamped the feed's scroll to `top` of `max`. → true when the
+    ; control moved it (a kept place) and wants laying out again.
+    fn laidOut:boolean (inThread:boolean top:double max:double) {
+        if inThread {
+            tScroll = top
+            tMax = max
+            if (anchorThread >= 0.0) {
+                tScroll = (max - anchorThread)
+                anchorThread = -1.0
+                return true
+            }
+            tfeed.scrolled((top >= (max - 2.0)))
+            return false
+        }
+        feedScroll = top
+        feedMax = max
+        if (anchorMain >= 0.0) {
+            feedScroll = (max - anchorMain)
+            anchorMain = -1.0
+            return true
+        }
+        feed.scrolled((top >= (max - 2.0)))
+        return false
+    }
+
+    ; The wheel (or PageUp/PageDown) over the messages.
+    fn scrollBy:void (inThread:boolean dy:double) {
+        if inThread {
+            tScroll = (ChannelCtl.clampTo((tScroll + dy) tMax))
+            tfeed.scrolled((tScroll >= (tMax - 2.0)))
+            if (((tScroll <= 0.0) && tHasOlder) && (loading == false)) {
+                this.askOlder(true)
+            }
+            return
+        }
+        feedScroll = (ChannelCtl.clampTo((feedScroll + dy) feedMax))
+        feed.scrolled((feedScroll >= (feedMax - 2.0)))
+        if (((feedScroll <= 0.0) && hasOlder) && (loading == false)) {
+            this.askOlder(false)
+        }
+    }
+
+    sfn clampTo:double (v:double max:double) {
+        if (v > max) {
+            return max
+        }
+        if (v < 0.0) {
+            return 0.0
+        }
+        return v
+    }
+
+    fn askOlder:void (inThread:boolean) {
+        loading = true
+        if inThread {
+            this.ask(("older\t" + threadId + "\t" + (to_string (tfeed.firstSeq()))))
+        } {
+            this.ask(("older\t\t" + (to_string (feed.firstSeq()))))
+        }
+    }
+
+    ; the newest in view again
+    fn toLatest:void () {
+        feed.toEnd()
+        feedScroll = feedMax
+    }
+
+    fn openThread:void (root:string) {
+        if (threadId == root) {
+            return
+        }
+        threadId = root
+        tfeed.clear()
+        tfeed.thread = root
+        tfeed.me = me
+        tHasOlder = false
+        tScroll = 0.0
+        tinput.setValue("")
+        tinput.moveTo(0 false)
+        keys = "thread"
+        this.ask(("thread\t" + root))
+    }
+
+    fn closeThread:void () {
+        threadId = ""
+        tfeed.clear()
+        tfeed.thread = ""
+        if (keys == "thread") {
+            keys = "main"
+        }
+        this.closeSug()
+    }
+
+    fn threadRoot:UiFeedMsg () {
+        return (feed.find(threadId))
+    }
+
+    ; --- the fields ---------------------------------------------------------------------------
+
+    fn field:InputCtl () {
+        if (keys == "thread") {
+            return tinput
+        }
+        if (keys == "desc") {
+            return dinput
+        }
+        if (keys == "profile") {
+            return pinput
+        }
+        return input
+    }
+
+    fn hasField:boolean () {
+        if ((keys == "main") || (keys == "thread")) {
+            return (readOnly == false)
+        }
+        return (((keys == "desc") && descOpen) || ((keys == "profile") && profileOpen))
+    }
+
+    fn focusField:void (which:string) {
+        keys = which
+        this.closeSug()
+    }
+
+    fn typeChar:boolean (target:string ch:string) {
+        if ((this.hasField()) == false) {
+            return false
+        }
+        def f:InputCtl (this.field())
+        f.insertText(ch)
+        this.findSug()
+        return true
+    }
+
+    fn send:boolean (inThread:boolean) {
+        if readOnly {
+            return false
+        }
+        def f:InputCtl input
+        if inThread {
+            f = tinput
+        }
+        def t:string (trim f.value)
+        if ((strlen t) == 0) {
+            return false
+        }
+        def th:string ""
+        if inThread {
+            th = threadId
+        }
+        this.ask(("send\t" + th + "\t" + t))
+        f.setValue("")
+        f.moveTo(0 false)
+        f.scrollX = 0.0
+        f.scrollY = 0.0
+        this.closeSug()
+        ; one's own message is read at the end
+        if inThread {
+            tfeed.toEnd()
+        } {
+            feed.toEnd()
+        }
+        return true
+    }
+
+    ; The selection (or the caret) wrapped in `mark` on both sides: *bold*,
+    ; _italic_, ~strike~, `code`; "```" puts it on lines of its own.
+    fn wrap:void (mark:string) {
+        def f:InputCtl (this.field())
+        def s:int (f.selStart())
+        def e:int (f.selEnd())
+        def v:string f.value
+        def head:string (substring v 0 s)
+        def mid:string (substring v s e)
+        def tail:string (substring v e (strlen v))
+        def open:string mark
+        def close:string mark
+        if (mark == "```") {
+            open = "```\n"
+            close = "\n```"
+            if (((strlen head) > 0) && ((ChannelCtl.endsWith(head "\n")) == false)) {
+                open = ("\n" + open)
+            }
+        }
+        f.applyEdit((head + open + mid + close + tail) ((strlen head) + (strlen open)) (((strlen head) + (strlen open)) + (strlen mid)))
+    }
+
+    sfn endsWith:boolean (s:string w:string) {
+        if ((strlen w) > (strlen s)) {
+            return false
+        }
+        return ((substring s ((strlen s) - (strlen w)) (strlen s)) == w)
+    }
+
+    ; --- suggestions --------------------------------------------------------------------------
+
+    fn closeSug:void () {
+        def none:[string]
+        sugItems = none
+        sugAt = 0
+        sugFrom = -1
+    }
+
+    fn sugOpen:boolean () {
+        return ((array_length sugItems) > 0)
+    }
+
+    ; a person's @name: their name with _ for its spaces
+    sfn handleOf:string (nm:string) {
+        def out:string ""
+        def i:int 0
+        def n:int (strlen nm)
+        while (i < n) {
+            def c:string (substring nm i (i + 1))
+            if (c == " ") {
+                out = (out + "_")
+            } {
+                out = (out + c)
+            }
+            i = (i + 1)
+        }
+        return out
+    }
+
+    ; The word before the caret, when it begins with ":", "@" or "#", lists
+    ; what it could be.
+    fn findSug:void () {
+        this.closeSug()
+        if (((keys != "main") && (keys != "thread")) || readOnly) {
+            return
+        }
+        def f:InputCtl (this.field())
+        if (f.hasSelection()) {
+            return
+        }
+        def v:string f.value
+        def c:int f.caret
+        def k:int c
+        def going:boolean true
+        while ((k > 0) && going) {
+            def ch:int (charAt v (k - 1))
+            if (UiChatText.isSpace(ch)) {
+                going = false
+            } {
+                k = (k - 1)
+            }
+        }
+        if (k >= c) {
+            return
+        }
+        def word:string (substring v k c)
+        def lead:string (substring word 0 1)
+        def rest:string (substring word 1 (strlen word))
+        def out:[string]
+        if (lead == ":") {
+            if (((strlen rest) < 2) || ((indexOf rest ":") >= 0)) {
+                return
+            }
+            def found:[string] (text.suggest(rest 8))
+            for found s:string i {
+                def parts:[string] (strsplit s "\t")
+                push out ((itemAt parts 1) + "\t:" + (itemAt parts 0) + ":\t" + (itemAt parts 1))
+            }
+        }
+        if (lead == "@") {
+            def low:string (to_lowercase rest)
+            for people p:UiChannelPerson i {
+                def h:string (ChannelCtl.handleOf(p.name))
+                if ((((indexOf (to_lowercase h) low) == 0) && (p.id != me)) && ((array_length out) < 8)) {
+                    push out ("@" + h + "\t" + p.name + "\t" + p.avatar + "|" + p.color + "|" + p.kind)
+                }
+            }
+        }
+        if (lead == "#") {
+            def low:string (to_lowercase rest)
+            for channels ch:string i {
+                if (((indexOf (to_lowercase ch) low) == 0) && ((array_length out) < 8)) {
+                    push out ("#" + ch + "\t#" + ch + "\t")
+                }
+            }
+        }
+        if ((array_length out) > 0) {
+            sugItems = out
+            sugAt = 0
+            sugFrom = k
+        }
+    }
+
+    ; The `i`th suggestion in place of the word being completed.
+    fn pickSug:void (i:int) {
+        if ((i < 0) || (i >= (array_length sugItems))) {
+            return
+        }
+        def f:InputCtl (this.field())
+        def parts:[string] (strsplit (itemAt sugItems i) "\t")
+        def put:string ((itemAt parts 0) + " ")
+        def v:string f.value
+        def c:int f.caret
+        def head:string (substring v 0 sugFrom)
+        def tail:string (substring v c (strlen v))
+        def at:int ((strlen head) + (strlen put))
+        f.applyEdit((head + put + tail) at at)
+        this.closeSug()
+    }
+
+    ; --- keys -------------------------------------------------------------------------------------
+
+    fn keyDown:string (target:string key:string) {
+        return (this.keyDownWith(target key false false))
+    }
+
+    fn keyDownWith:string (target:string key:string shift:boolean ctrl:boolean) {
+        if (this.sugOpen()) {
+            def n:int (array_length sugItems)
+            if (key == "ArrowDown") {
+                sugAt = ((sugAt + 1) % n)
+                return ""
+            }
+            if (key == "ArrowUp") {
+                sugAt = (((sugAt + n) - 1) % n)
+                return ""
+            }
+            if (((key == "Enter") && (shift == false)) || (key == "Tab")) {
+                this.pickSug(sugAt)
+                return ""
+            }
+            if (key == "Escape") {
+                this.closeSug()
+                return ""
+            }
+        }
+        if (keys == "desc") {
+            if (key == "Enter") {
+                this.saveDesc()
+                return ""
+            }
+            if (key == "Escape") {
+                descOpen = false
+                keys = "main"
+                return ""
+            }
+            dinput.keyDownWith(dinput.tid key shift ctrl)
+            return ""
+        }
+        if (keys == "profile") {
+            if (key == "Enter") {
+                this.saveProfile()
+                return ""
+            }
+            if (key == "Escape") {
+                profileOpen = false
+                keys = "main"
+                return ""
+            }
+            pinput.keyDownWith(pinput.tid key shift ctrl)
+            return ""
+        }
+        def inThread:boolean (keys == "thread")
+        if ((key == "Enter") && (shift == false)) {
+            this.send(inThread)
+            return ""
+        }
+        if (key == "Escape") {
+            if peopleOpen {
+                peopleOpen = false
+                return ""
+            }
+            if inThread {
+                this.closeThread()
+            }
+            return ""
+        }
+        if (key == "PageUp") {
+            this.scrollBy(inThread -400.0)
+            return ""
+        }
+        if (key == "PageDown") {
+            this.scrollBy(inThread 400.0)
+            return ""
+        }
+        if readOnly {
+            return ""
+        }
+        def f:InputCtl (this.field())
+        f.keyDownWith(f.tid key shift ctrl)
+        this.findSug()
+        return ""
+    }
+
+    ; --- the head ------------------------------------------------------------------------------
+
+    fn editDesc:void () {
+        if readOnly {
+            return
+        }
+        descOpen = true
+        dinput.setValue(description)
+        dinput.moveTo((strlen description) false)
+        keys = "desc"
+    }
+
+    fn saveDesc:void () {
+        def t:string (trim dinput.value)
+        descOpen = false
+        keys = "main"
+        if (t != description) {
+            this.ask(("describe\t" + t))
+        }
+    }
+
+    fn editProfile:void () {
+        profileOpen = true
+        pinput.setValue(myName)
+        pinput.moveTo((strlen myName) false)
+        pAvatar = (UiPixelAvatar.pick(myAvatar me))
+        pColor = myColor
+        if ((UiPixelAvatar.isHex(pColor)) == false) {
+            pColor = (UiPixelAvatar.defaultColor())
+        }
+        keys = "profile"
+    }
+
+    fn saveProfile:void () {
+        def nm:string (trim pinput.value)
+        if ((strlen nm) == 0) {
+            return
+        }
+        profileOpen = false
+        keys = "main"
+        this.ask(("profile\t" + nm + "\t" + pAvatar + "\t" + pColor))
+    }
+
+    ; --- the pointer -----------------------------------------------------------------------------
+
+    fn owns:boolean (target:string) {
+        def p:string (tid + "-")
+        if ((strlen target) <= (strlen p)) {
+            return (target == tid)
+        }
+        return ((substring target 0 (strlen p)) == p)
+    }
+
+    ; "m", "r" (a reply in the thread) or "o" (the thread's root); the seq;
+    ; and the part after it, from a message's tid ("ch-m12-react-0")
+    fn msgWhere:string (target:string) {
+        def p:string (tid + "-")
+        if ((strlen target) < ((strlen p) + 2)) {
+            return ""
+        }
+        def w:string (substring target (strlen p) ((strlen p) + 1))
+        if (((w != "m") && (w != "r")) && (w != "o")) {
+            return ""
+        }
+        def c:int (charAt target ((strlen p) + 1))
+        if ((c < 48) || (c > 57)) {
+            return ""
+        }
+        return w
+    }
+
+    fn msgSeq:int (target:string) {
+        def k:int ((strlen tid) + 2)
+        def v:int 0
+        def going:boolean true
+        while ((k < (strlen target)) && going) {
+            def c:int (charAt target k)
+            if ((c >= 48) && (c <= 57)) {
+                v = ((v * 10) + (c - 48))
+                k = (k + 1)
+            } {
+                going = false
+            }
+        }
+        return v
+    }
+
+    fn msgPart:string (target:string) {
+        def k:int ((strlen tid) + 2)
+        while ((k < (strlen target)) && (((charAt target k) >= 48) && ((charAt target k) <= 57))) {
+            k = (k + 1)
+        }
+        if (k >= (strlen target)) {
+            return ""
+        }
+        return (substring target (k + 1) (strlen target))
+    }
+
+    fn msgTid:string (where:string seq:int) {
+        return (tid + "-" + where + (to_string seq))
+    }
+
+    ; the message a part is of, in the feed it is drawn from
+    fn msgOf:UiFeedMsg (where:string seq:int) {
+        def f:UiChatFeed feed
+        if (where == "r") {
+            f = tfeed
+        }
+        for f.msgs m:UiFeedMsg i {
+            if (m.seq == seq) {
+                return m
+            }
+        }
+        return (new UiFeedMsg())
+    }
+
+    fn hover:string (target:string) {
+        def w:string (this.msgWhere(target))
+        if ((strlen w) == 0) {
+            if (((indexOf target (tid + "-feed")) == 0) || ((indexOf target (tid + "-tfeed")) == 0)) {
+                return ""
+            }
+            hoverSeq = 0
+            hoverWhere = ""
+            return ""
+        }
+        hoverSeq = (this.msgSeq(target))
+        hoverWhere = w
+        return ""
+    }
+
+    fn unhover:string () {
+        hoverSeq = 0
+        hoverWhere = ""
+        return ""
+    }
+
+    fn isFocusable:boolean (target:string) {
+        return ((((target == input.tid) || (target == tinput.tid)) || (target == dinput.tid)) || (target == pinput.tid))
+    }
+
+    ; a press in a text field: the caret, a word, a drag
+    fn textPointerDownAt:boolean (target:string px:double py:double clicks:int shift:boolean) {
+        def f:InputCtl input
+        def which:string ""
+        if (input.owns(target)) {
+            which = "main"
+        }
+        if (tinput.owns(target)) {
+            which = "thread"
+            f = tinput
+        }
+        if (dinput.owns(target)) {
+            which = "desc"
+            f = dinput
+        }
+        if (pinput.owns(target)) {
+            which = "profile"
+            f = pinput
+        }
+        if ((strlen which) == 0) {
+            return false
+        }
+        if (keys != which) {
+            this.closeSug()
+        }
+        keys = which
+        def took:boolean (f.textPointerDownAt(target px py clicks shift))
+        this.findSug()
+        return took
+    }
+
+    fn textPointerDownWith:boolean (target:string px:double clicks:int shift:boolean) {
+        return (this.textPointerDownAt(target px -1.0 clicks shift))
+    }
+
+    fn textPointerDown:boolean (target:string px:double clicks:int shift:boolean) {
+        return (this.textPointerDownAt(target px -1.0 clicks shift))
+    }
+
+    fn textPointerDrag:boolean (px:double) {
+        def f:InputCtl (this.field())
+        return (f.textPointerDrag(px))
+    }
+
+    fn textPointerDragAt:boolean (px:double py:double) {
+        def f:InputCtl (this.field())
+        return (f.textPointerDragAt(px py))
+    }
+
+    fn textPointerUp:void () {
+        def f:InputCtl (this.field())
+        f.pointerUp()
+    }
+
+    fn selectedText:string () {
+        def f:InputCtl (this.field())
+        return (f.selectedText())
+    }
+
+    fn placeText:void (eng:EVGTextEngine) {
+        input.setFocused((keys == "main"))
+        tinput.setFocused((keys == "thread"))
+        dinput.setFocused((keys == "desc"))
+        pinput.setFocused((keys == "profile"))
+        if (readOnly == false) {
+            input.placeText(eng)
+            if ((strlen threadId) > 0) {
+                tinput.placeText(eng)
+            }
+        }
+        if descOpen {
+            dinput.placeText(eng)
+        }
+        if profileOpen {
+            pinput.placeText(eng)
+        }
+    }
+
+    fn activate:string (target:string) {
+        def t:string (tid + "-")
+        if (target == (t + "desc")) {
+            this.editDesc()
+            return target
+        }
+        if (target == (t + "desc-save")) {
+            this.saveDesc()
+            return target
+        }
+        if (target == (t + "desc-cancel")) {
+            descOpen = false
+            keys = "main"
+            return target
+        }
+        if (target == (t + "here")) {
+            peopleOpen = (peopleOpen == false)
+            return target
+        }
+        if (target == (t + "me")) {
+            this.editProfile()
+            return target
+        }
+        if (target == (t + "latest")) {
+            this.toLatest()
+            return target
+        }
+        if (target == (t + "older")) {
+            if (loading == false) {
+                this.askOlder(false)
+            }
+            return target
+        }
+        if (target == (t + "tolder")) {
+            if (loading == false) {
+                this.askOlder(true)
+            }
+            return target
+        }
+        if (target == (t + "send")) {
+            this.send(false)
+            return target
+        }
+        if (target == (t + "tsend")) {
+            this.send(true)
+            return target
+        }
+        if (target == (t + "tclose")) {
+            this.closeThread()
+            return target
+        }
+        if ((indexOf target (t + "fmt-")) == 0) {
+            def which:string (substring target (strlen (t + "fmt-")) (strlen target))
+            def inThread:boolean ((indexOf which "t") == 0)
+            if inThread {
+                which = (substring which 1 (strlen which))
+                keys = "thread"
+            } {
+                keys = "main"
+            }
+            this.wrap((ChannelCtl.markOf(which)))
+            return target
+        }
+        if ((indexOf target (t + "sug-")) == 0) {
+            this.pickSug((ChannelCtl.digits((substring target (strlen (t + "sug-")) (strlen target)))))
+            return target
+        }
+        if ((indexOf target (t + "pf-")) == 0) {
+            return (this.profilePress(target))
+        }
+        def w:string (this.msgWhere(target))
+        if ((strlen w) > 0) {
+            return (this.msgPress(w (this.msgSeq(target)) (this.msgPart(target)) target))
+        }
+        if peopleOpen {
+            peopleOpen = false
+        }
+        return ""
+    }
+
+    ; the number written in `s` (its digits; 0 none)
+    sfn digits:int (s:string) {
+        def v:int 0
+        def i:int 0
+        while (i < (strlen s)) {
+            def c:int (charAt s i)
+            if ((c >= 48) && (c <= 57)) {
+                v = ((v * 10) + (c - 48))
+            }
+            i = (i + 1)
+        }
+        return v
+    }
+
+    sfn markOf:string (which:string) {
+        if (which == "b") {
+            return "*"
+        }
+        if (which == "i") {
+            return "_"
+        }
+        if (which == "s") {
+            return "~"
+        }
+        if (which == "c") {
+            return "`"
+        }
+        return "```"
+    }
+
+    fn profilePress:string (target:string) {
+        def p:string (tid + "-pf-")
+        def rest:string (substring target (strlen p) (strlen target))
+        if (rest == "save") {
+            this.saveProfile()
+            return target
+        }
+        if ((rest == "cancel") || (rest == "back")) {
+            profileOpen = false
+            keys = "main"
+            return target
+        }
+        if ((indexOf rest "a-") == 0) {
+            pAvatar = (substring rest 2 (strlen rest))
+            return target
+        }
+        if ((indexOf rest "c-") == 0) {
+            def all:[string] (UiPixelAvatar.palette())
+            def k:int (ChannelCtl.digits((substring rest 2 (strlen rest))))
+            if ((k >= 0) && (k < (array_length all))) {
+                pColor = (itemAt all k)
+            }
+            return target
+        }
+        return ""
+    }
+
+    ; A press on a message's part: its reactions, the hover bar, a link, a
+    ; thread's summary, Show more.
+    fn msgPress:string (where:string seq:int part:string target:string) {
+        def m:UiFeedMsg (this.msgOf(where seq))
+        if (where == "o") {
+            m = (this.threadRoot())
+        }
+        if ((strlen m.id) == 0) {
+            return ""
+        }
+        if ((indexOf part "rx-") == 0) {
+            def k:int (ChannelCtl.digits((substring part 3 (strlen part))))
+            if ((k >= 0) && (k < (array_length m.reactEmoji))) {
+                this.ask(("react\t" + m.id + "\t" + (itemAt m.reactEmoji k)))
+            }
+            return target
+        }
+        if ((indexOf part "q-") == 0) {
+            def k:int (ChannelCtl.digits((substring part 2 (strlen part))))
+            if ((k >= 0) && (k < (array_length quick))) {
+                this.ask(("react\t" + m.id + "\t" + (itemAt quick k)))
+            }
+            return target
+        }
+        if ((part == "reply") || (part == "thr")) {
+            this.openThread(m.id)
+            return target
+        }
+        if (part == "copy") {
+            this.ask(("copy\t" + m.text))
+            return target
+        }
+        if (part == "del") {
+            if (m.who == me) {
+                this.ask(("delete\t" + m.id))
+            }
+            return target
+        }
+        if (part == "more") {
+            m.unfolded = (m.unfolded == false)
+            return target
+        }
+        ; a span: b<block>-s<span>, an embed: b<block>-emb
+        if ((indexOf part "b") == 0) {
+            return (this.spanPress(m part target))
+        }
+        return ""
+    }
+
+    fn spanPress:string (m:UiFeedMsg part:string target:string) {
+        def dash:int (indexOf part "-")
+        if (dash < 0) {
+            return ""
+        }
+        def bi:int (ChannelCtl.digits((substring part 1 dash)))
+        def rest:string (substring part (dash + 1) (strlen part))
+        def blocks:[UiChatBlock] (this.blocksOf(m))
+        if ((bi < 0) || (bi >= (array_length blocks))) {
+            return ""
+        }
+        def b:UiChatBlock (itemAt blocks bi)
+        if ((indexOf rest "emb") == 0) {
+            this.ask(("deck\t" + b.deck + "\t" + (to_string b.slide)))
+            return target
+        }
+        if ((indexOf rest "s") != 0) {
+            return ""
+        }
+        def rest2:string (substring rest 1 (strlen rest))
+        def d2:int (indexOf rest2 "-")
+        if (d2 >= 0) {
+            rest2 = (substring rest2 0 d2)
+        }
+        def si:int (ChannelCtl.digits(rest2))
+        if ((si < 0) || (si >= (array_length b.spans))) {
+            return ""
+        }
+        def sp:UiChatSpan (itemAt b.spans si)
+        if (sp.kind == "link") {
+            this.ask(("link\t" + sp.href))
+            return target
+        }
+        if (sp.kind == "channel") {
+            this.ask(("channel\t" + sp.text))
+            return target
+        }
+        return ""
+    }
+
+    ; the message's blocks as drawn: the clipped part while it is folded
+    fn blocksOf:[UiChatBlock] (m:UiFeedMsg) {
+        if ((m.unfolded == false) && (text.isLong(m.text))) {
+            return (text.parse((text.clip(m.text))))
+        }
+        return (text.parse(m.text))
+    }
+
+    ; --- drawing -------------------------------------------------------------------------------------
+
+    fn avatarEl:EVGElement (id:string avatar:string color:string seed:string kind:string cls:string) {
+        def el:EVGElement (UiTree.div(id cls))
+        el.tagName = "svg"
+        el.elementType = 3
+        def who:string (UiPixelAvatar.pick(avatar seed))
+        if (kind == "bot") {
+            who = "robot"
+        }
+        el.svgSource = (UiPixelAvatar.svg(who color))
+        return el
+    }
+
+    fn build:void () {
+        def root:EVGElement (UiTree.div(tid "ch-root"))
+        UiTree.inline(root "width" ((to_string width) + "px"))
+        UiTree.inline(root "height" ((to_string height) + "px"))
+        def main:EVGElement (UiTree.div((tid + "-main") "ch-main"))
+        UiTree.inline(main "height" ((to_string height) + "px"))
+        main.addChild((this.headEl()))
+        if ((strlen notice) > 0) {
+            main.addChild((UiTree.label((tid + "-notice") "ch-notice" notice)))
+        }
+        main.addChild((this.feedEl(false)))
+        main.addChild((this.composerEl(false)))
+        def threadOpen:boolean ((strlen threadId) > 0)
+        def narrow:boolean (width < 720.0)
+        if (threadOpen && narrow) {
+            UiTree.inline(main "display" "none")
+        }
+        root.addChild(main)
+        if threadOpen {
+            def pane:EVGElement (this.threadEl())
+            if narrow {
+                UiTree.inline(pane "width" ((to_string width) + "px"))
+                UiTree.inline(pane "border-left-width" "0px")
+            } {
+                UiTree.inline(pane "width" ((to_string threadW) + "px"))
+            }
+            UiTree.inline(pane "height" ((to_string height) + "px"))
+            root.addChild(pane)
+        }
+        if peopleOpen {
+            root.addChild((this.peopleEl()))
+        }
+        if profileOpen {
+            root.addChild((this.profileEl()))
+        }
+        rootEl = root
+    }
+
+    fn headEl:EVGElement () {
+        def head:EVGElement (UiTree.div((tid + "-head") "ch-head"))
+        def left:EVGElement (UiTree.div((tid + "-head-l") "ch-head-l"))
+        left.addChild((UiTree.label((tid + "-title") "ch-title" ("# " + title))))
+        if descOpen {
+            def row:EVGElement (UiTree.div((tid + "-desc-row") "ch-desc-row"))
+            dinput.name = addDescText
+            dinput.placeholder = addDescText
+            dinput.boxClass = "ch-desc-field"
+            dinput.textClass = "ch-desc-draft"
+            dinput.placeholderClass = "ch-desc-ph"
+            dinput.build()
+            row.addChild((unwrap dinput.rootEl))
+            row.addChild((UiTree.label((tid + "-desc-save") "ch-btn ch-btn-primary" saveText)))
+            row.addChild((UiTree.label((tid + "-desc-cancel") "ch-btn" cancelText)))
+            left.addChild(row)
+        } {
+            def d:string description
+            def cls:string "ch-desc"
+            if ((strlen d) == 0) {
+                d = addDescText
+                cls = "ch-desc ch-desc-empty"
+            }
+            if readOnly {
+                cls = (cls + " ch-desc-ro")
+            }
+            left.addChild((UiTree.label((tid + "-desc") cls d)))
+        }
+        head.addChild(left)
+        def right:EVGElement (UiTree.div((tid + "-head-r") "ch-head-r"))
+        def h:EVGElement (UiTree.div((tid + "-here") "ch-here"))
+        def faces:int 0
+        for people p:UiChannelPerson i {
+            if (p.here && (faces < 3)) {
+                h.addChild((this.avatarEl("" p.avatar p.color p.id p.kind "ch-here-av")))
+                faces = (faces + 1)
+            }
+        }
+        h.addChild((UiTree.label((tid + "-here-n") "ch-here-n" ((to_string here) + " " + hereText))))
+        right.addChild(h)
+        def mine:EVGElement (UiTree.div((tid + "-me") "ch-me"))
+        mine.addChild((this.avatarEl("" myAvatar myColor me "person" "ch-me-av")))
+        mine.addChild((UiTree.label((tid + "-me-n") "ch-me-n" myName)))
+        right.addChild(mine)
+        head.addChild(right)
+        return head
+    }
+
+    ; the messages: the channel's, or the open thread's replies under its root
+    fn feedEl:EVGElement (inThread:boolean) {
+        def f:UiChatFeed feed
+        def id:string (tid + "-feed")
+        def where:string "m"
+        if inThread {
+            f = tfeed
+            id = (tid + "-tfeed")
+            where = "r"
+        }
+        def box:EVGElement (UiTree.div(id "ch-feed"))
+        box.setAttribute("overflow" "hidden")
+        def top:double feedScroll
+        if inThread {
+            top = tScroll
+        }
+        if f.atEnd {
+            top = 100000000.0
+        }
+        box.scrollTop = top
+        def list:EVGElement (UiTree.div((id + "-list") "ch-list"))
+        if inThread {
+            def root:UiFeedMsg (this.threadRoot())
+            if ((strlen root.id) > 0) {
+                list.addChild((this.msgEl(root "o" true)))
+                def n:int root.replies
+                def line:string ((to_string n) + " " + repliesText)
+                if (n == 1) {
+                    line = ("1 " + replyText)
+                }
+                list.addChild((UiTree.label((tid + "-tcount") "ch-tcount" line)))
+            }
+            if tHasOlder {
+                list.addChild((UiTree.label((tid + "-tolder") "ch-older" (? loading loadingText olderText))))
+            }
+        } {
+            if hasOlder {
+                list.addChild((UiTree.label((tid + "-older") "ch-older" (? loading loadingText olderText))))
+            }
+            if ((f.count()) == 0) {
+                list.addChild((UiTree.label((tid + "-empty") "ch-empty" emptyText)))
+            }
+        }
+        def today:int (UiChatFeed.dayOf(now))
+        def rows:[UiFeedRow] (f.layout(0 0))
+        for rows r:UiFeedRow i {
+            if (r.kind == "day") {
+                def pill:EVGElement (UiTree.div("" "ch-day"))
+                pill.addChild((UiTree.label("" "ch-day-t" (UiChatFeed.dayLabel(r.day today todayText yesterdayText)))))
+                list.addChild(pill)
+            }
+            if (r.kind == "new") {
+                def nl:EVGElement (UiTree.div("" "ch-newline"))
+                nl.addChild((UiTree.label("" "ch-newline-t" newLineText)))
+                list.addChild(nl)
+            }
+            if (r.kind == "msg") {
+                list.addChild((this.msgEl((f.at(r.index)) where r.head)))
+            }
+        }
+        box.addChild(list)
+        def wrapEl:EVGElement (UiTree.div((id + "-wrap") "ch-feed-wrap"))
+        wrapEl.addChild(box)
+        if (f.atEnd == false) {
+            def label:string latestText
+            if (f.unseen > 0) {
+                label = ((to_string f.unseen) + " " + newMessagesText)
+            }
+            if (inThread == false) {
+                ; after the messages and lifted over their bottom edge
+                ; (.ch-latest's margins), so it is drawn and hit above them
+                wrapEl.addChild((UiTree.label((tid + "-latest") "ch-latest" ("↓ " + label))))
+            }
+        }
+        return wrapEl
+    }
+
+    fn msgEl:EVGElement (m:UiFeedMsg where:string head:boolean) {
+        def id:string (this.msgTid(where m.seq))
+        def cls:string "ch-msg"
+        if head {
+            cls = "ch-msg ch-msg-head"
+        }
+        def hovered:boolean ((hoverSeq == m.seq) && (hoverWhere == where))
+        if hovered {
+            cls = (cls + " ch-msg-hover")
+        }
+        def row:EVGElement (UiTree.div(id cls))
+        def gutter:EVGElement (UiTree.div((id + "-g") "ch-gutter"))
+        if head {
+            gutter.addChild((this.avatarEl((id + "-av") m.avatar m.color m.who m.kind "ch-av")))
+        } {
+            if hovered {
+                gutter.addChild((UiTree.label((id + "-t") "ch-gtime" (UiChatFeed.clock(m.at h24)))))
+            }
+        }
+        row.addChild(gutter)
+        def body:EVGElement (UiTree.div((id + "-body") "ch-body"))
+        if head {
+            def meta:EVGElement (UiTree.div((id + "-meta") "ch-meta"))
+            def who:EVGElement (UiTree.label((id + "-name") "ch-name" m.name))
+            meta.addChild(who)
+            if (m.isBot()) {
+                meta.addChild((UiTree.label((id + "-bot") "ch-bot" botText)))
+            }
+            meta.addChild((UiTree.label((id + "-time") "ch-time" (UiChatFeed.clock(m.at h24)))))
+            body.addChild(meta)
+        }
+        if m.deleted {
+            body.addChild((UiTree.label((id + "-gone") "ch-deleted" deletedText)))
+        } {
+            this.textInto(body m id)
+            if m.edited {
+                body.addChild((UiTree.label((id + "-ed") "ch-edited" editedText)))
+            }
+        }
+        if ((array_length m.reactEmoji) > 0) {
+            def rx:EVGElement (UiTree.div((id + "-rxs") "ch-rxs"))
+            def k:int 0
+            while (k < (array_length m.reactEmoji)) {
+                def c:string "ch-rx"
+                if (itemAt m.reactMine k) {
+                    c = "ch-rx ch-rx-mine"
+                }
+                rx.addChild((UiTree.label((id + "-rx-" + (to_string k)) c ((itemAt m.reactEmoji k) + " " + (to_string (itemAt m.reactCount k))))))
+                k = (k + 1)
+            }
+            body.addChild(rx)
+        }
+        if ((where == "m") && (m.replies > 0)) {
+            body.addChild((this.threadSummary(m id)))
+        }
+        row.addChild(body)
+        if ((hovered && (m.deleted == false)) && (readOnly == false)) {
+            row.addChild((this.actionsEl(m id where)))
+        }
+        return row
+    }
+
+    fn threadSummary:EVGElement (m:UiFeedMsg id:string) {
+        def s:EVGElement (UiTree.div((id + "-thr") "ch-thr"))
+        for m.repliers rid:string i {
+            def p:UiChannelPerson (this.person(rid))
+            s.addChild((this.avatarEl("" p.avatar p.color rid p.kind "ch-thr-av")))
+        }
+        def n:string ((to_string m.replies) + " " + repliesText)
+        if (m.replies == 1) {
+            n = ("1 " + replyText)
+        }
+        s.addChild((UiTree.label((id + "-thr-n") "ch-thr-n" n)))
+        if (m.lastReply > 0.0) {
+            s.addChild((UiTree.label((id + "-thr-l") "ch-thr-l" (lastReplyText + " " + (UiChatFeed.clock(m.lastReply h24))))))
+        }
+        return s
+    }
+
+    fn actionsEl:EVGElement (m:UiFeedMsg id:string where:string) {
+        def bar:EVGElement (UiTree.div((id + "-acts") "ch-acts"))
+        def k:int 0
+        while (k < (array_length quick)) {
+            bar.addChild((UiTree.label((id + "-q-" + (to_string k)) "ch-act ch-act-emoji" (itemAt quick k))))
+            k = (k + 1)
+        }
+        if (where == "m") {
+            bar.addChild((UiTree.label((id + "-reply") "ch-act" "💬")))
+        }
+        bar.addChild((UiTree.label((id + "-copy") "ch-act" "⧉")))
+        if (m.who == me) {
+            bar.addChild((UiTree.label((id + "-del") "ch-act ch-act-danger" "🗑")))
+        }
+        return bar
+    }
+
+    ; the message's words: one element per block, the spans of a line as
+    ; words that wrap (a line of plain words is one wrapping run)
+    fn textInto:void (body:EVGElement m:UiFeedMsg id:string) {
+        def blocks:[UiChatBlock] (this.blocksOf(m))
+        def bi:int 0
+        while (bi < (array_length blocks)) {
+            def b:UiChatBlock (itemAt blocks bi)
+            body.addChild((this.blockEl(b (id + "-b" + (to_string bi)))))
+            bi = (bi + 1)
+        }
+        if (text.isLong(m.text)) {
+            body.addChild((UiTree.label((id + "-more") "ch-more" (? m.unfolded showLessText showMoreText))))
+        }
+    }
+
+    fn blockEl:EVGElement (b:UiChatBlock id:string) {
+        if (b.kind == "gap") {
+            return (UiTree.div("" "ch-gap"))
+        }
+        if (b.kind == "code") {
+            def pre:EVGElement (UiTree.div((id + "-code") "ch-code"))
+            def lines:[string] (strsplit b.text "\n")
+            for lines l:string i {
+                def t:string l
+                if ((strlen t) == 0) {
+                    t = " "
+                }
+                pre.addChild((UiTree.label("" "ch-code-l" t)))
+            }
+            return pre
+        }
+        if (b.kind == "embed") {
+            def card:EVGElement (UiTree.div((id + "-emb") "ch-emb"))
+            card.addChild((UiTree.label((id + "-emb-i") "ch-emb-i" "▶")))
+            def info:EVGElement (UiTree.div((id + "-emb-t") "ch-emb-t"))
+            def t:string (this.deckTitle(b.deck))
+            if ((strlen t) == 0) {
+                t = presentationText
+            }
+            info.addChild((UiTree.label((id + "-emb-n") "ch-emb-n" t)))
+            def sub:string b.deck
+            if (b.slide > 0) {
+                sub = (sub + " · " + slideText + " " + (to_string b.slide))
+            }
+            info.addChild((UiTree.label((id + "-emb-s") "ch-emb-s" sub)))
+            card.addChild(info)
+            card.addChild((UiTree.label((id + "-emb-open") "ch-btn" openText)))
+            return card
+        }
+        def cls:string "ch-line"
+        if (b.kind == "quote") {
+            cls = "ch-line ch-quote"
+        }
+        def line:EVGElement (UiTree.div(id cls))
+        if (b.kind == "li") {
+            line.addChild((UiTree.label("" "ch-bullet" "•")))
+        }
+        if (b.kind == "ol") {
+            line.addChild((UiTree.label("" "ch-bullet" ((to_string b.num) + "."))))
+        }
+        if (((array_length b.spans) == 1) && ((b.kind == "p") || (b.kind == "quote"))) {
+            def only:UiChatSpan (itemAt b.spans 0)
+            if ((only.kind == "text") && ((only.styled()) == false)) {
+                line.addChild((UiTree.label((id + "-s0") "ch-run" only.text)))
+                return line
+            }
+        }
+        def words:EVGElement (UiTree.div("" "ch-words"))
+        def si:int 0
+        while (si < (array_length b.spans)) {
+            def sp:UiChatSpan (itemAt b.spans si)
+            this.spanInto(words sp (id + "-s" + (to_string si)))
+            si = (si + 1)
+        }
+        line.addChild(words)
+        return line
+    }
+
+    fn spanClass:string (sp:UiChatSpan) {
+        def c:string "ch-w"
+        if (sp.kind == "code") {
+            c = "ch-w ch-icode"
+        }
+        if (sp.kind == "link") {
+            c = "ch-w ch-link"
+        }
+        if (sp.kind == "emoji") {
+            c = "ch-w ch-emoji"
+        }
+        if (sp.kind == "mention") {
+            c = "ch-w ch-mention"
+            if ((to_lowercase sp.text) == (to_lowercase (ChannelCtl.handleOf(myName)))) {
+                c = "ch-w ch-mention ch-mention-me"
+            }
+        }
+        if (sp.kind == "channel") {
+            c = "ch-w ch-channel"
+        }
+        if sp.bold {
+            c = (c + " ch-b")
+        }
+        if sp.italic {
+            c = (c + " ch-i")
+        }
+        if sp.strike {
+            c = (c + " ch-s")
+        }
+        return c
+    }
+
+    ; A span as words: each ends where a space was (ch-sp puts the space
+    ; after it), so a line of several looks wraps between words.
+    fn spanInto:void (words:EVGElement sp:UiChatSpan id:string) {
+        def cls:string (this.spanClass(sp))
+        def shown:string sp.text
+        if (sp.kind == "mention") {
+            shown = ("@" + sp.text)
+        }
+        if (sp.kind == "channel") {
+            shown = ("#" + sp.text)
+        }
+        if ((sp.kind == "code") || (sp.kind == "emoji")) {
+            words.addChild((UiTree.label(id cls shown)))
+            return
+        }
+        def parts:[string] (strsplit shown " ")
+        def n:int (array_length parts)
+        def k:int 0
+        while (k < n) {
+            def w:string (itemAt parts k)
+            def spaced:boolean (k < (n - 1))
+            if ((strlen w) > 0) {
+                def c:string cls
+                if spaced {
+                    c = (c + " ch-sp")
+                }
+                def wid:string id
+                if (k > 0) {
+                    wid = (id + "-" + (to_string k))
+                }
+                words.addChild((UiTree.label(wid c w)))
+            } {
+                ; a space at the start: after what came before
+                if ((k == 0) && spaced) {
+                    def nk:int (array_length words.children)
+                    if (nk > 0) {
+                        def prev:EVGElement (itemAt words.children (nk - 1))
+                        if ((indexOf prev.className "ch-sp") < 0) {
+                            prev.className = (prev.className + " ch-sp")
+                        }
+                    }
+                }
+            }
+            k = (k + 1)
+        }
+    }
+
+    fn composerEl:EVGElement (inThread:boolean) {
+        def pre:string ""
+        def f:InputCtl input
+        def ph:string (placeholderText + " #" + title)
+        if inThread {
+            pre = "t"
+            f = tinput
+            ph = threadPlaceholder
+        }
+        def box:EVGElement (UiTree.div((tid + "-" + pre + "composer") "ch-composer"))
+        ; A column's free space goes to the messages only after what has a
+        ; height (EVGLayout counts an auto-height child as 0), so the
+        ; composer says its own: the sheet's sizes, the draft's lines.
+        if readOnly {
+            UiTree.inline(box "height" "58px")
+            box.addChild((UiTree.label((tid + "-" + pre + "ro") "ch-ro" readOnlyText)))
+            return box
+        }
+        UiTree.inline(box "height" ((to_string (ChannelCtl.composerH(f.sizedLines))) + "px"))
+        UiTree.anchor(box)
+        def mineKeys:boolean ((keys == "thread") == inThread)
+        if ((this.sugOpen()) && mineKeys) {
+            box.addChild((this.sugEl()))
+        }
+        def frame:EVGElement (UiTree.div((tid + "-" + pre + "frame") "ch-frame"))
+        f.name = ph
+        f.placeholder = ph
+        f.boxClass = "ch-field"
+        f.textClass = "ch-draft"
+        f.placeholderClass = "ch-ph"
+        f.build()
+        frame.addChild((unwrap f.rootEl))
+        def tools:EVGElement (UiTree.div((tid + "-" + pre + "tools") "ch-tools"))
+        tools.addChild((UiTree.label((tid + "-fmt-" + pre + "b") "ch-tool ch-b" "B")))
+        tools.addChild((UiTree.label((tid + "-fmt-" + pre + "i") "ch-tool ch-i" "I")))
+        tools.addChild((UiTree.label((tid + "-fmt-" + pre + "s") "ch-tool ch-s" "S")))
+        tools.addChild((UiTree.label((tid + "-fmt-" + pre + "c") "ch-tool ch-icode" "</>")))
+        tools.addChild((UiTree.label((tid + "-fmt-" + pre + "k") "ch-tool" "{ }")))
+        tools.addChild((UiTree.div("" "ch-grow")))
+        def scls:string "ch-sendb"
+        if ((strlen (trim f.value)) == 0) {
+            scls = "ch-sendb ch-sendb-off"
+        }
+        tools.addChild((UiTree.label((tid + "-" + pre + "send") scls "➤")))
+        frame.addChild(tools)
+        box.addChild(frame)
+        return box
+    }
+
+    ; the composer's height for a draft of `lines` lines: the field (8px
+    ; above the text, 20px a line, at least 36px), the tools' 32px, the
+    ; frame's border and 14px under it (theme/base.css, .ch-composer …)
+    sfn composerH:double (lines:int) {
+        def n:int lines
+        if (n < 1) {
+            n = 1
+        }
+        def field:double (8.0 + ((to_double n) * 20.0))
+        if (field < 36.0) {
+            field = 36.0
+        }
+        return (((14.0 + 2.0) + field) + 32.0)
+    }
+
+    fn sugEl:EVGElement () {
+        def list:EVGElement (UiTree.div((tid + "-sugs") "ch-sugs"))
+        UiTree.surface(list "top" "start")
+        def i:int 0
+        while (i < (array_length sugItems)) {
+            def parts:[string] (strsplit (itemAt sugItems i) "\t")
+            def c:string "ch-sug"
+            if (i == sugAt) {
+                c = "ch-sug ch-sug-on"
+            }
+            def row:EVGElement (UiTree.div((tid + "-sug-" + (to_string i)) c))
+            def glyph:string ""
+            if ((array_length parts) > 2) {
+                glyph = (itemAt parts 2)
+            }
+            def lead:string (substring (itemAt parts 0) 0 1)
+            if (lead == "@") {
+                def bits:[string] (strsplit glyph "|")
+                def av:string (itemAt bits 0)
+                def col:string ""
+                def kind:string "person"
+                if ((array_length bits) > 2) {
+                    col = (itemAt bits 1)
+                    kind = (itemAt bits 2)
+                }
+                row.addChild((this.avatarEl("" av col (itemAt parts 1) kind "ch-sug-av")))
+            } {
+                if ((strlen glyph) > 0) {
+                    row.addChild((UiTree.label("" "ch-sug-g" glyph)))
+                }
+            }
+            row.addChild((UiTree.label("" (? (i == sugAt) "ch-sug-t ch-sug-t-on" "ch-sug-t") (itemAt parts 1))))
+            list.addChild(row)
+            i = (i + 1)
+        }
+        return list
+    }
+
+    fn threadEl:EVGElement () {
+        def pane:EVGElement (UiTree.div((tid + "-thread") "ch-thread"))
+        def head:EVGElement (UiTree.div((tid + "-thead") "ch-thead"))
+        def t:EVGElement (UiTree.div("" "ch-thead-l"))
+        t.addChild((UiTree.label((tid + "-ttitle") "ch-ttitle" threadText)))
+        t.addChild((UiTree.label("" "ch-tsub" ("# " + title))))
+        head.addChild(t)
+        head.addChild((UiTree.label((tid + "-tclose") "ch-x" "×")))
+        pane.addChild(head)
+        pane.addChild((this.feedEl(true)))
+        pane.addChild((this.composerEl(true)))
+        return pane
+    }
+
+    fn peopleEl:EVGElement () {
+        def box:EVGElement (UiTree.div((tid + "-people") "ch-people"))
+        for people p:UiChannelPerson i {
+            def row:EVGElement (UiTree.div((tid + "-pp-" + (to_string i)) "ch-pp"))
+            row.addChild((this.avatarEl("" p.avatar p.color p.id p.kind "ch-pp-av")))
+            row.addChild((UiTree.label("" "ch-pp-n" p.name)))
+            if (p.kind == "bot") {
+                row.addChild((UiTree.label("" "ch-bot" botText)))
+            }
+            row.addChild((UiTree.div("" "ch-grow")))
+            row.addChild((UiTree.div("" (? p.here "ch-dot ch-dot-on" "ch-dot"))))
+            box.addChild(row)
+        }
+        return box
+    }
+
+    fn profileEl:EVGElement () {
+        def back:EVGElement (UiTree.div((tid + "-pf-back") "ch-pf-back"))
+        UiTree.inline(back "width" ((to_string width) + "px"))
+        UiTree.inline(back "height" ((to_string height) + "px"))
+        def box:EVGElement (UiTree.div((tid + "-pf") "ch-pf"))
+        box.addChild((UiTree.label((tid + "-pf-title") "ch-pf-title" profileText)))
+        def top:EVGElement (UiTree.div("" "ch-pf-top"))
+        top.addChild((this.avatarEl((tid + "-pf-big") pAvatar pColor me "person" "ch-pf-big")))
+        def nameBox:EVGElement (UiTree.div("" "ch-pf-namebox"))
+        nameBox.addChild((UiTree.label("" "ch-pf-l" nameText)))
+        pinput.name = nameText
+        pinput.placeholder = nameText
+        pinput.boxClass = "ch-pf-field"
+        pinput.textClass = "ch-desc-draft"
+        pinput.placeholderClass = "ch-desc-ph"
+        pinput.build()
+        nameBox.addChild((unwrap pinput.rootEl))
+        top.addChild(nameBox)
+        box.addChild(top)
+        box.addChild((UiTree.label("" "ch-pf-l" characterText)))
+        def grid:EVGElement (UiTree.div((tid + "-pf-grid") "ch-pf-grid"))
+        def all:[string] (UiPixelAvatar.names())
+        for all a:string i {
+            def c:string "ch-pf-a"
+            if (a == pAvatar) {
+                c = "ch-pf-a ch-pf-on"
+            }
+            def cell:EVGElement (UiTree.div((tid + "-pf-a-" + a) c))
+            cell.addChild((this.avatarEl((tid + "-pf-a-" + a + "-i") a pColor me "person" "ch-pf-ai")))
+            grid.addChild(cell)
+        }
+        box.addChild(grid)
+        box.addChild((UiTree.label("" "ch-pf-l" colorText)))
+        def sw:EVGElement (UiTree.div((tid + "-pf-sw") "ch-pf-sw"))
+        def pal:[string] (UiPixelAvatar.palette())
+        def k:int 0
+        while (k < (array_length pal)) {
+            def c:string "ch-pf-c"
+            if ((itemAt pal k) == pColor) {
+                c = "ch-pf-c ch-pf-c-on"
+            }
+            def chip:EVGElement (UiTree.div((tid + "-pf-c-" + (to_string k)) c))
+            UiTree.inline(chip "background-color" (itemAt pal k))
+            sw.addChild(chip)
+            k = (k + 1)
+        }
+        box.addChild(sw)
+        def acts:EVGElement (UiTree.div("" "ch-pf-acts"))
+        acts.addChild((UiTree.label((tid + "-pf-cancel") "ch-btn" cancelText)))
+        acts.addChild((UiTree.label((tid + "-pf-save") "ch-btn ch-btn-primary" saveText)))
+        box.addChild(acts)
+        back.addChild(box)
+        return back
+    }
+
+    ; --- what it is, to a reader ---------------------------------------------------------------
+
+    fn tids:[string] () {
+        def a:[string]
+        push a tid
+        push a (tid + "-desc")
+        push a (tid + "-here")
+        push a (tid + "-me")
+        push a input.tid
+        push a (tid + "-send")
+        return a
+    }
+
+    fn btnRow:UiRow (id:string label:string parent:string) {
+        def r:UiRow (UiRow.of(id (EVGA11yRole.button()) label))
+        r.parentTid = parent
+        r.focusable = true
+        r.tabStop = true
+        return r
+    }
+
+    fn msgSaid:string (m:UiFeedMsg) {
+        def said:string (m.name + ", " + (UiChatFeed.clock(m.at h24)) + ": ")
+        if m.deleted {
+            return (said + deletedText)
+        }
+        def blocks:[UiChatBlock] (text.parse(m.text))
+        def parts:[string]
+        for blocks b:UiChatBlock i {
+            def p:string (trim (b.plain()))
+            if ((strlen p) > 0) {
+                push parts p
+            }
+        }
+        said = (said + (join parts " "))
+        if ((array_length m.reactEmoji) > 0) {
+            def rs:[string]
+            def k:int 0
+            while (k < (array_length m.reactEmoji)) {
+                push rs ((itemAt m.reactEmoji k) + " " + (to_string (itemAt m.reactCount k)))
+                k = (k + 1)
+            }
+            said = (said + " (" + (join rs ", ") + ")")
+        }
+        if (m.replies > 0) {
+            said = (said + ", " + (to_string m.replies) + " " + repliesText)
+        }
+        return said
+    }
+
+    fn rows:[UiRow] () {
+        def out:[UiRow]
+        push out (UiRow.of(tid (EVGA11yRole.region()) ("# " + title)))
+        def h:UiRow (UiRow.of((tid + "-title") (EVGA11yRole.heading()) ("# " + title)))
+        h.parentTid = tid
+        push out h
+        if (descOpen == false) {
+            def d:string description
+            if ((strlen d) == 0) {
+                d = addDescText
+            }
+            push out (this.btnRow((tid + "-desc") d tid))
+        }
+        push out (this.btnRow((tid + "-here") ((to_string here) + " " + hereText) tid))
+        push out (this.btnRow((tid + "-me") (profileText + ": " + myName) tid))
+        def log:UiRow (UiRow.of((tid + "-feed") (EVGA11yRole.log()) title))
+        log.parentTid = tid
+        push out log
+        for feed.msgs m:UiFeedMsg i {
+            def r:UiRow (UiRow.of((this.msgTid("m" m.seq)) (EVGA11yRole.text()) (this.msgSaid(m))))
+            r.parentTid = (tid + "-feed")
+            push out r
+            if (m.replies > 0) {
+                push out (this.btnRow(((this.msgTid("m" m.seq)) + "-thr") (threadText + ": " + (to_string m.replies) + " " + repliesText) (tid + "-feed")))
+            }
+        }
+        if (feed.atEnd == false) {
+            push out (this.btnRow((tid + "-latest") latestText tid))
+        }
+        if (readOnly == false) {
+            def f:UiRow (UiRow.of(input.tid (EVGA11yRole.textField()) (placeholderText + " #" + title)))
+            f.parentTid = tid
+            f.hasText = true
+            f.text = input.value
+            f.focusable = true
+            f.tabStop = true
+            push out f
+            push out (this.btnRow((tid + "-send") sendText tid))
+        }
+        if ((strlen threadId) > 0) {
+            def th:UiRow (UiRow.of((tid + "-thread") (EVGA11yRole.region()) threadText))
+            th.parentTid = tid
+            push out th
+            push out (this.btnRow((tid + "-tclose") closeText (tid + "-thread")))
+            for tfeed.msgs m:UiFeedMsg i {
+                def r:UiRow (UiRow.of((this.msgTid("r" m.seq)) (EVGA11yRole.text()) (this.msgSaid(m))))
+                r.parentTid = (tid + "-thread")
+                push out r
+            }
+        }
+        return out
+    }
+}

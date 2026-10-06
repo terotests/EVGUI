@@ -1,0 +1,433 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; UiChatFeed — a channel's messages as a reader scrolls them
+; =============================================================================
+; The order and the shape of a Slack-like feed, with no elements: checked in
+; Node (ui:chatmodel:check), drawn by ChannelCtl.
+;
+; MESSAGES come as they are posted, changed or reacted to, in any order and
+; more than once: `put` keeps one per id, in the order of their numbers
+; (`seq`, one higher for each message posted in the room, threads too). A
+; feed is the top level (`thread` "") or one thread's replies (`thread` the
+; root's id); a message of another is not put, but its number is heard
+; (`note`), so `missingAfter` can tell the host that it missed some and
+; from where to ask again.
+;
+; ROWS are what is drawn (`layout`): a day's line where the day changes
+; ("Today", "Yesterday", "Monday, August 17th"), a "New" line before the
+; first message after the last one read (`readUpTo`), and the messages, each
+; with its HEAD (avatar, name and time) only where the writer changes, a new
+; day or the New line begins, or five minutes have passed: what one person
+; writes in a row reads as one.
+;
+; THE READER: at the end (`atEnd`) the newest stays in view; scrolled up,
+; what others post meanwhile is counted (`unseen`) and the "Latest
+; messages" button shows (`latestLabel`) until they are back at the end.
+;
+; TIMES are the host's local clock in milliseconds (UTC + the offset), so
+; a day is `at / 86400000` and the clock reads the time of day.
+; =============================================================================
+
+Import "UiDate.rgr"
+
+class UiFeedMsg {
+    def id:string ""
+    def seq:int 0
+    def thread:string ""
+    ; who wrote it: their id, name, "person" or "bot", character and colour
+    def who:string ""
+    def name:string ""
+    def kind:string "person"
+    def avatar:string ""
+    def color:string ""
+    def at:double 0.0
+    def text:string ""
+    def edited:boolean false
+    def deleted:boolean false
+    ; a root's thread
+    def replies:int 0
+    def lastReply:double 0.0
+    def repliers:[string]
+    ; reactions: the emoji, how many, whether one of them is the reader's,
+    ; and who ("id,id")
+    def reactEmoji:[string]
+    def reactCount:[int]
+    def reactMine:[boolean]
+    def reactWho:[string]
+    ; folded open by the reader ("Show more")
+    def unfolded:boolean false
+
+    Constructor () {
+    }
+
+    fn isBot:boolean () {
+        return (kind == "bot")
+    }
+
+    ; "emoji TAB id,id" lines; `me` is the reader
+    fn setReactions:void (lines:string me:string) {
+        def e:[string]
+        def c:[int]
+        def m:[boolean]
+        def w:[string]
+        def rows:[string] (strsplit lines "\n")
+        for rows row:string i {
+            def parts:[string] (strsplit row "\t")
+            if (((array_length parts) >= 2) && ((strlen (itemAt parts 0)) > 0)) {
+                def ids:[string] (strsplit (itemAt parts 1) ",")
+                def n:int 0
+                def mine:boolean false
+                for ids id:string k {
+                    if ((strlen id) > 0) {
+                        n = (n + 1)
+                        if (id == me) {
+                            mine = true
+                        }
+                    }
+                }
+                if (n > 0) {
+                    push e (itemAt parts 0)
+                    push c n
+                    push m mine
+                    push w (itemAt parts 1)
+                }
+            }
+        }
+        reactEmoji = e
+        reactCount = c
+        reactMine = m
+        reactWho = w
+    }
+
+    fn copyFrom:void (o:UiFeedMsg) {
+        seq = o.seq
+        thread = o.thread
+        who = o.who
+        name = o.name
+        kind = o.kind
+        avatar = o.avatar
+        color = o.color
+        at = o.at
+        text = o.text
+        edited = o.edited
+        deleted = o.deleted
+        replies = o.replies
+        lastReply = o.lastReply
+        repliers = o.repliers
+        reactEmoji = o.reactEmoji
+        reactCount = o.reactCount
+        reactMine = o.reactMine
+        reactWho = o.reactWho
+    }
+}
+
+class UiFeedRow {
+    ; day | new | msg
+    def kind:string "msg"
+    ; the message's place in the feed
+    def index:int -1
+    ; the avatar, name and time drawn
+    def head:boolean false
+    ; the day (since 1970) a day row is for
+    def day:int 0
+
+    Constructor () {
+    }
+}
+
+class UiChatFeed {
+    def msgs:[UiFeedMsg]
+    ; "" the top level, else the root whose replies this is
+    def thread:string ""
+    ; the reader's own id
+    def me:string ""
+    ; the highest number heard in the room, any thread
+    def heard:int 0
+    def atEnd:boolean true
+    def unseen:int 0
+    ; the last message read (0: none marked)
+    def readUpTo:int 0
+    ; a writer's messages within this many ms read as one
+    def runMs:double 300000.0
+
+    Constructor () {
+    }
+
+    fn count:int () {
+        return (array_length msgs)
+    }
+
+    fn at:UiFeedMsg (i:int) {
+        return (itemAt msgs i)
+    }
+
+    fn indexOf:int (id:string) {
+        def i:int 0
+        while (i < (array_length msgs)) {
+            def m:UiFeedMsg (itemAt msgs i)
+            if (m.id == id) {
+                return i
+            }
+            i = (i + 1)
+        }
+        return -1
+    }
+
+    fn has:boolean (id:string) {
+        return ((this.indexOf(id)) >= 0)
+    }
+
+    ; the message by id; an empty one when it is not here
+    fn find:UiFeedMsg (id:string) {
+        def i:int (this.indexOf(id))
+        if (i < 0) {
+            return (new UiFeedMsg())
+        }
+        return (itemAt msgs i)
+    }
+
+    fn firstSeq:int () {
+        if ((array_length msgs) == 0) {
+            return 0
+        }
+        def m:UiFeedMsg (itemAt msgs 0)
+        return m.seq
+    }
+
+    fn lastSeq:int () {
+        if ((array_length msgs) == 0) {
+            return 0
+        }
+        def m:UiFeedMsg (itemAt msgs ((array_length msgs) - 1))
+        return m.seq
+    }
+
+    ; a number heard in the room
+    fn note:void (seq:int) {
+        if (seq > heard) {
+            heard = seq
+        }
+    }
+
+    ; A message numbered `seq` arrived: the number to ask "after" when some
+    ; before it were missed, -1 when none were. (Call before `note`/`put`.)
+    fn missingAfter:int (seq:int) {
+        if ((heard > 0) && (seq > (heard + 1))) {
+            return heard
+        }
+        return -1
+    }
+
+    ; Keep m (or change the one with its id). → false when it belongs to
+    ; another thread (its number is still heard).
+    fn put:boolean (m:UiFeedMsg) {
+        this.note(m.seq)
+        if (m.thread != thread) {
+            return false
+        }
+        def i:int (this.indexOf(m.id))
+        if (i >= 0) {
+            def had:UiFeedMsg (itemAt msgs i)
+            def open:boolean had.unfolded
+            had.copyFrom(m)
+            had.unfolded = open
+            return true
+        }
+        ; in order of number: usually at the end, older pages at the front
+        def at:int (array_length msgs)
+        def going:boolean true
+        while ((at > 0) && going) {
+            def before:UiFeedMsg (itemAt msgs (at - 1))
+            if (before.seq > m.seq) {
+                at = (at - 1)
+            } {
+                going = false
+            }
+        }
+        insert msgs at m
+        def newest:boolean (at == ((array_length msgs) - 1))
+        if ((newest && (atEnd == false)) && (m.who != me)) {
+            unseen = (unseen + 1)
+        }
+        return true
+    }
+
+    fn clear:void () {
+        def none:[UiFeedMsg]
+        msgs = none
+        heard = 0
+        unseen = 0
+        atEnd = true
+    }
+
+    ; --- the reader ---------------------------------------------------------------
+
+    fn scrolled:void (end:boolean) {
+        atEnd = end
+        if end {
+            unseen = 0
+        }
+    }
+
+    fn toEnd:void () {
+        this.scrolled(true)
+    }
+
+    ; the jump button's words while the reader is away from the end ("" none)
+    fn latestLabel:string (words:string) {
+        if atEnd {
+            return ""
+        }
+        if (unseen > 0) {
+            return words
+        }
+        return words
+    }
+
+    ; --- rows -------------------------------------------------------------------------
+
+    sfn dayOf:int (at:double) {
+        return ((floor (at / 86400000.0)))
+    }
+
+    ; The rows of messages from `first`, `n` of them (0: to the end).
+    fn layout:[UiFeedRow] (first:int n:int) {
+        def out:[UiFeedRow]
+        def last:int (array_length msgs)
+        if ((n > 0) && ((first + n) < last)) {
+            last = (first + n)
+        }
+        def prevDay:int -99999999
+        def prev@(optional):UiFeedMsg
+        def newDone:boolean false
+        def i:int first
+        if (i < 0) {
+            i = 0
+        }
+        while (i < last) {
+            def m:UiFeedMsg (itemAt msgs i)
+            def d:int (UiChatFeed.dayOf(m.at))
+            def head:boolean false
+            if (d != prevDay) {
+                def dr (new UiFeedRow())
+                dr.kind = "day"
+                dr.day = d
+                push out dr
+                prevDay = d
+                head = true
+            }
+            if ((((readUpTo > 0) && (newDone == false)) && (m.seq > readUpTo)) && (m.who != me)) {
+                def nr (new UiFeedRow())
+                nr.kind = "new"
+                push out nr
+                newDone = true
+                head = true
+            }
+            if (null? prev) {
+                head = true
+            } {
+                def p:UiFeedMsg (unwrap prev)
+                if (((p.who != m.who) || ((m.at - p.at) > runMs)) || p.deleted) {
+                    head = true
+                }
+            }
+            if m.deleted {
+                head = true
+            }
+            def r (new UiFeedRow())
+            r.kind = "msg"
+            r.index = i
+            r.head = head
+            push out r
+            prev = m
+            i = (i + 1)
+        }
+        return out
+    }
+
+    ; --- words ----------------------------------------------------------------------
+
+    ; "Today", "Yesterday", "Monday, August 17th" this year, else with the year
+    sfn dayLabel:string (day:int today:int todayWord:string yesterdayWord:string) {
+        if (day == today) {
+            return todayWord
+        }
+        if (day == (today - 1)) {
+            return yesterdayWord
+        }
+        def ymd:[int] ([] _:int (0 0 0))
+        UiDate.fromDays(day ymd)
+        def now:[int] ([] _:int (0 0 0))
+        UiDate.fromDays(today now)
+        def y:int (itemAt ymd 0)
+        def m:int (itemAt ymd 1)
+        def dd:int (itemAt ymd 2)
+        if (y == (itemAt now 0)) {
+            def dow:int (UiDate.weekday(day))
+            return ((UiDate.dayName(dow)) + ", " + (UiDate.monthName(m)) + " " + (UiDate.ordinal(dd)))
+        }
+        return (UiDate.longLabel(y m dd))
+    }
+
+    ; the time of day of `at` (local ms): "15:09" or "3:09 PM"
+    sfn clock:string (at:double h24:boolean) {
+        def dayMs:double 86400000.0
+        def inDay:double (at - ((to_double (floor (at / dayMs))) * dayMs))
+        def mins:int ((floor (inDay / 60000.0)))
+        def h:int (idiv mins 60)
+        def mm:int (mins - (h * 60))
+        def m2:string (to_string mm)
+        if (mm < 10) {
+            m2 = ("0" + m2)
+        }
+        if h24 {
+            def h2:string (to_string h)
+            if (h < 10) {
+                h2 = ("0" + h2)
+            }
+            return (h2 + ":" + m2)
+        }
+        def ap:string "AM"
+        if (h >= 12) {
+            ap = "PM"
+        }
+        def h12:int (h % 12)
+        if (h12 == 0) {
+            h12 = 12
+        }
+        return ((to_string h12) + ":" + m2 + " " + ap)
+    }
+
+    ; "just now", "5 minutes ago", "2 months ago" (English; a host in
+    ; another language says its own)
+    sfn ago:string (ms:double) {
+        def s:int ((floor (ms / 1000.0)))
+        if (s < 60) {
+            return "just now"
+        }
+        def m:int (idiv s 60)
+        if (m < 60) {
+            return (UiChatFeed.plural(m "minute"))
+        }
+        def h:int (idiv m 60)
+        if (h < 24) {
+            return (UiChatFeed.plural(h "hour"))
+        }
+        def d:int (idiv h 24)
+        if (d < 30) {
+            return (UiChatFeed.plural(d "day"))
+        }
+        if (d < 365) {
+            return (UiChatFeed.plural((idiv d 30) "month"))
+        }
+        return (UiChatFeed.plural((idiv d 365) "year"))
+    }
+
+    sfn plural:string (n:int unit:string) {
+        if (n == 1) {
+            return ("1 " + unit + " ago")
+        }
+        return ((to_string n) + " " + unit + "s ago")
+    }
+}
