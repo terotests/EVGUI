@@ -33,7 +33,7 @@
   border-radius: 12px;
   background-color: #ffffff;
 }
-.cp-card-inline { height: 500px; }
+.cp-card-inline { height: 540px; }
 .cp-card-sample { height: 500px; }
 
 /* 39px and a 1px rule under it (`.cp-caption-rule`): the reference's
