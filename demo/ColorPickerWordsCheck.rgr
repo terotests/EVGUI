@@ -1,0 +1,42 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; ColorPickerCtl in a host's words, on Node: `ui:colorpicker:words`.
+Import "../src/ColorPickerCtl.rgr"
+
+class ColorPickerWordsCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    fn run:void () {
+        def c (new ColorPickerCtl())
+        this.ok(((c.fieldName(0)) == "Hex") ("English by default: " + (c.fieldName(0))))
+        this.ok(((indexOf (c.hueText()) " degrees") > 0) ("hue in English: " + (c.hueText())))
+        set c.words "Hex" "Heksa"
+        set c.words " degrees" " astetta"
+        set c.words "Saturation " "Kylläisyys "
+        this.ok(((c.fieldName(0)) == "Heksa") ("a translated label: " + (c.fieldName(0))))
+        this.ok(((indexOf (c.hueText()) " astetta") > 0) ("a translated value: " + (c.hueText())))
+        this.ok(((indexOf (c.svText()) "Kylläisyys ") == 0) ("translated first word: " + (c.svText())))
+        this.ok(((indexOf (c.svText()) "%, Brightness ") > 0) ("a phrase left out stays English: " + (c.svText())))
+        def ps:[string] (ColorPickerCtl.phrases())
+        this.ok(((indexOf ps "Hex") >= 0) "phrases lists Hex")
+        this.ok(((indexOf ps ", alpha") >= 0) "phrases lists the alpha label")
+    }
+
+    sfn main@(main):void () {
+        def c (new ColorPickerWordsCheck())
+        c.run()
+        print ((to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
+        if (c.fails > 0) {
+            print "RESULT FAIL"
+        }
+    }
+}
