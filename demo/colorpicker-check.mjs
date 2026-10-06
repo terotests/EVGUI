@@ -721,9 +721,11 @@ if (!fs.existsSync(path.join(HERE, "bundle.js"))) {
     const seen = walk.filter((id) => want.includes(id));
     ok("Tab walks the pipette, the sliders, the field and the format button in order", JSON.stringify(seen) === JSON.stringify(want), walk);
     ok("and then the swatches, as one stop", /^cpi-preset-\d$/.test(walk[walk.length - 1]), walk);
+    // back over the muted tones (one stop) and the format button
     await page.keyboard.press("Shift+Tab");
     await page.keyboard.press("Shift+Tab");
-    ok("Shift+Tab goes back to the hex field", (await state(page)).focused === "cpi-f0");
+    await page.keyboard.press("Shift+Tab");
+    ok("Shift+Tab goes back to the hex field", (await state(page)).focused === "cpi-f0", (await state(page)).focused);
     await page.keyboard.press("Control+a");
     await page.keyboard.type("#ff0000");
     s = await state(page);
