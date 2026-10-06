@@ -21,7 +21,22 @@
 ;   │ ✓ │  done
 ;   └───┘
 ;
+; Or `compact`: a small pill of three round buttons, for a bar at the foot
+; of what is drawn on, with the choices in a discreet menu that opens
+; upward from the button pressed:
+;
+;   ┌─────────────┐
+;   │ ✎ Pen       │   menu "tool": the tools, the one on marked
+;   │ ↗ Arrow     │
+;   └─────────────┘
+;   ( ✎ │ ↗ │ ● )     the pen (drawing on or off), the tool, the colour
+;
+; The colour menu holds the swatches and the sizes. The host places the
+; menu (`menuTid`) above the pill once its height is known.
+;
 ; `activate` answers "tool:<value>", "color:<value>", "size:<n>" or "done",
+; and compact also "toggle" (drawing on or off, `active`), "menu:tool",
+; "menu:color" (that menu opened or closed, `menu`);
 ; and has already made the tool, colour or size the chosen one. The host
 ; places the bar (`x`, `y`, the top left) and lays it out `vertical` or not.
 ;
@@ -52,6 +67,16 @@ class DrawToolsCtl extends UiCtl {
     def sizes:int 3
     def size:int 2
     def doneName:string "Done"
+    ; the pill with menus, and in it: drawing on or not, the menu open
+    ; ("", "tool", "color")
+    def compact:boolean false
+    def active:boolean false
+    def menu:string ""
+    def menuX:double 0.0
+    def menuY:double 0.0
+    def penName:string "Draw"
+    def toolMenuName:string "Tool"
+    def colorMenuName:string "Colour"
 
     Constructor () {
         def a:[string]
@@ -107,6 +132,31 @@ class DrawToolsCtl extends UiCtl {
         return (tid + "-done")
     }
 
+    fn toggleTid:string () {
+        return (tid + "-pen")
+    }
+
+    fn kindTid:string () {
+        return (tid + "-kind")
+    }
+
+    fn hueTid:string () {
+        return (tid + "-hue")
+    }
+
+    fn menuTid:string () {
+        return (tid + "-menu")
+    }
+
+    ; the glyph of the tool on
+    fn toolGlyph:string () {
+        def i:int (indexOf toolValues tool)
+        if (i < 0) {
+            return ""
+        }
+        return (itemAt toolGlyphs i)
+    }
+
     ; --- choosing ----------------------------------------------------------------------
 
     fn setTool:boolean (value:string) {
@@ -136,6 +186,10 @@ class DrawToolsCtl extends UiCtl {
     ; --- the tree -------------------------------------------------------------------------
 
     fn build:void () {
+        if compact {
+            this.buildCompact()
+            return
+        }
         def root:EVGElement (UiTree.div(tid (? vertical "drawtools" "drawtools drawtools-row")))
         UiTree.surface(root "free" "start")
         root.overlayX = x
@@ -180,6 +234,70 @@ class DrawToolsCtl extends UiCtl {
         rootEl = root
     }
 
+    ; The pill, and the open menu as a surface of its own (placed by the
+    ; host above the pill: `menuX`, `menuY`).
+    fn buildCompact:void () {
+        def root:EVGElement (UiTree.div(tid "drawtools-pill"))
+        UiTree.surface(root "free" "start")
+        root.overlayX = x
+        root.overlayY = y
+        def pen:EVGElement (UiTree.label((this.toggleTid()) (? active "drawtools-btn drawtools-btn-on" "drawtools-btn") "✎"))
+        root.addChild(pen)
+        def kind:EVGElement (UiTree.label((this.kindTid()) (? (menu == "tool") "drawtools-btn drawtools-btn-open" "drawtools-btn") (this.toolGlyph())))
+        root.addChild(kind)
+        def hue:EVGElement (UiTree.div((this.hueTid()) (? (menu == "color") "drawtools-btn drawtools-hue drawtools-btn-open" "drawtools-btn drawtools-hue")))
+        def dot:EVGElement (UiTree.div((this.hueTid() + "-dot") ("drawtools-hue-dot drawtools-hue-" + (to_string size))))
+        UiTree.inline(dot "background-color" color)
+        hue.addChild(dot)
+        root.addChild(hue)
+        if (menu == "tool") {
+            def m:EVGElement (UiTree.div((this.menuTid()) "drawtools-menu"))
+            UiTree.surface(m "free" "start")
+            m.overlayX = menuX
+            m.overlayY = menuY
+            def i:int 0
+            while (i < (array_length toolValues)) {
+                def v:string (itemAt toolValues i)
+                def row:EVGElement (UiTree.div((this.toolTid(v)) (? (v == tool) "drawtools-item drawtools-item-on" "drawtools-item")))
+                ; the sheet has no descendant selectors: the chosen line's
+                ; words carry their own class
+                row.addChild((UiTree.label("" (? (v == tool) "drawtools-glyph drawtools-glyph-on" "drawtools-glyph") (itemAt toolGlyphs i))))
+                row.addChild((UiTree.label("" (? (v == tool) "drawtools-name drawtools-name-on" "drawtools-name") (itemAt toolNames i))))
+                m.addChild(row)
+                i = (i + 1)
+            }
+            root.addChild(m)
+        }
+        if (menu == "color") {
+            def mc:EVGElement (UiTree.div((this.menuTid()) "drawtools-menu"))
+            UiTree.surface(mc "free" "start")
+            mc.overlayX = menuX
+            mc.overlayY = menuY
+            def sw:EVGElement (UiTree.div((tid + "-swatches") "drawtools-menu-row"))
+            def k:int 0
+            while (k < (array_length colors)) {
+                def one:EVGElement (UiTree.div((this.colorTid(k)) (? ((itemAt colors k) == color) "drawtools-swatch drawtools-swatch-on" "drawtools-swatch")))
+                def d:EVGElement (UiTree.div((this.colorTid(k) + "-dot") "drawtools-dot"))
+                UiTree.inline(d "background-color" (itemAt colors k))
+                one.addChild(d)
+                sw.addChild(one)
+                k = (k + 1)
+            }
+            mc.addChild(sw)
+            def sz:EVGElement (UiTree.div((tid + "-sizes") "drawtools-menu-row"))
+            def n:int 1
+            while (n <= sizes) {
+                def b:EVGElement (UiTree.div((this.sizeTid(n)) (? (n == size) "drawtools-size drawtools-size-chosen" "drawtools-size")))
+                b.addChild((UiTree.div((this.sizeTid(n) + "-dot") ((? (n == size) "drawtools-size-dot drawtools-size-dot-chosen" "drawtools-size-dot drawtools-size-dot-menu") + " drawtools-size-" + (to_string n)))))
+                sz.addChild(b)
+                n = (n + 1)
+            }
+            mc.addChild(sz)
+            root.addChild(mc)
+        }
+        rootEl = root
+    }
+
     ; What the part `target` (or one inside it) is: "tool:<value>",
     ; "color:<value>", "size:<n>", "done", or "" for none of them.
     fn partOf:string (target:string) {
@@ -210,13 +328,45 @@ class DrawToolsCtl extends UiCtl {
         if (target == (this.doneTid())) {
             return "done"
         }
+        if compact {
+            if (target == (this.toggleTid())) {
+                return "toggle"
+            }
+            if (target == (this.kindTid())) {
+                return "menu:tool"
+            }
+            if ((target == (this.hueTid())) || (target == ((this.hueTid()) + "-dot"))) {
+                return "menu:color"
+            }
+        }
         return ""
     }
 
     ; A press on `target`: what it means, with the tool, colour or size it
     ; names chosen already.
+    ; Compact: the pen turns drawing on or off; a menu button opens its menu
+    ; (or closes it); a tool chosen turns drawing on; any choice closes the
+    ; menu.
     fn activate:string (target:string) {
         def what:string (this.partOf(target))
+        if compact {
+            if (what == "toggle") {
+                active = (active == false)
+                menu = ""
+            }
+            if (what == "menu:tool") {
+                menu = (? (menu == "tool") "" "tool")
+            }
+            if (what == "menu:color") {
+                menu = (? (menu == "color") "" "color")
+            }
+            if ((indexOf what "tool:") == 0) {
+                active = true
+            }
+            if ((((indexOf what "tool:") == 0) || ((indexOf what "color:") == 0)) || ((indexOf what "size:") == 0)) {
+                menu = ""
+            }
+        }
         if ((indexOf what "tool:") == 0) {
             tool = (substring what 5 (strlen what))
         }
@@ -236,6 +386,9 @@ class DrawToolsCtl extends UiCtl {
     ; Every part a press can land on, the bar first (UiHost hit-tests by
     ; these).
     fn tids:[string] () {
+        if compact {
+            return (this.compactTids())
+        }
         def out:[string]
         push out tid
         def i:int 0
@@ -259,7 +412,45 @@ class DrawToolsCtl extends UiCtl {
         return out
     }
 
+    ; The pill's buttons, then the open menu's choices.
+    fn compactTids:[string] () {
+        def out:[string]
+        push out tid
+        push out (this.toggleTid())
+        push out (this.kindTid())
+        push out (this.hueTid())
+        push out ((this.hueTid()) + "-dot")
+        if ((strlen menu) > 0) {
+            push out (this.menuTid())
+        }
+        if (menu == "tool") {
+            def i:int 0
+            while (i < (array_length toolValues)) {
+                push out (this.toolTid((itemAt toolValues i)))
+                i = (i + 1)
+            }
+        }
+        if (menu == "color") {
+            def k:int 0
+            while (k < (array_length colors)) {
+                push out (this.colorTid(k))
+                push out ((this.colorTid(k)) + "-dot")
+                k = (k + 1)
+            }
+            def n:int 1
+            while (n <= sizes) {
+                push out (this.sizeTid(n))
+                push out ((this.sizeTid(n)) + "-dot")
+                n = (n + 1)
+            }
+        }
+        return out
+    }
+
     fn rows:[UiRow] () {
+        if compact {
+            return (this.compactRows())
+        }
         def out:[UiRow]
         def bar:UiRow (UiRow.of(tid (EVGA11yRole.toolbar()) name))
         bar.orientation = (? vertical "vertical" "horizontal")
@@ -297,6 +488,64 @@ class DrawToolsCtl extends UiCtl {
         d.parentTid = tid
         d.focusable = true
         push out d
+        return out
+    }
+
+    ; A toolbar of three buttons; the pen pressed or not, the two others
+    ; opening a menu, and the open menu's choices as radio buttons.
+    fn compactRows:[UiRow] () {
+        def out:[UiRow]
+        def bar:UiRow (UiRow.of(tid (EVGA11yRole.toolbar()) name))
+        bar.orientation = "horizontal"
+        push out bar
+        def pen:UiRow (UiRow.of((this.toggleTid()) (EVGA11yRole.button()) penName))
+        pen.parentTid = tid
+        pen.pressed = (? active 1 0)
+        pen.focusable = true
+        pen.tabStop = true
+        push out pen
+        def kind:UiRow (UiRow.of((this.kindTid()) (EVGA11yRole.button()) toolMenuName))
+        kind.parentTid = tid
+        kind.expanded = (? (menu == "tool") 1 0)
+        kind.focusable = true
+        push out kind
+        def hue:UiRow (UiRow.of((this.hueTid()) (EVGA11yRole.button()) colorMenuName))
+        hue.parentTid = tid
+        hue.expanded = (? (menu == "color") 1 0)
+        hue.focusable = true
+        push out hue
+        if (menu == "tool") {
+            def i:int 0
+            while (i < (array_length toolValues)) {
+                def v:string (itemAt toolValues i)
+                def r:UiRow (UiRow.of((this.toolTid(v)) (EVGA11yRole.radio()) (itemAt toolNames i)))
+                r.parentTid = tid
+                r.checked = (? (v == tool) 1 0)
+                r.focusable = true
+                push out r
+                i = (i + 1)
+            }
+        }
+        if (menu == "color") {
+            def k:int 0
+            while (k < (array_length colors)) {
+                def cr:UiRow (UiRow.of((this.colorTid(k)) (EVGA11yRole.radio()) (itemAt colorNames k)))
+                cr.parentTid = tid
+                cr.checked = (? ((itemAt colors k) == color) 1 0)
+                cr.focusable = true
+                push out cr
+                k = (k + 1)
+            }
+            def n:int 1
+            while (n <= sizes) {
+                def sr:UiRow (UiRow.of((this.sizeTid(n)) (EVGA11yRole.radio()) ("Size " + (to_string n))))
+                sr.parentTid = tid
+                sr.checked = (? (n == size) 1 0)
+                sr.focusable = true
+                push out sr
+                n = (n + 1)
+            }
+        }
         return out
     }
 }

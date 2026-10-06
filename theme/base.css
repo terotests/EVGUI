@@ -1836,7 +1836,7 @@
   border-radius: 13px;
 }
 .drawtools-swatch-on { border-color: #fafafa; }
-.drawtools-dot { width: 16px; height: 16px; border-radius: 8px; border: 1px solid rgba(0, 0, 0, 0.35); }
+.drawtools-dot { width: 16px; height: 16px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.35); }
 .drawtools-size {
   display: flex; align-items: center; justify-content: center;
   width: 30px; height: 24px;
@@ -1848,6 +1848,51 @@
 .drawtools-size-1 { width: 4px; height: 4px; border-radius: 2px; }
 .drawtools-size-2 { width: 8px; height: 8px; border-radius: 4px; }
 .drawtools-size-3 { width: 13px; height: 13px; border-radius: 7px; }
+
+/* the compact pill (DrawToolsCtl `compact`): three round buttons at the foot
+   of the stage, with a quiet menu opening upward */
+.drawtools-pill {
+  display: flex; flex-direction: row; align-items: center; gap: 2px;
+  padding: 5px; border-radius: 20px;
+  background-color: rgba(24, 24, 27, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  font-family: Open Sans;
+}
+.drawtools-btn {
+  width: 30px; height: 30px; line-height: 30px; border-radius: 15px;
+  text-align: center; font-size: 15px; color: #d4d4d8;
+}
+.drawtools-btn:hover { background-color: rgba(255, 255, 255, 0.12); color: #ffffff; }
+.drawtools-btn-open { background-color: rgba(255, 255, 255, 0.14); color: #ffffff; }
+.drawtools-btn-on { background-color: #fafafa; color: #18181b; }
+.drawtools-btn-on:hover { background-color: #fafafa; color: #18181b; }
+.drawtools-hue { display: flex; align-items: center; justify-content: center; }
+.drawtools-hue-dot { border: 1px solid rgba(255, 255, 255, 0.55); }
+.drawtools-hue-1 { width: 10px; height: 10px; border-radius: 5px; }
+.drawtools-hue-2 { width: 13px; height: 13px; border-radius: 7px; }
+.drawtools-hue-3 { width: 16px; height: 16px; border-radius: 8px; }
+.drawtools-menu {
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 4px; border-radius: 10px;
+  background-color: rgba(24, 24, 27, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-family: Open Sans;
+}
+.drawtools-item {
+  display: flex; flex-direction: row; align-items: center; gap: 10px;
+  height: 26px; padding-left: 8px; padding-right: 14px; border-radius: 6px;
+  color: #d4d4d8;
+}
+.drawtools-item:hover { background-color: rgba(255, 255, 255, 0.08); color: #fafafa; }
+.drawtools-item-on { color: #ffffff; background-color: rgba(255, 255, 255, 0.14); }
+.drawtools-glyph { width: 18px; text-align: center; font-size: 12px; color: #a1a1aa; }
+.drawtools-name { font-size: 12px; letter-spacing: 0.2px; color: #d4d4d8; }
+.drawtools-glyph-on { color: #ffffff; }
+.drawtools-name-on { color: #ffffff; }
+.drawtools-menu-row { display: flex; flex-direction: row; align-items: center; gap: 2px; padding: 2px; }
+.drawtools-size-chosen { background-color: rgba(255, 255, 255, 0.14); }
+.drawtools-size-dot-chosen { background-color: #fafafa; }
+.drawtools-size-dot-menu { background-color: #a1a1aa; }
 
 /* --- a room's channel (ChannelCtl): Slack's layout, retro characters ------- */
 .ch-root { position: relative; display: flex; flex-direction: row; flex-wrap: nowrap; background-color: #ffffff; }
