@@ -385,6 +385,7 @@
 .theme-retro .ch-thread,
 .theme-retro .ch-tcount,
 .theme-retro .ch-day { border-color: var(--retro-screen-3); }
+.theme-retro .ch-split { background-color: var(--retro-screen-3); }
 .theme-retro .ch-title,
 .theme-retro .ch-ttitle,
 .theme-retro .ch-name,
@@ -452,6 +453,22 @@
 .theme-retro .ch-desc-field,
 .theme-retro .ch-pf-field { background-color: var(--retro-screen); border-color: var(--retro-edge); }
 .theme-retro .ch-emb { border-color: var(--retro-screen-3); }
+.theme-retro .ch-pic,
+.theme-retro .ch-doc,
+.theme-retro .ch-pend { background-color: var(--retro-screen-2); border-color: var(--retro-screen-3); }
+.theme-retro .ch-doc:hover { background-color: var(--retro-screen-3); }
+.theme-retro .ch-lk { border-color: var(--retro-screen-3); }
+.theme-retro .ch-doc-n,
+.theme-retro .ch-lk-t { color: var(--retro-hot-b); }
+.theme-retro .ch-lk-d,
+.theme-retro .ch-pend,
+.theme-retro .ch-pend-n { color: var(--retro-ink); }
+.theme-retro .ch-doc-s,
+.theme-retro .ch-lk-s,
+.theme-retro .ch-pend-s,
+.theme-retro .ch-pend-up,
+.theme-retro .ch-pend-x { color: var(--retro-ink-dim); }
+.theme-retro .ch-pend-x:hover { background-color: var(--retro-screen-3); color: var(--retro-ink); }
 .theme-retro .ch-emb:hover { background-color: var(--retro-screen-3); }
 .theme-retro .ch-emb-i,
 .theme-retro .ch-sendb,

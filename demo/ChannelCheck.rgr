@@ -81,7 +81,7 @@ class ChannelCheck {
         this.type(c "there")
         this.ok((c.input.value == "hello\nthere") ("Shift+Enter breaks the line: " + c.input.value))
         c.keyDownWith("" "Enter" false false)
-        this.ok(((c.take()) == "send\t\thello\nthere") "Enter sends to the channel")
+        this.ok(((c.take()) == "send\t\t\thello\nthere") "Enter sends to the channel")
         this.ok(((c.take()) == "") "once")
         this.ok((c.input.value == "") "the composer is empty again")
         c.keyDownWith("" "Enter" false false)
@@ -254,7 +254,7 @@ class ChannelCheck {
         this.ok(((c.feed.put(reply)) == false) "not in the channel")
         this.type(c "thanks")
         c.keyDownWith("" "Enter" false false)
-        this.ok(((c.take()) == "send\tid1\tthanks") "sent to the thread")
+        this.ok(((c.take()) == "send\tid1\t\tthanks") "sent to the thread")
         c.width = 1000.0
         c.build()
         def r2:EVGElement (unwrap c.rootEl)
@@ -264,12 +264,18 @@ class ChannelCheck {
         this.ok(((indexOf ids "|ch-r6-reply|") < 0) "a reply has no thread of its own")
         def mainEl@(optional):EVGElement (UiTree.findById(r2 "ch-main"))
         this.ok(((unwrap mainEl).display != "none") "a wide channel keeps both")
+        def top:string ""
+        for r2.children k:EVGElement ki {
+            top = (top + "|" + k.id)
+        }
+        this.ok(((indexOf top "|ch-main|ch-split|ch-thread") >= 0) ("a line between the messages and the thread: " + top))
         c.width = 600.0
         c.build()
         def r3:EVGElement (unwrap c.rootEl)
         def main3@(optional):EVGElement (UiTree.findById(r3 "ch-main"))
         def hidden:boolean ((unwrap main3).display == "none")
         this.ok(hidden "a narrow one shows only the thread")
+        this.ok(((indexOf (this.ids(r3)) "|ch-split|") < 0) "with no line beside it")
         c.keyDownWith("" "Escape" false false)
         this.ok(((c.threadId == "") && (c.keys == "main")) "Escape closes the thread")
         c.activate("ch-m1-reply")
@@ -506,6 +512,126 @@ class ChannelCheck {
         }
     }
 
+    ; files: attached in the composer, sent with a message, drawn with it;
+    ; link previews; an embedded presentation's slide
+    ; what the pointer is over: pressed where it is drawn, and the cursor says
+    ; whether pressing does something
+    fn pointer:void () {
+        def css:string (?? (read_file "." "gallery/evgui/theme/base.css") "")
+        if ((strlen css) == 0) {
+            css = (?? (read_file "." "theme/base.css") "")
+        }
+        def c:ChannelCtl (this.channel())
+        c.width = 900.0
+        c.height = 600.0
+        c.activate("ch-me")
+        def h:UiHost (this.lay(c css))
+        def r:EVGElement (unwrap h.root)
+        def cell@(optional):EVGElement (h.findEl(r "ch-pf-a-owl"))
+        def x:double 0.0
+        def y:double 0.0
+        if (!null? cell) {
+            def ce:EVGElement (unwrap cell)
+            x = (ce.calculatedX + (ce.calculatedWidth / 2.0))
+            y = (ce.calculatedY + (ce.calculatedHeight / 2.0))
+        }
+        def hit:string (h.hitTest(x y))
+        this.ok((hit == "ch-pf-a-owl") ("a press on a character's picture is the character's: " + hit))
+        c.activate(hit)
+        this.ok((c.pAvatar == "owl") ("and picks it: " + c.pAvatar))
+        this.ok(((c.cursorFor(hit)) == "pointer") "a character shows the hand")
+        this.ok((((c.cursorFor("ch-pf-c-3")) == "pointer") && ((c.cursorFor("ch-pf-save")) == "pointer")) "so do a colour and Save")
+        this.ok((((c.cursorFor("ch-pf-title")) == "") && ((c.cursorFor("ch-pf-back")) == "")) "the sheet's title and backdrop do not")
+        def fld@(optional):EVGElement (h.findEl(r "ch-pin"))
+        def fx:double 0.0
+        def fy:double 0.0
+        if (!null? fld) {
+            def fe:EVGElement (unwrap fld)
+            fx = (fe.calculatedX + 20.0)
+            fy = (fe.calculatedY + (fe.calculatedHeight / 2.0))
+        }
+        def pf:string (h.hitTest(fx fy))
+        this.ok(((c.cursorFor(pf)) == "text") ("the name field shows the text cursor: " + pf))
+        c.activate("ch-pf-cancel")
+        this.ok((((c.cursorFor("ch-send")) == "pointer") && ((c.cursorFor("ch-fmt-b")) == "pointer")) "the composer's buttons show the hand")
+        this.ok((((c.cursorFor("ch-m1")) == "") && ((c.cursorFor("ch-feed")) == "")) "a message and the feed do not")
+        this.ok((((c.cursorFor("ch-m1-reply")) == "pointer") && ((c.cursorFor("ch-m1-q-0")) == "pointer")) "a message's actions do")
+        this.ok(((c.cursorFor("ch-m3-b0-emb")) == "pointer") "a deck embed does")
+        this.ok((((c.cursorFor("ch-m1-del")) == "") && ((c.cursorFor("ch-m2-del")) == "pointer")) "Delete only on one's own")
+        this.ok(((c.cursorFor("ch-m4-b0-s0")) == "") "plain text does not")
+        c.readOnly = true
+        this.ok((((c.cursorFor("ch-desc")) == "") && ((c.cursorFor("ch-attach")) == "")) "nor what an archived room does not allow")
+    }
+
+    fn files:void () {
+        def c:ChannelCtl (this.channel())
+        c.activate("ch-attach")
+        this.ok(((c.take()) == "attach\tmain") "the clip asks the host for a file")
+        c.setUploading(false 1)
+        c.build()
+        this.ok((((ChannelCtl.composerHeight(1 true)) - (ChannelCtl.composerH(1))) == 36.0) "a row of files makes the composer taller")
+        c.keyDownWith("" "Enter" false false)
+        this.ok(((c.take()) == "") "nothing is sent while a file is on its way")
+        c.setUploading(false 0)
+        c.addPending(false "plan.png" "/files/rooms/r/files/plan.png" "image/png" 2048 640 480)
+        c.addPending(false "notes.txt" "/files/rooms/r/files/notes.txt" "text/plain" 9 0 0)
+        c.addPending(false "old.txt" "/files/rooms/r/files/old.txt" "text/plain" 9 0 0)
+        c.activate("ch-pend-2-x")
+        this.ok(((array_length c.pendMain) == 2) "× takes a file away")
+        c.keyDownWith("" "Enter" false false)
+        this.ok(((c.take()) == "send\t\tplan.png\nnotes.txt\t") "files go with no words too")
+        this.ok(((array_length c.pendMain) == 0) "and the composer is empty again")
+        ; drawn: a picture made smaller to fit, a file as a card, a preview
+        def m:UiFeedMsg (this.msg(9 "p-bob" "Bob" "look https://example.com" 3))
+        def f1 (new UiFeedFile())
+        f1.name = "plan.png"
+        f1.url = "/files/rooms/r/files/plan.png"
+        f1.type = "image/png"
+        f1.w = 1600
+        f1.h = 800
+        def f2 (new UiFeedFile())
+        f2.name = "budget.xlsx"
+        f2.url = "/files/rooms/r/files/budget.xlsx"
+        f2.type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        f2.size = 3565158
+        push m.files f1
+        push m.files f2
+        def l (new UiFeedLink())
+        l.url = "https://example.com"
+        l.site = "Example"
+        l.title = "Example Domain"
+        l.desc = "For examples."
+        push m.links l
+        c.feed.put(m)
+        c.embedPicture = "/s/{deck}/{slide}.jpg"
+        c.build()
+        def r:EVGElement (unwrap c.rootEl)
+        def host (new UiHost())
+        def pic@(optional):EVGElement (host.findEl(r "ch-m9-f0"))
+        this.ok((!null? pic) "the picture is drawn")
+        if (!null? pic) {
+            def pe:EVGElement (unwrap pic)
+            this.ok(((pe.src == f1.url) && (pe.width.pixels == 360.0)) ("at most 360px wide: " + (to_string pe.width.pixels)))
+            this.ok((pe.height.pixels == 180.0) ("its own shape: " + (to_string pe.height.pixels)))
+        }
+        this.ok((!null? (host.findEl(r "ch-m9-f1"))) "the other file as a card")
+        this.ok(((UiFeedFile.sizeText(3565158)) == "3.4 MB") ("its size: " + (UiFeedFile.sizeText(3565158))))
+        this.ok(((((UiFeedFile.sizeText(820)) == "820 B") && ((UiFeedFile.sizeText(12345)) == "12 KB")) && ((UiFeedFile.sizeText(26214400)) == "25 MB")) "sizes read as people say them")
+        this.ok(((ChannelCtl.fileGlyph(f2.type "budget.xlsx")) == "📊") "a sheet looks like one")
+        c.activate("ch-m9-f1")
+        this.ok(((c.take()) == "file\t/files/rooms/r/files/budget.xlsx\tbudget.xlsx") "pressed, the host opens it")
+        c.activate("ch-m9-lk0")
+        this.ok(((c.take()) == "link\thttps://example.com") "a preview opens its link")
+        def emb@(optional):EVGElement (host.findEl(r "ch-m3-b0-emb-p"))
+        this.ok((!null? emb) "an embedded presentation shows its slide")
+        if (!null? emb) {
+            def ee:EVGElement (unwrap emb)
+            this.ok((ee.src == "/s/abc123/2.jpg") ("from the host's address: " + ee.src))
+        }
+        c.activate("ch-m3-b0-emb-p")
+        this.ok(((c.take()) == "deck\tabc123\t2") "and opens the presentation")
+    }
+
     sfn main:void () {
         def k (new ChannelCheck())
         k.writing()
@@ -514,7 +640,9 @@ class ChannelCheck {
         k.threads()
         k.head()
         k.a11y()
+        k.files()
         k.laidOut()
+        k.pointer()
         print ((to_string k.passes) + " passed, " + (to_string k.fails) + " failed")
         if (k.fails > 0) {
             print "RESULT FAIL"
