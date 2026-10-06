@@ -94,6 +94,7 @@ SUITES=(
   ui:chatmodel:check
   # The channel drawn from them (src/ChannelCtl.rgr).
   ui:channel:check
+  ui:participants:check
   evg:flexgrow:check
   evg:pctflex:check
   evg:inspect:test

@@ -83,5 +83,6 @@
   "ui:callout:check": "node dist/rgrc.js -es6 gallery/evgui/demo/CalloutCheck.rgr -d=gallery/evgui/bin -o=CalloutCheck.js -nodecli && node gallery/evgui/bin/CalloutCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
   "ui:chatmodel:check": "node dist/rgrc.js -es6 gallery/evgui/demo/ChatModelCheck.rgr -d=gallery/evgui/bin -o=ChatModelCheck.js -nodecli && node gallery/evgui/bin/ChatModelCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
   "ui:channel:check": "node dist/rgrc.js -es6 gallery/evgui/demo/ChannelCheck.rgr -d=gallery/evgui/bin -o=ChannelCheck.js -nodecli && node gallery/evgui/bin/ChannelCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
-  "ui:colorpicker:words": "node dist/rgrc.js -es6 gallery/evgui/demo/ColorPickerWordsCheck.rgr -d=gallery/evgui/bin -o=ColorPickerWordsCheck.js -nodecli && node gallery/evgui/bin/ColorPickerWordsCheck.js | tee /dev/stderr | grep -q ' 0 failed'"
+  "ui:colorpicker:words": "node dist/rgrc.js -es6 gallery/evgui/demo/ColorPickerWordsCheck.rgr -d=gallery/evgui/bin -o=ColorPickerWordsCheck.js -nodecli && node gallery/evgui/bin/ColorPickerWordsCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
+  "ui:participants:check": "node dist/rgrc.js -es6 gallery/evgui/demo/ParticipantsCheck.rgr -d=gallery/evgui/bin -o=ParticipantsCheck.js -nodecli && node gallery/evgui/bin/ParticipantsCheck.js | tee /dev/stderr | grep -q ' 0 failed'"
 }

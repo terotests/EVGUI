@@ -1,0 +1,150 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; Who is in a call (ParticipantsCtl), on Node: `ui:participants:check`.
+;
+; The people as the call is told (kept in order, levels kept over a new
+; telling), the speaking light held between words and off for the muted,
+; the buttons: one's own Mute / Unmute and Leave, the host's Mute on
+; someone else's row and nobody else's, and what a reader is told.
+Import "../src/ParticipantsCtl.rgr"
+
+class ParticipantsCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    fn call:ParticipantsCtl () {
+        def c (new ParticipantsCtl())
+        c.setup("pc" "Call · 3")
+        c.put("a" "Ada" "#ea580c" true false false false)
+        c.put("b" "Bo" "#2563eb" false false true false)
+        c.put("c" "Claude" "#7c3aed" false false false true)
+        return c
+    }
+
+    fn found:boolean (root:EVGElement id:string) {
+        def e@(optional):EVGElement (UiTree.findById(root id))
+        return (!null? e)
+    }
+
+    fn people:void () {
+        def c:ParticipantsCtl (this.call())
+        this.ok(((c.count()) == 3) "three in the call")
+        this.ok(((c.meIndex()) == 1) "Bo is me")
+        this.ok(((c.amHost()) == false) "and not the host")
+        c.setLevel("a" 0.5)
+        ; told again: Ada stays, keeps her level; Claude went
+        def keep:[string]
+        push keep "a"
+        push keep "b"
+        c.keepOnly(keep)
+        c.put("a" "Ada L." "#ea580c" true false false false)
+        this.ok(((c.count()) == 2) "the one who left is gone")
+        def a:UiCallPerson (c.at(0))
+        this.ok(((a.name == "Ada L.") && (a.level == 0.5)) "a new name, the level kept")
+        this.ok(((c.indexOf("c")) == -1) "Claude is not found")
+    }
+
+    fn speaking:void () {
+        def c:ParticipantsCtl (this.call())
+        c.now = 1000.0
+        this.ok(((c.speaking(0)) == false) "quiet at first")
+        this.ok((c.setLevel("a" 0.3)) "loud: the light comes on (a change)")
+        this.ok(((c.setLevel("a" 0.4)) == false) "louder still: no change")
+        this.ok(((c.setLevel("a" 0.01)) == false) "a pause between words: still on")
+        this.ok(((c.tick(1400.0)) == false) "held for a moment")
+        this.ok((c.tick(1700.0)) "then off (a change)")
+        this.ok(((c.speaking(0)) == false) "off")
+        this.ok(((c.setLevel("zz" 0.9)) == false) "someone not in the call: nothing")
+        def a:UiCallPerson (c.at(0))
+        a.muted = true
+        c.setLevel("a" 0.9)
+        this.ok(((c.speaking(0)) == false) "the muted do not light up")
+        c.setLevel("b" 2.0)
+        def b:UiCallPerson (c.at(1))
+        this.ok((b.level == 1.0) "a level is at most 1")
+    }
+
+    fn buttons:void () {
+        def c:ParticipantsCtl (this.call())
+        c.build()
+        def r:EVGElement (unwrap c.rootEl)
+        this.ok((this.found(r "pc-mic")) "my microphone button")
+        this.ok((this.found(r "pc-leave")) "and Leave")
+        this.ok(((this.found(r "pc-p-0-mute")) == false) "not the host: no Mute on others")
+        c.activate("pc-mic")
+        this.ok(((c.takeAction()) == "mute") "Mute")
+        c.activate("pc-p-0-mute")
+        this.ok(((c.takeAction()) == "") "a hidden button does nothing")
+        def me:UiCallPerson (c.at(1))
+        me.muted = true
+        c.activate("pc-mic")
+        this.ok(((c.takeAction()) == "unmute") "Unmute when muted")
+        c.activate("pc-leave")
+        this.ok(((c.takeAction()) == "leave") "Leave")
+
+        ; Ada's page: the host mutes Bo, not the assistant, not herself
+        def h:ParticipantsCtl (this.call())
+        def ha:UiCallPerson (h.at(0))
+        ha.me = true
+        def hb:UiCallPerson (h.at(1))
+        hb.me = false
+        h.build()
+        def hr:EVGElement (unwrap h.rootEl)
+        this.ok((this.found(hr "pc-p-1-mute")) "the host has Mute on Bo")
+        this.ok(((this.found(hr "pc-p-2-mute")) == false) "not on the assistant")
+        this.ok(((this.found(hr "pc-p-0-mute")) == false) "nor on herself")
+        h.activate("pc-p-1-mute")
+        this.ok(((h.takeAction()) == "mute:b") "mute:b")
+        hb.muted = true
+        h.build()
+        def hr2:EVGElement (unwrap h.rootEl)
+        this.ok(((this.found(hr2 "pc-p-1-mute")) == false) "Bo muted: the button goes (only Bo unmutes)")
+        this.ok((this.found(hr2 "pc-p-1-muted")) "a muted mark instead")
+
+        ; not in the call: a list only
+        def o:ParticipantsCtl (this.call())
+        def ob:UiCallPerson (o.at(1))
+        ob.me = false
+        o.build()
+        def orr:EVGElement (unwrap o.rootEl)
+        this.ok(((this.found(orr "pc-mic")) == false) "not in it: no microphone button")
+        o.activate("pc-leave")
+        this.ok(((o.takeAction()) == "") "nor Leave")
+        this.ok(((o.needH()) == ((36.0 + 96.0) + 48.0)) "the height for three rows")
+    }
+
+    fn reader:void () {
+        def c:ParticipantsCtl (this.call())
+        c.now = 0.0
+        c.setLevel("a" 0.5)
+        def rs:[UiRow] (c.rows())
+        def said:string ""
+        for rs r:UiRow i {
+            said = (said + r.name + "|")
+        }
+        this.ok(((indexOf said "Ada, host, speaking|") >= 0) ("Ada is told speaking: " + said))
+        this.ok(((indexOf said "Bo (you)|") >= 0) ("Bo is me: " + said))
+        this.ok(((indexOf said "Claude, assistant|") >= 0) "Claude an assistant")
+        this.ok(((indexOf said "Mute|") >= 0) "my Mute button")
+    }
+
+    sfn main:void () {
+        def k (new ParticipantsCheck())
+        k.people()
+        k.speaking()
+        k.buttons()
+        k.reader()
+        print ((to_string k.passes) + " passed, " + (to_string k.fails) + " failed")
+        if (k.fails > 0) {
+            print "RESULT FAIL"
+        }
+    }
+}

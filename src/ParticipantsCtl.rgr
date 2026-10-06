@@ -1,0 +1,457 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; ParticipantsCtl — who is in a call: their names, who speaks, who is muted
+; =============================================================================
+; The list beside a document while people talk about it (Sliqtly's call on a
+; presentation, Teams' or Slack huddle's roster): one row per person in the
+; order they came, a dot in their colour that lights up while they speak,
+; "(you)" on one's own, "host" on the one who started it, a muted mark, and
+; an assistant marked as one. Under the list one's own microphone button
+; (Mute / Unmute) and Leave.
+;
+; STATE: `people` (the host sets them as the call is told: `clear` + `put`),
+; each with `level` (0..1, the loudness the host measures). `setLevel`
+; says whether the row's speaking state changed, so a host measuring many
+; times a second repaints only then. Speaking is `level >= speakAt`, held
+; for `holdMs` after it drops, so the light does not flicker between words.
+;
+; ACTIONS (a press leaves a value in `acted` for the host to `takeAction`):
+; "mute" / "unmute" (one's own microphone), "leave", and for the host only
+; "mute:<client>" (another person's, from the row's own Mute button; nobody
+; unmutes another).
+;
+; TO A READER: a region named by the title; the people a list, each item
+; "Ada (host), speaking" / "Bo, muted"; the buttons buttons.
+; =============================================================================
+
+Import "UiCtl.rgr"
+Import "UiTree.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+
+class UiCallPerson {
+    ; the host's id for the person's page (one person may be in twice)
+    def client:string ""
+    def name:string ""
+    def color:string "#64748b"
+    def host:boolean false
+    def muted:boolean false
+    def me:boolean false
+    def agent:boolean false
+    def level:double 0.0
+    ; when it last was at speaking loudness (the host's clock, ms), once it
+    ; has been (`loud`)
+    def loud:boolean false
+    def loudAt:double 0.0
+
+    Constructor () {
+    }
+}
+
+class ParticipantsCtl extends UiCtl {
+    def title:string "Call"
+    def people:[UiCallPerson]
+    ; the loudness that counts as speaking, and how long it is held
+    def speakAt:double 0.08
+    def holdMs:double 600.0
+    ; the host's clock, ms (set before setLevel / speaking)
+    def now:double 0.0
+    def muteText:string "Mute"
+    def unmuteText:string "Unmute"
+    def leaveText:string "Leave"
+    def hostText:string "host"
+    def youText:string "you"
+    def mutedText:string "muted"
+    def speakingText:string "speaking"
+    def agentText:string "assistant"
+    def emptyText:string "Nobody is in the call."
+    def acted:string ""
+
+    Constructor () {
+    }
+
+    fn setup:void (id:string label:string) {
+        tid = id
+        name = label
+        title = label
+    }
+
+    ; --- the people ---------------------------------------------------------------
+
+    fn clear:void () {
+        def none:[UiCallPerson]
+        people = none
+    }
+
+    ; one more, or the one with that client changed (its level is kept)
+    fn put:UiCallPerson (client:string who:string color:string host:boolean muted:boolean me:boolean agent:boolean) {
+        def i:int (this.indexOf(client))
+        def p:UiCallPerson (new UiCallPerson())
+        if (i >= 0) {
+            p = (itemAt people i)
+        } {
+            p.client = client
+            push people p
+        }
+        p.name = who
+        p.color = color
+        p.host = host
+        p.muted = muted
+        p.me = me
+        p.agent = agent
+        return p
+    }
+
+    ; the people now are these clients (in this order); the others go
+    fn keepOnly:void (clients:[string]) {
+        def next:[UiCallPerson]
+        for clients c:string ci {
+            def i:int (this.indexOf(c))
+            if (i >= 0) {
+                push next (itemAt people i)
+            }
+        }
+        people = next
+    }
+
+    fn indexOf:int (client:string) {
+        def i:int 0
+        while (i < (array_length people)) {
+            def p:UiCallPerson (itemAt people i)
+            if (p.client == client) {
+                return i
+            }
+            i = (i + 1)
+        }
+        return -1
+    }
+
+    fn count:int () {
+        return (array_length people)
+    }
+
+    fn at:UiCallPerson (i:int) {
+        return (itemAt people i)
+    }
+
+    ; one's own row: -1 while one is not in the call
+    fn meIndex:int () {
+        def i:int 0
+        while (i < (array_length people)) {
+            def p:UiCallPerson (itemAt people i)
+            if p.me {
+                return i
+            }
+            i = (i + 1)
+        }
+        return -1
+    }
+
+    fn joined:boolean () {
+        return ((this.meIndex()) >= 0)
+    }
+
+    fn amHost:boolean () {
+        def i:int (this.meIndex())
+        if (i < 0) {
+            return false
+        }
+        def p:UiCallPerson (itemAt people i)
+        return p.host
+    }
+
+    fn mutedMe:boolean () {
+        def i:int (this.meIndex())
+        if (i < 0) {
+            return false
+        }
+        def p:UiCallPerson (itemAt people i)
+        return p.muted
+    }
+
+    ; --- speaking -------------------------------------------------------------------
+
+    fn speaking:boolean (i:int) {
+        def p:UiCallPerson (itemAt people i)
+        if (p.muted || (p.loud == false)) {
+            return false
+        }
+        return ((now - p.loudAt) <= holdMs)
+    }
+
+    ; -> whether the row's speaking state changed (the host repaints then)
+    fn setLevel:boolean (client:string level:double) {
+        def i:int (this.indexOf(client))
+        if (i < 0) {
+            return false
+        }
+        def was:boolean (this.speaking(i))
+        def p:UiCallPerson (itemAt people i)
+        def l:double level
+        if (l < 0.0) {
+            l = 0.0
+        }
+        if (l > 1.0) {
+            l = 1.0
+        }
+        p.level = l
+        if (l >= speakAt) {
+            p.loud = true
+            p.loudAt = now
+        }
+        return (was != (this.speaking(i)))
+    }
+
+    ; the clock moved: whether any speaking light went out
+    fn tick:boolean (t:double) {
+        def before:[boolean]
+        def i:int 0
+        while (i < (array_length people)) {
+            push before (this.speaking(i))
+            i = (i + 1)
+        }
+        now = t
+        def changed:boolean false
+        i = 0
+        while (i < (array_length people)) {
+            if ((itemAt before i) != (this.speaking(i))) {
+                changed = true
+            }
+            i = (i + 1)
+        }
+        return changed
+    }
+
+    ; --- the buttons ------------------------------------------------------------------
+
+    fn micTid:string () {
+        return (tid + "-mic")
+    }
+
+    fn leaveTid:string () {
+        return (tid + "-leave")
+    }
+
+    fn rowTid:string (i:int) {
+        return (tid + "-p-" + (to_string i))
+    }
+
+    fn muteTid:string (i:int) {
+        return ((this.rowTid(i)) + "-mute")
+    }
+
+    ; the host's Mute on someone else's row, while they are not muted
+    fn canMute:boolean (i:int) {
+        def p:UiCallPerson (itemAt people i)
+        return ((((this.amHost()) && (p.me == false)) && (p.muted == false)) && (p.agent == false))
+    }
+
+    fn takeAction:string () {
+        def a:string acted
+        acted = ""
+        return a
+    }
+
+    fn activate:string (target:string) {
+        if ((this.joined()) == false) {
+            return ""
+        }
+        if (target == (this.micTid())) {
+            if (this.mutedMe()) {
+                acted = "unmute"
+            } {
+                acted = "mute"
+            }
+            return target
+        }
+        if (target == (this.leaveTid())) {
+            acted = "leave"
+            return target
+        }
+        def i:int 0
+        while (i < (array_length people)) {
+            if ((target == (this.muteTid(i))) && (this.canMute(i))) {
+                def p:UiCallPerson (itemAt people i)
+                acted = ("mute:" + p.client)
+                return target
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    ; --- drawing -------------------------------------------------------------------------
+
+    ; the height it needs: the head, a row each, the buttons
+    fn needH:double () {
+        def n:int (array_length people)
+        if (n == 0) {
+            n = 1
+        }
+        return ((36.0 + ((to_double n) * 32.0)) + 48.0)
+    }
+
+    ; "Ada (you), host, muted"
+    fn said:string (i:int) {
+        def p:UiCallPerson (itemAt people i)
+        def s:string p.name
+        if p.me {
+            s = (s + " (" + youText + ")")
+        }
+        if p.host {
+            s = (s + ", " + hostText)
+        }
+        if p.agent {
+            s = (s + ", " + agentText)
+        }
+        if p.muted {
+            s = (s + ", " + mutedText)
+        } {
+            if (this.speaking(i)) {
+                s = (s + ", " + speakingText)
+            }
+        }
+        return s
+    }
+
+    fn build:void () {
+        def root:EVGElement (UiTree.div(tid "call-panel"))
+        def head:EVGElement (UiTree.div((tid + "-head") "call-head"))
+        head.addChild((UiTree.label((tid + "-title") "call-title" title)))
+        root.addChild(head)
+        def list:EVGElement (UiTree.div((tid + "-list") "call-list"))
+        if ((array_length people) == 0) {
+            list.addChild((UiTree.label((tid + "-empty") "call-empty" emptyText)))
+        }
+        def i:int 0
+        while (i < (array_length people)) {
+            def p:UiCallPerson (itemAt people i)
+            def on:boolean (this.speaking(i))
+            def cls:string "call-row"
+            if on {
+                cls = (cls + " call-row-speaking")
+            }
+            def row:EVGElement (UiTree.div((this.rowTid(i)) cls))
+            def dcls:string "call-dot"
+            if on {
+                dcls = "call-dot call-dot-speaking"
+            }
+            def dot:EVGElement (UiTree.div(((this.rowTid(i)) + "-dot") dcls))
+            UiTree.inline(dot "background-color" p.color)
+            if on {
+                UiTree.inline(dot "border-color" p.color)
+            }
+            row.addChild(dot)
+            def nm:string p.name
+            if p.agent {
+                nm = ("🤖 " + nm)
+            }
+            if p.me {
+                nm = (nm + " (" + youText + ")")
+            }
+            row.addChild((UiTree.label(((this.rowTid(i)) + "-name") "call-name" nm)))
+            if p.host {
+                row.addChild((UiTree.label(((this.rowTid(i)) + "-host") "call-tag" hostText)))
+            }
+            if p.muted {
+                row.addChild((UiTree.label(((this.rowTid(i)) + "-muted") "call-muted" "🔇")))
+            } {
+                if (this.canMute(i)) {
+                    row.addChild((UiTree.label((this.muteTid(i)) "call-mute-other" muteText)))
+                }
+            }
+            list.addChild(row)
+            i = (i + 1)
+        }
+        root.addChild(list)
+        if (this.joined()) {
+            def foot:EVGElement (UiTree.div((tid + "-foot") "call-foot"))
+            def mcls:string "call-mic"
+            def mtext:string muteText
+            if (this.mutedMe()) {
+                mcls = "call-mic call-mic-off"
+                mtext = unmuteText
+            }
+            foot.addChild((UiTree.label((this.micTid()) mcls mtext)))
+            foot.addChild((UiTree.label((this.leaveTid()) "call-leave" leaveText)))
+            root.addChild(foot)
+        }
+        rootEl = root
+    }
+
+    ; --- what it is, to a reader ----------------------------------------------------------
+
+    fn tids:[string] () {
+        def a:[string]
+        push a tid
+        push a (tid + "-list")
+        def i:int 0
+        while (i < (array_length people)) {
+            push a (this.rowTid(i))
+            if (this.canMute(i)) {
+                push a (this.muteTid(i))
+            }
+            i = (i + 1)
+        }
+        if (this.joined()) {
+            push a (this.micTid())
+            push a (this.leaveTid())
+        }
+        return a
+    }
+
+    fn isFocusable:boolean (target:string) {
+        if ((target == (this.micTid())) || (target == (this.leaveTid()))) {
+            return (this.joined())
+        }
+        def i:int 0
+        while (i < (array_length people)) {
+            if (target == (this.muteTid(i))) {
+                return (this.canMute(i))
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    fn rows:[UiRow] () {
+        def out:[UiRow]
+        push out (UiRow.of(tid (EVGA11yRole.region()) title))
+        def l:UiRow (UiRow.of((tid + "-list") (EVGA11yRole.list()) title))
+        l.parentTid = tid
+        push out l
+        def i:int 0
+        while (i < (array_length people)) {
+            def r:UiRow (UiRow.of((this.rowTid(i)) (EVGA11yRole.listItem()) (this.said(i))))
+            r.parentTid = (tid + "-list")
+            push out r
+            if (this.canMute(i)) {
+                def p:UiCallPerson (itemAt people i)
+                def m:UiRow (UiRow.of((this.muteTid(i)) (EVGA11yRole.button()) ((muteText + " ") + p.name)))
+                m.parentTid = (this.rowTid(i))
+                m.focusable = true
+                m.tabStop = true
+                push out m
+            }
+            i = (i + 1)
+        }
+        if (this.joined()) {
+            def mt:string muteText
+            if (this.mutedMe()) {
+                mt = unmuteText
+            }
+            def mic:UiRow (UiRow.of((this.micTid()) (EVGA11yRole.button()) mt))
+            mic.parentTid = tid
+            mic.focusable = true
+            mic.tabStop = true
+            push out mic
+            def lv:UiRow (UiRow.of((this.leaveTid()) (EVGA11yRole.button()) leaveText))
+            lv.parentTid = tid
+            lv.focusable = true
+            lv.tabStop = true
+            push out lv
+        }
+        return out
+    }
+}
