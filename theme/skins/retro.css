@@ -449,7 +449,12 @@
 .theme-retro .ch-act { color: var(--retro-ink); }
 .theme-retro .ch-sug-on { background-color: var(--retro-fill-b); }
 .theme-retro .ch-sug-t-on { color: var(--retro-btn-ink); }
-.theme-retro .ch-frame,
+.theme-retro .ch-fmtseam,
+.theme-retro .ch-cbody { background-color: var(--retro-screen); }
+.theme-retro .ch-tool-on,
+.theme-retro .ch-ftool:hover { background-color: var(--retro-screen-3); }
+.theme-retro .ch-field-code { background-color: var(--retro-screen-2); border-color: var(--retro-screen-3); }
+.theme-retro .ch-frame { background-color: var(--retro-screen-2); border-color: var(--retro-edge); }
 .theme-retro .ch-desc-field,
 .theme-retro .ch-pf-field { background-color: var(--retro-screen); border-color: var(--retro-edge); }
 .theme-retro .ch-emb { border-color: var(--retro-screen-3); }

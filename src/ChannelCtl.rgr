@@ -161,6 +161,10 @@ class ChannelCtl extends UiCtl {
     def pendThread:[UiFeedFile]
     def upMain:int 0
     def upThread:int 0
+    ; the composer as a code block, as in Slack: "```" and a space at the
+    ; start of an empty draft, or { }; the draft goes out between ``` lines
+    def codeMain:boolean false
+    def codeThread:boolean false
     ; where an embedded presentation's slide is drawn from, with {deck} and
     ; {slide} put in ("" no picture, only its card)
     def embedPicture:string ""
@@ -341,6 +345,8 @@ class ChannelCtl extends UiCtl {
         this.clearPending(true)
         upMain = 0
         upThread = 0
+        codeMain = false
+        codeThread = false
         if (keys == "thread") {
             keys = "main"
         }
@@ -488,7 +494,89 @@ class ChannelCtl extends UiCtl {
         def f:InputCtl (this.field())
         f.insertText(ch)
         this.findSug()
+        if ((ch == " ") && ((keys == "main") || (keys == "thread"))) {
+            this.fenceTyped((keys == "thread"))
+        }
         return true
+    }
+
+    ; --- the code block ---------------------------------------------------------------------
+
+    fn codeOn:boolean (inThread:boolean) {
+        if inThread {
+            return codeThread
+        }
+        return codeMain
+    }
+
+    fn setCode:void (inThread:boolean on:boolean) {
+        if inThread {
+            codeThread = on
+        } {
+            codeMain = on
+        }
+    }
+
+    ; "```" and a space just typed at the start of a line: an otherwise
+    ; empty draft turns into a code block; in the middle of a draft the
+    ; block is written out with its ``` lines and the caret in it
+    fn fenceTyped:void (inThread:boolean) {
+        if (this.codeOn(inThread)) {
+            return
+        }
+        def f:InputCtl (this.field())
+        def c:int f.caret
+        def v:string f.value
+        if (c < 4) {
+            return
+        }
+        if ((substring v (c - 4) c) != "``` ") {
+            return
+        }
+        def at:int (c - 4)
+        if ((at > 0) && ((substring v (at - 1) at) != "\n")) {
+            return
+        }
+        def head:string (substring v 0 at)
+        def tail:string (substring v c (strlen v))
+        this.closeSug()
+        if ((strlen (trim (head + tail))) == 0) {
+            f.applyEdit("" 0 0)
+            this.setCode(inThread true)
+            return
+        }
+        if (((strlen tail) > 0) && ((indexOf tail "\n") != 0)) {
+            tail = ("\n" + tail)
+        }
+        def open:string (head + "```\n")
+        f.applyEdit((open + "\n```" + tail) (strlen open) (strlen open))
+    }
+
+    ; { }: the whole draft in a code block, or out of it again
+    fn toggleCode:void (inThread:boolean) {
+        this.setCode(inThread ((this.codeOn(inThread)) == false))
+        this.closeSug()
+    }
+
+    ; a code block's draft as sent: its blank lines at either end left out,
+    ; the indentation kept
+    sfn codeBody:string (v:string) {
+        def lines:[string] (strsplit v "\n")
+        def a:int 0
+        def b:int (array_length lines)
+        while ((a < b) && ((strlen (trim (itemAt lines a))) == 0)) {
+            a = (a + 1)
+        }
+        while ((b > a) && ((strlen (trim (itemAt lines (b - 1)))) == 0)) {
+            b = (b - 1)
+        }
+        def kept:[string]
+        def i:int a
+        while (i < b) {
+            push kept (itemAt lines i)
+            i = (i + 1)
+        }
+        return (join kept "\n")
     }
 
     ; --- files waiting to be sent ---------------------------------------------------------
@@ -565,6 +653,10 @@ class ChannelCtl extends UiCtl {
             f = tinput
         }
         def t:string (trim f.value)
+        def code:boolean (this.codeOn(inThread))
+        if (code && ((strlen t) > 0)) {
+            t = ("```\n" + (ChannelCtl.codeBody(f.value)) + "\n```")
+        }
         def pend:[UiFeedFile] (this.pending(inThread))
         if (((strlen t) == 0) && ((array_length pend) == 0)) {
             return false
@@ -586,6 +678,7 @@ class ChannelCtl extends UiCtl {
         }
         this.ask(("send\t" + th + "\t" + names + "\t" + t))
         this.clearPending(inThread)
+        this.setCode(inThread false)
         f.setValue("")
         f.moveTo(0 false)
         f.scrollX = 0.0
@@ -819,6 +912,11 @@ class ChannelCtl extends UiCtl {
             return ""
         }
         def f:InputCtl (this.field())
+        ; Backspace in an empty code block takes the block away
+        if (((key == "Backspace") && (this.codeOn(inThread))) && ((strlen f.value) == 0)) {
+            this.setCode(inThread false)
+            return ""
+        }
         f.keyDownWith(f.tid key shift ctrl)
         this.findSug()
         return ""
@@ -1124,6 +1222,14 @@ class ChannelCtl extends UiCtl {
             } {
                 keys = "main"
             }
+            if (which == "k") {
+                this.toggleCode(inThread)
+                return target
+            }
+            ; in a code block the text is as written
+            if (this.codeOn(inThread)) {
+                return target
+            }
             this.wrap((ChannelCtl.markOf(which)))
             return target
         }
@@ -1175,7 +1281,10 @@ class ChannelCtl extends UiCtl {
         if (((indexOf rest "pend-") == 0) || ((indexOf rest "tpend-") == 0)) {
             return (ChannelCtl.endsIn(rest "-x"))
         }
-        if ((((indexOf rest "fmt-") == 0) || ((indexOf rest "sug-") == 0)) || (((indexOf rest "pf-a-") == 0) || ((indexOf rest "pf-c-") == 0))) {
+        if ((indexOf rest "fmt-") == 0) {
+            return ((this.fmtOff(rest)) == false)
+        }
+        if (((indexOf rest "sug-") == 0) || (((indexOf rest "pf-a-") == 0) || ((indexOf rest "pf-c-") == 0))) {
             return true
         }
         def w:string (this.msgWhere(target))
@@ -1183,6 +1292,15 @@ class ChannelCtl extends UiCtl {
             return ((strlen (this.msgAction(w (this.msgSeq(target)) (this.msgPart(target))))) > 0)
         }
         return false
+    }
+
+    ; a format button that does nothing now: all but { } in a code block
+    ; (`rest` is "fmt-b", "fmt-tk" …)
+    fn fmtOff:boolean (rest:string) {
+        def which:string (substring rest 4 (strlen rest))
+        def inThread:boolean ((strlen which) > 1)
+        def k:string (substring which ((strlen which) - 1) (strlen which))
+        return ((k != "k") && (this.codeOn(inThread)))
     }
 
     ; the number written in `s` (its digits; 0 none)
@@ -1972,7 +2090,11 @@ class ChannelCtl extends UiCtl {
         def pend:[UiFeedFile] (this.pending(inThread))
         def up:int (this.uploading(inThread))
         def withFiles:boolean (((array_length pend) > 0) || (up > 0))
-        UiTree.inline(box "height" ((to_string (ChannelCtl.composerHeight(f.sizedLines withFiles))) + "px"))
+        def boxH:double (ChannelCtl.composerHeight(f.sizedLines withFiles))
+        if (this.codeOn(inThread)) {
+            boxH = (boxH + ChannelCtl.codeExtra())
+        }
+        UiTree.inline(box "height" ((to_string boxH) + "px"))
         def mineKeys:boolean ((keys == "thread") == inThread)
         if ((this.sugOpen()) && mineKeys) {
             box.addChild((this.sugEl()))
@@ -1980,30 +2102,60 @@ class ChannelCtl extends UiCtl {
         def frame:EVGElement (UiTree.div((tid + "-" + pre + "frame") "ch-frame"))
         ; the suggestions (a sibling before it) open above it
         UiTree.anchor(frame)
+        def code:boolean (this.codeOn(inThread))
+        ; the format buttons on the frame's grey at the top, as in Slack,
+        ; and the rest on white under them: the body's rounded top corners
+        ; are squared by the white piece it is laid over
+        def bar:EVGElement (UiTree.div((tid + "-" + pre + "fmtbar") "ch-fmtbar"))
+        def marks:[string] ([] _:string ("b" "i" "s" "c" "k"))
+        def faces:[string] ([] _:string ("B" "I" "S" "</>" "{ }"))
+        def looks:[string] ([] _:string ("ch-b" "ch-i" "ch-s" "ch-icode" ""))
+        for marks m:string mi {
+            def cls:string ("ch-tool ch-ftool " + (itemAt looks mi))
+            if (m == "k") {
+                if code {
+                    cls = "ch-tool ch-ftool ch-tool-on"
+                }
+            } {
+                if code {
+                    cls = (cls + " ch-tool-off")
+                }
+            }
+            bar.addChild((UiTree.label((tid + "-fmt-" + pre + m) (trim cls) (itemAt faces mi))))
+        }
+        frame.addChild(bar)
+        frame.addChild((UiTree.div("" "ch-fmtseam")))
+        def body:EVGElement (UiTree.div((tid + "-" + pre + "cbody") "ch-cbody"))
+        frame.addChild(body)
         f.name = ph
         f.placeholder = ph
         f.boxClass = "ch-field"
         f.textClass = "ch-draft"
+        if code {
+            f.boxClass = "ch-field ch-field-code"
+            f.textClass = "ch-draft ch-draft-code"
+        }
         f.placeholderClass = "ch-ph"
         f.build()
         if withFiles {
-            frame.addChild((this.pendingEl(pre pend up)))
+            body.addChild((this.pendingEl(pre pend up)))
         }
-        frame.addChild((unwrap f.rootEl))
+        if code {
+            def cb:EVGElement (UiTree.div("" "ch-codebox"))
+            cb.addChild((unwrap f.rootEl))
+            body.addChild(cb)
+        } {
+            body.addChild((unwrap f.rootEl))
+        }
         def tools:EVGElement (UiTree.div((tid + "-" + pre + "tools") "ch-tools"))
         tools.addChild((UiTree.label((tid + "-" + pre + "attach") "ch-tool ch-attach" "📎")))
-        tools.addChild((UiTree.label((tid + "-fmt-" + pre + "b") "ch-tool ch-b" "B")))
-        tools.addChild((UiTree.label((tid + "-fmt-" + pre + "i") "ch-tool ch-i" "I")))
-        tools.addChild((UiTree.label((tid + "-fmt-" + pre + "s") "ch-tool ch-s" "S")))
-        tools.addChild((UiTree.label((tid + "-fmt-" + pre + "c") "ch-tool ch-icode" "</>")))
-        tools.addChild((UiTree.label((tid + "-fmt-" + pre + "k") "ch-tool" "{ }")))
         tools.addChild((UiTree.div("" "ch-grow")))
         def scls:string "ch-sendb"
         if ((((strlen (trim f.value)) == 0) && ((array_length pend) == 0)) || (up > 0)) {
             scls = "ch-sendb ch-sendb-off"
         }
         tools.addChild((UiTree.label((tid + "-" + pre + "send") scls "➤")))
-        frame.addChild(tools)
+        body.addChild(tools)
         box.addChild(frame)
         return box
     }
@@ -2036,9 +2188,15 @@ class ChannelCtl extends UiCtl {
         return h
     }
 
-    ; the composer's height for a draft of `lines` lines: the field (8px
-    ; above the text, 20px a line, at least 36px), the tools' 32px, the
-    ; frame's border and 20px under it (theme/base.css, .ch-composer …)
+    ; what a code block adds: the box's 6px above it and its border
+    sfn codeExtra:double () {
+        return 8.0
+    }
+
+    ; the composer's height for a draft of `lines` lines: the format band's
+    ; 32px, the field (8px above the text, 20px a line, at least 36px), the
+    ; tools' 32px, the frame's border and 20px under it (theme/base.css,
+    ; .ch-composer …)
     sfn composerH:double (lines:int) {
         def n:int lines
         if (n < 1) {
@@ -2048,7 +2206,7 @@ class ChannelCtl extends UiCtl {
         if (field < 36.0) {
             field = 36.0
         }
-        return (((20.0 + 2.0) + field) + 32.0)
+        return ((((20.0 + 2.0) + 32.0) + field) + 32.0)
     }
 
     fn sugEl:EVGElement () {
