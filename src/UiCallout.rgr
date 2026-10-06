@@ -10,7 +10,8 @@
 ;
 ; WHERE THE BOX GOES (`place`, once its size `bw` × `bh` is known): above
 ; and to the right of the point, `gap` away; below, left, or below-left when
-; that does not fit inside the page (`pw` × `ph`, `margin` from its edges);
+; that does not fit inside the page (`pw` × `ph`, `margin` from its edges,
+; below `top`);
 ; when none fits, the first one pushed inside. A box the person dragged
 ; (`dragBy`) stays where they put it, still inside the page.
 ;
@@ -34,6 +35,9 @@ class UiCallout {
     def y:double 0.0
     def gap:double 44.0
     def margin:double 8.0
+    ; the top of the room it may use (a bar across the page's top it
+    ; keeps clear of); `ph` is its bottom
+    def top:double 0.0
     def tailW:double 16.0
     ; put somewhere by hand: kept there (`ux`, `uy`, before clamping)
     def moved:boolean false
@@ -57,6 +61,12 @@ class UiCallout {
         ph = h
     }
 
+    ; the room from `t` down to `b` (`b` the page's height when it is all)
+    fn setRows:void (t:double b:double) {
+        top = t
+        ph = b
+    }
+
     fn setSize:void (w:double h:double) {
         bw = w
         bh = h
@@ -64,7 +74,7 @@ class UiCallout {
 
     ; the box at (bx, by) is inside the page
     fn fits:boolean (bx:double by:double) {
-        return ((((bx >= margin) && (by >= margin)) && ((bx + bw) <= (pw - margin))) && ((by + bh) <= (ph - margin)))
+        return ((((bx >= margin) && (by >= (top + margin))) && ((bx + bw) <= (pw - margin))) && ((by + bh) <= (ph - margin)))
     }
 
     fn clampX:double (bx:double) {
@@ -83,8 +93,8 @@ class UiCallout {
         if ((v + bh) > (ph - margin)) {
             v = ((ph - margin) - bh)
         }
-        if (v < margin) {
-            v = margin
+        if (v < (top + margin)) {
+            v = (top + margin)
         }
         return v
     }
