@@ -1,0 +1,131 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; UiScroll — a box that scrolls by the wheel and by a finger
+; =============================================================================
+; A window's body, a dialog held to the page: a scroll container (EVG's
+; `overflow-y: auto`, so the layout clips it and writes `scrollHeight`) and
+; this, which says how far it is scrolled and turns the wheel and a finger
+; into that. The owner writes `top` on the element as its `scrollTop` when it
+; builds, and passes the laid-out element to the methods below.
+;
+; A finger is the part a page cannot do for itself. On a phone there is no
+; wheel: content taller than the screen is reached by drawing a finger over
+; it, and a finger that goes down on a button may be starting a scroll rather
+; than a press. So a press over the box waits (`beginPan`): one that travels
+; more than `slop` scrolls, one that does not is a tap, and the owner presses
+; it where it went down when the finger lifts (`endPan` says which).
+; =============================================================================
+
+Import "pkg:evg/EVGElement.rgr"
+
+class UiScroll {
+    ; How far the box is scrolled, in page pixels.
+    def top:double 0.0
+    ; A finger down on the box: where it went down, where it is now, and
+    ; whether it has gone far enough to be a scroll.
+    def panning:boolean false
+    def moved:boolean false
+    def downX:double 0.0
+    def downY:double 0.0
+    def panY:double 0.0
+    def clicks:int 1
+    def shift:boolean false
+    ; How far a finger may wobble and still be a tap.
+    def slop:double 10.0
+
+    fn reset:void () {
+        top = 0.0
+        panning = false
+        moved = false
+    }
+
+    ; Over the box, as last laid out.
+    sfn has:boolean (el:EVGElement px:double py:double) {
+        if (el.calculatedHeight <= 0.0) {
+            return false
+        }
+        return (((px >= el.calculatedX) && (px <= (el.calculatedX + el.calculatedWidth))) && ((py >= el.calculatedY) && (py <= (el.calculatedY + el.calculatedHeight))))
+    }
+
+    ; Scroll by `dy` (down positive), clamped to what there is. True when it
+    ; moved, so a wheel at the end can be left to whatever is under the box.
+    fn scrollBy:boolean (el:EVGElement dy:double) {
+        def most:double (el.maxScrollTop())
+        ; from where it is drawn: the layout clamps a box that got shorter
+        def before:double top
+        if (before > most) {
+            before = most
+        }
+        def t:double (before + dy)
+        if (t > most) {
+            t = most
+        }
+        if (t < 0.0) {
+            t = 0.0
+        }
+        top = t
+        el.scrollTop = t
+        return (t != before)
+    }
+
+    ; Bring a band (page pixels, as laid out) into sight: a field reached by
+    ; Tab below the fold. A band taller than the box shows its top.
+    fn reveal:boolean (el:EVGElement bandTop:double bandBottom:double) {
+        if (el.calculatedHeight <= 0.0) {
+            return false
+        }
+        def viewTop:double el.calculatedY
+        def viewBottom:double (el.calculatedY + el.calculatedHeight)
+        if (bandTop < viewTop) {
+            return (this.scrollBy(el (bandTop - viewTop)))
+        }
+        if (bandBottom > viewBottom) {
+            def d:double (bandBottom - viewBottom)
+            if ((bandBottom - bandTop) > el.calculatedHeight) {
+                d = (bandTop - viewTop)
+            }
+            return (this.scrollBy(el d))
+        }
+        return false
+    }
+
+    ; A finger went down on the box: remember the press, scroll nothing yet.
+    fn beginPan:void (px:double py:double n:int sh:boolean) {
+        panning = true
+        moved = false
+        downX = px
+        downY = py
+        panY = py
+        clicks = n
+        shift = sh
+    }
+
+    ; The finger moved: past `slop` it scrolls, the content following it.
+    ; True when the box moved.
+    fn panTo:boolean (el:EVGElement py:double) {
+        if (panning == false) {
+            return false
+        }
+        if (moved == false) {
+            def d:double (py - downY)
+            if ((d * d) < (slop * slop)) {
+                return false
+            }
+            moved = true
+        }
+        def r:boolean (this.scrollBy(el (panY - py)))
+        panY = py
+        return r
+    }
+
+    ; The finger lifted. True when it was a tap: the owner presses it at
+    ; (`downX`, `downY`) with `clicks` and `shift`.
+    fn endPan:boolean () {
+        if (panning == false) {
+            return false
+        }
+        panning = false
+        return (moved == false)
+    }
+}

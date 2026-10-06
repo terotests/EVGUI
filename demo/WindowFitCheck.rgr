@@ -1,0 +1,198 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; A window held to the page, its body scrolling: `ui:windowfit:check`.
+; The bug this was written for: Sliqtly's Document settings window, taller
+; than a phone (and than a low desktop window), ran off the bottom of the
+; page with its buttons, and nothing scrolled it. It was also 560 pixels wide
+; on a 390-pixel phone.
+Import "../src/UiHost.rgr"
+
+class WindowFitCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    ; Sliqtly's window rules (web/chart-editor.css): a 560px column.
+    fn sheet:string () {
+        return ".ui-root { width: 100%; height: 100%; } .ui-window-trigger { display: none; } .ui-window-content { display: flex; flex-direction: column; width: 560px; border: 1px solid #e4e4e7; } .ui-window-titlebar { display: flex; flex-direction: row; align-items: center; width: 100%; height: 44px; } .ui-window-handle { display: flex; flex-direction: row; flex-grow: 1; height: 44px; } .ui-window-title { font-size: 14px; } .ui-window-close { font-size: 18px; height: 44px; } .ui-window-body { padding: 0; } .row { width: 100%; height: 60px; } .ui-button { width: 100px; height: 40px; }"
+    }
+
+    fn el:EVGElement (h:UiHost id:string) {
+        def page:EVGElement (unwrap h.lastPage)
+        def hit@(optional):EVGElement (h.findEl(page id))
+        if (null? hit) {
+            print ("[FAIL] no element " + id)
+            fails = (fails + 1)
+            return (EVGElement.createDiv())
+        }
+        return (unwrap hit)
+    }
+
+    ; A window of `rows` 60px rows and a 40px OK button ("w-foot") at (x, y).
+    fn make:WindowCtl (h:UiHost rows:int x:double y:double) {
+        def w:WindowCtl (h.addWindow("w" "Settings" "Document settings" false))
+        w.x = x
+        w.y = y
+        w.openWindow()
+        def body:EVGElement (unwrap w.bodyEl)
+        UiTree.clearChildren(body)
+        def i:int 0
+        while (i < rows) {
+            body.addChild((UiTree.div(("w-row" + (to_string i)) "row")))
+            i = (i + 1)
+        }
+        ; the foot is a button, so a hit test can find it
+        def ok (new ButtonCtl())
+        ok.tid = "w-foot"
+        ok.name = "OK"
+        ok.build()
+        push h.ctls ok
+        body.addChild((unwrap ok.rootEl))
+        w.build()
+        return w
+    }
+
+    fn host:UiHost (pw:double ph:double) {
+        def h (new UiHost())
+        h.setPageSize(pw ph)
+        h.addStyleSheet((this.sheet()))
+        return h
+    }
+
+    ; A phone: 390 × 700, the window 15 rows (944px) tall at y = 120.
+    fn phone:void () {
+        def h:UiHost (this.host(390.0 700.0))
+        def w:WindowCtl (this.make(h 15 8.0 120.0))
+        h.layout()
+        def f:EVGElement (this.el(h "w-content"))
+        def b:EVGElement (this.el(h "w-body"))
+        this.ok((f.calculatedWidth <= 374.5) ("the frame is not wider than the phone less its margins: " + (to_string f.calculatedWidth)))
+        def bottom:double (f.calculatedY + f.calculatedHeight)
+        this.ok((bottom <= 692.5) ("the frame ends above the page's bottom: " + (to_string bottom)))
+        this.ok((f.calculatedHeight > 500.0) ("the frame still takes the room there is: " + (to_string f.calculatedHeight)))
+        def head:EVGElement (this.el(h "w-head"))
+        this.ok((head.calculatedHeight >= 43.5) ("the title bar keeps its height: " + (to_string head.calculatedHeight)))
+        this.ok(((b.calculatedY + b.calculatedHeight) <= (bottom + 0.5)) "the body is inside the frame")
+        def most:double (w.bodyScrollMax())
+        this.ok((most > 300.0) ("the body has the rest to scroll: " + (to_string most)))
+
+        ; the foot is below the fold, and hit testing does not find it there
+        def foot:EVGElement (this.el(h "w-foot"))
+        this.ok((foot.calculatedY > bottom) ("the foot starts below the frame: " + (to_string foot.calculatedY)))
+
+        ; the wheel, to the end and no further
+        this.ok((w.scrollBody(100000.0)) "a wheel scrolls the body")
+        h.layout()
+        this.ok(((w.scroll.top - most) < 0.5) ("held at the end: " + (to_string w.scroll.top)))
+        this.ok(((w.scrollBody(50.0)) == false) "nothing more to scroll at the end")
+        def foot2:EVGElement (this.el(h "w-foot"))
+        def b2:EVGElement (this.el(h "w-body"))
+        def footEnd:double (foot2.calculatedY + foot2.calculatedHeight)
+        this.ok(((footEnd <= ((b2.calculatedY + b2.calculatedHeight) + 0.5)) && (foot2.calculatedY >= b2.calculatedY)) ("scrolled to the end, the foot is in sight: " + (to_string foot2.calculatedY)))
+        def mid:double (foot2.calculatedY + 20.0)
+        this.ok(((h.hitTest(100.0 mid)) == "w-foot") ("and under the pointer: " + (h.hitTest(100.0 mid))))
+        this.ok(((h.hitTest(100.0 (head.calculatedY + 20.0))) != "w-row0") "the title bar is not covered by what scrolled under it")
+
+        ; a finger: drawn up, the content follows it down the list
+        w.scrollBody(-100000.0)
+        h.layout()
+        w.beginPan(100.0 600.0 1 false)
+        this.ok(((w.panTo(595.0)) == false) "a finger that wobbles less than the slop does not scroll")
+        this.ok((w.panTo(500.0)) "a finger drawn up scrolls")
+        this.ok(((w.scroll.top - 100.0) * (w.scroll.top - 100.0) < 0.25) ("by as far as it went: " + (to_string w.scroll.top)))
+        w.panTo(550.0)
+        this.ok(((w.scroll.top - 50.0) * (w.scroll.top - 50.0) < 0.25) ("and back: " + (to_string w.scroll.top)))
+        this.ok(((w.endPan()) == false) "a finger that scrolled is not a tap")
+        this.ok(((w.panTo(0.0)) == false) "a lifted finger scrolls nothing")
+        w.beginPan(100.0 300.0 1 false)
+        w.panTo(304.0)
+        this.ok((w.endPan()) "one that stayed put is a tap")
+        this.ok(((w.scroll.downX == 100.0) && (w.scroll.downY == 300.0)) "pressed where it went down")
+
+        ; a band below the fold is brought into sight
+        w.scrollBody(-100000.0)
+        h.layout()
+        def f3:EVGElement (this.el(h "w-foot"))
+        this.ok((w.revealBody(f3.calculatedY (f3.calculatedY + f3.calculatedHeight))) "a field below the fold is scrolled to")
+        h.layout()
+        def f4:EVGElement (this.el(h "w-foot"))
+        def b4:EVGElement (this.el(h "w-body"))
+        this.ok(((f4.calculatedY + f4.calculatedHeight) <= ((b4.calculatedY + b4.calculatedHeight) + 0.5)) "and is in sight")
+
+        ; opened again, it starts at the top
+        w.openWindow()
+        this.ok((w.scroll.top == 0.0) "a window opened again starts at the top")
+    }
+
+    ; A desktop window that fits is the window it always was.
+    fn fits:void () {
+        def h:UiHost (this.host(1400.0 900.0))
+        def w:WindowCtl (this.make(h 4 100.0 80.0))
+        h.layout()
+        def f:EVGElement (this.el(h "w-content"))
+        this.ok(((f.calculatedWidth - 560.0) * (f.calculatedWidth - 560.0) < 1.0) ("its own width on a wide page: " + (to_string f.calculatedWidth)))
+        this.ok((f.calculatedHeight > 320.0) ("its content's height: " + (to_string f.calculatedHeight)))
+        this.ok(((w.bodyScrollMax()) == 0.0) "nothing to scroll")
+        this.ok(((w.scrollBody(40.0)) == false) "a wheel does not move it")
+    }
+
+    ; A low desktop window: dragged down, the frame shortens and scrolls more,
+    ; and never below `minH`.
+    fn dragged:void () {
+        def h:UiHost (this.host(1200.0 500.0))
+        def w:WindowCtl (this.make(h 8 100.0 60.0))
+        h.layout()
+        def f:EVGElement (this.el(h "w-content"))
+        this.ok(((f.calculatedY + f.calculatedHeight) <= 492.5) ("held to the page: " + (to_string (f.calculatedY + f.calculatedHeight))))
+        w.press("w-titlebar")
+        w.dragBy(0.0 200.0)
+        w.release()
+        h.layout()
+        def f2:EVGElement (this.el(h "w-content"))
+        this.ok(((f2.calculatedY + f2.calculatedHeight) <= 492.5) ("still held after a drag down: " + (to_string (f2.calculatedY + f2.calculatedHeight))))
+        w.dragging = true
+        w.dragBy(0.0 400.0)
+        w.dragging = false
+        w.build()
+        h.layout()
+        def f3:EVGElement (this.el(h "w-content"))
+        this.ok((f3.calculatedHeight >= (w.minH - 0.5)) ("never shorter than minH: " + (to_string f3.calculatedHeight)))
+    }
+
+    ; A modal is centred, a margin above and below.
+    fn modal:void () {
+        def h:UiHost (this.host(390.0 600.0))
+        def w:WindowCtl (h.addWindow("w" "Settings" "Settings" true))
+        w.openWindow()
+        def body:EVGElement (unwrap w.bodyEl)
+        def i:int 0
+        while (i < 20) {
+            body.addChild((UiTree.div(("w-row" + (to_string i)) "row")))
+            i = (i + 1)
+        }
+        w.build()
+        h.layout()
+        def f:EVGElement (this.el(h "w-content"))
+        this.ok((f.calculatedHeight <= 584.5) ("a modal is the page less two margins at most: " + (to_string f.calculatedHeight)))
+        this.ok(((w.bodyScrollMax()) > 0.0) "and its body scrolls")
+    }
+
+    sfn main:void () {
+        def c (new WindowFitCheck())
+        c.phone()
+        c.fits()
+        c.dragged()
+        c.modal()
+        print ((to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
+        if (c.fails > 0) {
+            print "RESULT FAIL"
+        }
+    }
+}

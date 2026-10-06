@@ -77,6 +77,8 @@ SUITES=(
   # Hatch stripes and tab outlines as paths (src/UiShapes.rgr).
   ui:shapes:check
   ui:menufit:check
+  # A window held to the page, its body scrolling (src/UiScroll.rgr).
+  ui:windowfit:check
   # A table's ticks, open tabs (src/UiPick.rgr, src/UiOpenTabs.rgr) and the
   # document tab row (src/DocTabsCtl.rgr).
   ui:pick:check

@@ -46,6 +46,7 @@
 
 Import "UiCtl.rgr"
 Import "UiTree.rgr"
+Import "UiScroll.rgr"
 Import "pkg:evg/EVGElement.rgr"
 Import "pkg:evg/EVGUnit.rgr"
 Import "pkg:evg/EVGA11yTree.rgr"
@@ -71,8 +72,26 @@ class WindowCtl extends UiCtl {
     ; How much of the window must stay on the page. Enough to grab: a window
     ; dragged entirely off the bottom is a window nobody can get back.
     def keepOnScreen:double 48.0
+    ; The gap the frame keeps from the page's edges. The frame is never wider
+    ; than the page less this on both sides, and never taller than what is
+    ; left below its top less this; what does not fit then scrolls in the
+    ; body (`bodyScroll`). A window whose content is taller than a phone, or
+    ; than a low desktop window, otherwise ran off the bottom with its buttons
+    ; and nothing could bring them back.
+    def margin:double 8.0
+    ; What the frame holds besides the body, down: the title bar, the
+    ; description, the frame's own border and padding. The body's bound is
+    ; the frame's less this. Measured after a layout (`settle`); before the
+    ; first one it is a title bar's worth.
+    def chromeH:double 46.0
 
     def dragging:boolean false
+
+    ; How far the body is scrolled, and a finger on it (`UiScroll`): the
+    ; wheel (`scrollBody`) or a finger (`beginPan`). Back to the top when the
+    ; window opens. An owner that makes a new window for an open one hands
+    ; this over, and the new one stays where the old one was scrolled.
+    def scroll:UiScroll (new UiScroll())
 
     ; --- the desktop layer (all optional; a window that sets none of these is
     ; the window it always was) ----------------------------------------------
@@ -320,6 +339,7 @@ class WindowCtl extends UiCtl {
             frame.overlayX = x
             frame.overlayY = y
         }
+        this.fitFrame()
 
         ; The title bar: the label, and the handle. A modal has the same bar
         ; and it simply is not a handle — `dragsFreely` is what says so, not a
@@ -394,6 +414,13 @@ class WindowCtl extends UiCtl {
         def body:EVGElement (unwrap bodyEl)
         body.id = (this.bodyTid())
         UiTree.addClass(body (base + "-body"))
+        ; The body is what gives way when the frame meets the page's bottom:
+        ; it shrinks below its content and scrolls, so the title bar and its
+        ; close button stay put. Inline, because it is the frame's geometry
+        ; and not a look a theme should be able to take away.
+        UiTree.inline(body "overflow-y" "auto")
+        this.fitBody()
+        body.scrollTop = scroll.top
         frame.addChild(body)
 
         root.addChild(frame)
@@ -405,6 +432,7 @@ class WindowCtl extends UiCtl {
     fn openWindow:string () {
         open = true
         dragging = false
+        scroll.reset()
         this.build()
         ; Focus lands on the close button, which is what Radix's dialog does
         ; and what `DialogCtl` is measured doing: it is the one control every
@@ -585,6 +613,148 @@ class WindowCtl extends UiCtl {
         def frame:EVGElement (unwrap frameEl)
         frame.overlayX = x
         frame.overlayY = y
+        this.fitFrame()
+    }
+
+    ; --- fitting the page ----------------------------------------------------------------
+    ;
+    ; The most a frame may take: the page less `margin` on each side across,
+    ; and what is left below its top less `margin` down. A modal is centred,
+    ; so it has the whole height less a margin at each end. A maximized or
+    ; snapped window is the page's size on purpose and keeps no margin.
+    ;
+    ; Never less than `minH` down: a window dragged nearly off the bottom
+    ; keeps a body to scroll rather than collapsing to its title bar, and the
+    ; rest of it is below the page as before, to be pulled back up.
+
+    fn fills:boolean () {
+        return (maximized || ((strlen snapped) > 0))
+    }
+
+    fn fitW:double () {
+        if (this.fills()) {
+            return pageW
+        }
+        def m:double (pageW - (margin * 2.0))
+        if (m < 0.0) {
+            return pageW
+        }
+        return m
+    }
+
+    fn fitH:double () {
+        if (this.fills()) {
+            return pageH
+        }
+        def m:double (pageH - (margin * 2.0))
+        if (isModal == false) {
+            def top:double y
+            if (top < margin) {
+                top = margin
+            }
+            m = ((pageH - top) - margin)
+        }
+        if (m < minH) {
+            m = minH
+        }
+        return m
+    }
+
+    ; Written on the frame and the body on every build and every move: the
+    ; bound follows the window down the page as it is dragged.
+    ;
+    ; The body carries its own `max-height` rather than shrinking inside a
+    ; bounded frame, because EVG's column flex does not shrink an auto-height
+    ; item against its container's `max-height` the way CSS does: the frame
+    ; stopped at the page and its body ran on out of it.
+    fn fitFrame:void () {
+        def frame:EVGElement (unwrap frameEl)
+        UiTree.inline(frame "max-width" ((to_string (to_int (this.fitW()))) + "px"))
+        this.fitBody()
+    }
+
+    fn bodyMaxH:double () {
+        def m:double ((this.fitH()) - chromeH)
+        if (m < 40.0) {
+            m = 40.0
+        }
+        return m
+    }
+
+    fn fitBody:void () {
+        def body:EVGElement (unwrap bodyEl)
+        UiTree.inline(body "max-height" ((to_string (to_int (this.bodyMaxH()))) + "px"))
+    }
+
+    ; After a layout: measure what the frame holds besides its body. True
+    ; when that changed the body's bound, and the owner lays out again — once,
+    ; since the chrome does not depend on the body's height.
+    fn settle:boolean () {
+        if (open == false) {
+            return false
+        }
+        def f:EVGElement (unwrap frameEl)
+        def b:EVGElement (unwrap bodyEl)
+        if (f.calculatedHeight <= 0.0) {
+            return false
+        }
+        def m:double (((b.calculatedY - f.calculatedY) + f.box.borderWidthPx) + f.box.paddingBottomPx)
+        if (m < 0.0) {
+            return false
+        }
+        def d:double (m - chromeH)
+        if ((d * d) < 0.25) {
+            return false
+        }
+        chromeH = m
+        this.fitBody()
+        return true
+    }
+
+    ; --- scrolling the body --------------------------------------------------------------
+    ;
+    ; What there is to scroll, from the last layout: zero when it all fits.
+    fn bodyScrollMax:double () {
+        return bodyEl.maxScrollTop()
+    }
+
+    ; Over the body (as last laid out): where a wheel or a finger scrolls it.
+    fn overBody:boolean (px:double py:double) {
+        if (open == false) {
+            return false
+        }
+        return (UiScroll.has((unwrap bodyEl) px py))
+    }
+
+    ; Scroll by `dy` (down positive). True when it moved, so a wheel that has
+    ; reached the end can be left to whatever is under the window.
+    fn scrollBody:boolean (dy:double) {
+        return (scroll.scrollBy((unwrap bodyEl) dy))
+    }
+
+    ; Bring a band of the body (page pixels, as laid out) into sight: a field
+    ; focused by Tab below the fold.
+    fn revealBody:boolean (top:double bottom:double) {
+        return (scroll.reveal((unwrap bodyEl) top bottom))
+    }
+
+    ; A finger on the body: `beginPan` where it went down, `panTo` as it
+    ; moves (the content follows it), `endPan` when it lifts, true for a tap
+    ; to be pressed at `scroll.downX`, `scroll.downY`.
+    fn beginPan:void (px:double py:double clicks:int shift:boolean) {
+        scroll.beginPan(px py clicks shift)
+    }
+
+    fn panTo:boolean (py:double) {
+        return (scroll.panTo((unwrap bodyEl) py))
+    }
+
+    fn endPan:boolean () {
+        return (scroll.endPan())
+    }
+
+    fn panning:boolean () {
+        return scroll.panning
     }
 
     ; --- the desktop layer: size, resize, minimize, maximize, snap -----------------------
