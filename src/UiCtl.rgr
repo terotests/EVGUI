@@ -372,6 +372,14 @@ class UiCtl {
     fn placeText:void (eng:EVGTextEngine) {
     }
 
+    ; After a layout, a control whose size bound depends on what was laid out
+    ; (a window held to the page measures its title bar) corrects it. True
+    ; when it changed something and the page should be laid out again. The
+    ; host calls it for every control (`UiHost.settle`).
+    fn settle:boolean () {
+        return false
+    }
+
     ; True when the press landed in a text field and the field took it.
     fn textPointerDown:boolean (target:string px:double clicks:int shift:boolean) {
         return false

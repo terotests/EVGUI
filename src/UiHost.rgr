@@ -1070,9 +1070,27 @@ class UiHost {
         if (UiHost.fitSurfaces(r lay)) {
             lay.layout(page)
         }
+        if (this.settle()) {
+            lay.layout(page)
+        }
         this.placeText((lay.getTextEngine()))
         lastPage = page
         return page
+    }
+
+    ; Every control's `settle` after a layout: true when one asked for
+    ; another. A host that lays its page out itself calls this the same way.
+    fn settle:boolean () {
+        def again:boolean false
+        def i:int 0
+        while (i < (array_length ctls)) {
+            def c:UiCtl (itemAt ctls i)
+            if (c.settle()) {
+                again = true
+            }
+            i = (i + 1)
+        }
+        return again
     }
 
     ; A floating surface that is `width: fit-content` — a menu card — is laid
