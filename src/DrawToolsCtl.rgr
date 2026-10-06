@@ -140,6 +140,9 @@ class DrawToolsCtl extends UiCtl {
         UiTree.surface(root "free" "start")
         root.overlayX = x
         root.overlayY = y
+        ; the sheet has no descendant selectors: a row's separators and the
+        ; chosen size's dot carry classes of their own
+        def sep:string (? vertical "drawtools-sep" "drawtools-sep drawtools-sep-row")
         def i:int 0
         while (i < (array_length toolValues)) {
             def v:string (itemAt toolValues i)
@@ -151,7 +154,7 @@ class DrawToolsCtl extends UiCtl {
             i = (i + 1)
         }
         if ((array_length colors) > 0) {
-            root.addChild((UiTree.div((tid + "-sep1") "drawtools-sep")))
+            root.addChild((UiTree.div((tid + "-sep1") sep)))
             def k:int 0
             while (k < (array_length colors)) {
                 def sw:EVGElement (UiTree.div((this.colorTid(k)) (? ((itemAt colors k) == color) "drawtools-swatch drawtools-swatch-on" "drawtools-swatch")))
@@ -163,16 +166,16 @@ class DrawToolsCtl extends UiCtl {
             }
         }
         if (sizes > 1) {
-            root.addChild((UiTree.div((tid + "-sep2") "drawtools-sep")))
+            root.addChild((UiTree.div((tid + "-sep2") sep)))
             def n:int 1
             while (n <= sizes) {
                 def sz:EVGElement (UiTree.div((this.sizeTid(n)) (? (n == size) "drawtools-size drawtools-on" "drawtools-size")))
-                sz.addChild((UiTree.div((this.sizeTid(n) + "-dot") ("drawtools-size-dot drawtools-size-" + (to_string n)))))
+                sz.addChild((UiTree.div((this.sizeTid(n) + "-dot") ((? (n == size) "drawtools-size-dot drawtools-size-dot-on" "drawtools-size-dot") + " drawtools-size-" + (to_string n)))))
                 root.addChild(sz)
                 n = (n + 1)
             }
         }
-        root.addChild((UiTree.div((tid + "-sep3") "drawtools-sep")))
+        root.addChild((UiTree.div((tid + "-sep3") sep)))
         root.addChild((UiTree.label((this.doneTid()) "drawtools-tool drawtools-done" "✓")))
         rootEl = root
     }

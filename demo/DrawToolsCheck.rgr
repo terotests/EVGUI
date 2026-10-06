@@ -1,6 +1,7 @@
 ; SPDX-License-Identifier: AGPL-3.0-or-later
 ; The drawing palette (DrawToolsCtl), on Node: `ui:drawtools:check`.
 Import "../src/DrawToolsCtl.rgr"
+Import "../src/UiHost.rgr"
 
 class DrawToolsCheck {
     def fails:int 0
@@ -65,6 +66,23 @@ class DrawToolsCheck {
         this.ok((((pen.role == (EVGA11yRole.radio())) && (pen.checked == 1)) && (pen.name == "Pen")) "the pen is a checked radio")
         def last:UiRow (itemAt rows ((array_length rows) - 1))
         this.ok(((last.role == (EVGA11yRole.button())) && (last.name == "Done")) "Done is a button")
+
+        ; laid out as a row: its own separator class, the chosen size's dot
+        ; marked (the sheet has no descendant selectors)
+        p.vertical = false
+        p.build()
+        def rowRoot:EVGElement p.rootEl
+        def sep:EVGElement (rowRoot.getChild(3))
+        this.ok((UiTree.hasClass(sep "drawtools-sep-row")) "a row's separator is marked as one")
+        ; the theme's rules read without errors (run from Ranger's root, or
+        ; from EVGUI's)
+        def css:string (?? (read_file "." "gallery/evgui/theme/base.css") "")
+        if ((strlen css) == 0) {
+            css = (?? (read_file "." "theme/base.css") "")
+        }
+        def h (new UiHost())
+        h.addStyleSheet(css)
+        this.ok((((strlen css) > 0) && ((h.styleErrorCount()) == 0)) ("the theme reads without errors: " + (to_string (h.styleErrorCount()))))
     }
 
     sfn main:void () {
