@@ -114,8 +114,13 @@ class UiOpenTabs {
         if (((this.has(from)) == false) || (from == to)) {
             return
         }
+        ; `to` has a tab already: one tab for it, in front when `from` was
         if (this.has(to)) {
+            def front:boolean (active == from)
             this.close(from)
+            if front {
+                this.open(to)
+            }
             return
         }
         def t:[string]

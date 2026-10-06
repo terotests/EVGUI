@@ -104,6 +104,16 @@ class UiPickCheck {
         m.retain(([] _:string ("a" "x")))
         this.ok(((this.tabsText(m)) == "a") ("tabs of deleted files close: " + (this.tabsText(m))))
         this.ok((m.active == "a") "and the front one is one that is left")
+        ; moved onto a file that has a tab: one tab, the front going with it
+        def r (new UiOpenTabs())
+        r.open("a")
+        r.open("b")
+        r.open("c")
+        r.rename("c" "a")
+        this.ok(((this.tabsText(r)) == "a,b") ("moved onto an open file: one tab: " + (this.tabsText(r))))
+        this.ok((r.active == "a") ("the front tab moved stays in front as the one it became: " + r.active))
+        r.rename("b" "a")
+        this.ok((((this.tabsText(r)) == "a") && (r.active == "a")) "a tab behind moved onto the front one")
         ; two files with one name: the folder tells them apart
         def n (new UiOpenTabs())
         n.open("data/weather.csv")
