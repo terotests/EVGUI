@@ -86,6 +86,11 @@ SUITES=(
   ui:text:select
   # A callout beside its point (src/UiCallout.rgr, src/CalloutCtl.rgr).
   ui:callout:check
+  # A room's chat as models: message text, pixel avatars, the feed
+  # (src/UiChatText.rgr, src/UiPixelAvatar.rgr, src/UiChatFeed.rgr).
+  ui:chatmodel:check
+  # The channel drawn from them (src/ChannelCtl.rgr).
+  ui:channel:check
   evg:flexgrow:check
   evg:pctflex:check
   evg:inspect:test

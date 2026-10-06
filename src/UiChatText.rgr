@@ -1,0 +1,966 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; UiChatText — a chat message's text as blocks of styled spans
+; =============================================================================
+; What people type in a chat (Slack's way, with Markdown's spellings too),
+; read into what a control draws, with no elements: checked on its own in
+; Node (ui:chattext:check).
+;
+; A message is LINES; each line is one block, as a chat keeps the breaks
+; that were typed:
+;
+;   p        a line of text
+;   quote    "> " a quoted line
+;   li       "- ", "* " or "• " a bullet
+;   ol       "1. " a numbered line (`num`)
+;   code     ``` … ``` a fenced block, kept as typed (`text`, `lang`); one
+;            line ```like this``` too
+;   embed    [[slides:<deck>]] or [[slides:<deck>#3]] alone on a line, or a
+;            line that is only a link to a shared presentation (…/s/<id>):
+;            `deck`, `slide` (0: the first), `href`
+;   gap      an empty line
+;
+; Inside a line, SPANS: text with `bold` (*x* or **x**), `italic` (_x_),
+; `strike` (~x~ or ~~x~~) set, and the kinds
+;
+;   code     `x`, nothing inside it is read
+;   link     https://… (the trailing . , ; : ! ? ) is not part of it),
+;            [words](https://…) and Slack's <https://…|words>
+;   emoji    :thumbs_up: or :+1: — the shortcodes of the emojis EVG draws
+;            (UiEmojiCatalog): a name in lower case with _ for its spaces,
+;            and a few of Slack's own (+1, tada, joy …). An unknown one stays
+;            text.
+;   mention  @name   (`text` the name; the host finds the person)
+;   channel  #name   (`text` the name; the host finds the room)
+;
+; A marker counts only where it could: _ inside snake_case is a letter, a *
+; with a space after it is a star, a lone ` is a backtick; a backslash takes
+; the next character as it is.
+;
+; LONG MESSAGES are folded: `isLong` says when (more than `foldLines` lines
+; or `foldChars` characters), `clip` is the part shown, cut at a line, with
+; a fence that was cut open closed again.
+; =============================================================================
+
+Import "EmojiPickerCtl.rgr"
+
+class UiChatSpan {
+    ; text | code | link | emoji | mention | channel
+    def kind:string "text"
+    def text:string ""
+    def href:string ""
+    def bold:boolean false
+    def italic:boolean false
+    def strike:boolean false
+
+    Constructor () {
+    }
+
+    fn styled:boolean () {
+        return ((bold || italic) || strike)
+    }
+}
+
+class UiChatBlock {
+    ; p | quote | li | ol | code | embed | gap
+    def kind:string "p"
+    def spans:[UiChatSpan]
+    ; a code block's text and language
+    def text:string ""
+    def lang:string ""
+    def num:int 0
+    ; an embed: the presentation, the slide (1-based, 0 the first) and the
+    ; link it came from
+    def deck:string ""
+    def slide:int 0
+    def href:string ""
+
+    Constructor () {
+    }
+
+    ; The line's words as plain text (what a reader is told).
+    fn plain:string () {
+        if (kind == "code") {
+            return text
+        }
+        if (kind == "embed") {
+            return href
+        }
+        def out:string ""
+        for spans s:UiChatSpan i {
+            if (s.kind == "mention") {
+                out = (out + "@" + s.text)
+            } {
+                if (s.kind == "channel") {
+                    out = (out + "#" + s.text)
+                } {
+                    out = (out + s.text)
+                }
+            }
+        }
+        return out
+    }
+}
+
+class UiChatText {
+    def catalog:UiEmojiCatalog (new UiEmojiCatalog())
+    ; shortcodes made from the catalogue's names, and their emojis
+    def codes:[string]
+    def codeEmojis:[string]
+    def codesMade:boolean false
+    def foldLines:int 12
+    def foldChars:int 1200
+    ; what a folded message shows
+    def clipLines:int 8
+    def clipChars:int 700
+
+    Constructor () {
+    }
+
+    ; --- emoji shortcodes ------------------------------------------------------
+
+    ; A catalogue name as a shortcode: "thumbs up" → "thumbs_up".
+    sfn codeOf:string (name:string) {
+        def s:string (to_lowercase name)
+        def out:string ""
+        def i:int 0
+        def n:int (strlen s)
+        def under:boolean false
+        while (i < n) {
+            def c:int (charAt s i)
+            def keep:boolean ((((c >= 97) && (c <= 122)) || ((c >= 48) && (c <= 57))) || (c >= 128))
+            if keep {
+                if under {
+                    if ((strlen out) > 0) {
+                        out = (out + "_")
+                    }
+                    under = false
+                }
+                out = (out + (substring s i (i + 1)))
+            } {
+                under = true
+            }
+            i = (i + 1)
+        }
+        return out
+    }
+
+    fn makeCodes:void () {
+        if codesMade {
+            return
+        }
+        codesMade = true
+        catalog.load()
+        ; Slack's own names first: they are what people type
+        this.alias("+1" "👍")
+        this.alias("thumbsup" "👍")
+        this.alias("-1" "👎")
+        this.alias("thumbsdown" "👎")
+        this.alias("smile" "😄")
+        this.alias("smiley" "😃")
+        this.alias("grin" "😁")
+        this.alias("joy" "😂")
+        this.alias("laughing" "😆")
+        this.alias("wink" "😉")
+        this.alias("blush" "😊")
+        this.alias("heart" "❤️")
+        this.alias("tada" "🎉")
+        this.alias("fire" "🔥")
+        this.alias("rocket" "🚀")
+        this.alias("eyes" "👀")
+        this.alias("pray" "🙏")
+        this.alias("clap" "👏")
+        this.alias("wave" "👋")
+        this.alias("ok_hand" "👌")
+        this.alias("100" "💯")
+        this.alias("thinking" "🤔")
+        this.alias("cry" "😢")
+        this.alias("sob" "😭")
+        this.alias("white_check_mark" "✅")
+        this.alias("heavy_check_mark" "✔️")
+        this.alias("x" "❌")
+        this.alias("warning" "⚠️")
+        this.alias("bulb" "💡")
+        this.alias("sparkles" "✨")
+        this.alias("robot_face" "🤖")
+        this.alias("coffee" "☕")
+        this.alias("bug" "🐛")
+        def i:int 0
+        while (i < (catalog.count())) {
+            def e:UiEmoji (catalog.at(i))
+            def c:string (UiChatText.codeOf(e.name))
+            if (((strlen c) > 0) && ((this.emojiOf(c)) == "")) {
+                push codes c
+                push codeEmojis e.text
+            }
+            i = (i + 1)
+        }
+    }
+
+    ; Slack's name for an emoji, in the form the catalogue has it (with or
+    ; without the emoji presentation selector), so a reaction typed one way
+    ; and picked the other is the same reaction
+    fn alias:void (code:string emoji:string) {
+        def e:string emoji
+        def i:int 0
+        while (i < (catalog.count())) {
+            def it:UiEmoji (catalog.at(i))
+            if ((it.text == emoji) || (it.text == (emoji + (strfromcode 65039)))) {
+                e = it.text
+                break
+            }
+            i = (i + 1)
+        }
+        push codes code
+        push codeEmojis e
+    }
+
+    ; The emoji of a shortcode ("" none).
+    fn emojiOf:string (code:string) {
+        def i:int 0
+        while (i < (array_length codes)) {
+            if ((itemAt codes i) == code) {
+                return (itemAt codeEmojis i)
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    fn emoji:string (code:string) {
+        this.makeCodes()
+        return (this.emojiOf((to_lowercase code)))
+    }
+
+    ; The shortcode an emoji is typed as ("" none): the first one it has.
+    fn codeFor:string (emoji:string) {
+        this.makeCodes()
+        def i:int 0
+        while (i < (array_length codeEmojis)) {
+            if ((itemAt codeEmojis i) == emoji) {
+                return (itemAt codes i)
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    ; Shortcodes that begin with `prefix` (the ":" suggestions), as
+    ; "code TAB emoji", at most `max`; aliases first.
+    fn suggest:[string] (prefix:string max:int) {
+        this.makeCodes()
+        def p:string (to_lowercase prefix)
+        def out:[string]
+        def seen:[string]
+        def i:int 0
+        while ((i < (array_length codes)) && ((array_length out) < max)) {
+            def c:string (itemAt codes i)
+            if ((indexOf c p) == 0) {
+                def e:string (itemAt codeEmojis i)
+                if ((UiChatText.inList(seen e)) == false) {
+                    push out (c + "\t" + e)
+                    push seen e
+                }
+            }
+            i = (i + 1)
+        }
+        ; then names that have the prefix inside them ("up" finds thumbs_up)
+        i = 0
+        while ((i < (array_length codes)) && ((array_length out) < max)) {
+            def c:string (itemAt codes i)
+            if ((indexOf c ("_" + p)) > 0) {
+                def e:string (itemAt codeEmojis i)
+                if ((UiChatText.inList(seen e)) == false) {
+                    push out (c + "\t" + e)
+                    push seen e
+                }
+            }
+            i = (i + 1)
+        }
+        return out
+    }
+
+    sfn inList:boolean (xs:[string] x:string) {
+        def i:int 0
+        while (i < (array_length xs)) {
+            if ((itemAt xs i) == x) {
+                return true
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    ; --- characters --------------------------------------------------------------
+
+    sfn isWordChar:boolean (c:int) {
+        return (((((c >= 97) && (c <= 122)) || ((c >= 65) && (c <= 90))) || ((c >= 48) && (c <= 57))) || ((c == 95) || (c >= 128)))
+    }
+
+    sfn isSpace:boolean (c:int) {
+        return ((((c == 32) || (c == 9)) || (c == 10)) || (c == 13))
+    }
+
+    ; a name after @ or #: letters, digits, _ - .
+    sfn isNameChar:boolean (c:int) {
+        return ((UiChatText.isWordChar(c)) || ((c == 45) || (c == 46)))
+    }
+
+    sfn codeAt:int (s:string i:int) {
+        if ((i < 0) || (i >= (strlen s))) {
+            return 0
+        }
+        return (charAt s i)
+    }
+
+    sfn startsAt:boolean (s:string i:int w:string) {
+        if ((i + (strlen w)) > (strlen s)) {
+            return false
+        }
+        return ((substring s i (i + (strlen w))) == w)
+    }
+
+    ; --- blocks --------------------------------------------------------------------
+
+    fn parse:[UiChatBlock] (src:string) {
+        def out:[UiChatBlock]
+        def lines:[string] (strsplit src "\n")
+        def i:int 0
+        def n:int (array_length lines)
+        while (i < n) {
+            def raw:string (itemAt lines i)
+            def line:string raw
+            if ((strlen line) > 0) {
+                if ((charAt line ((strlen line) - 1)) == 13) {
+                    line = (substring line 0 ((strlen line) - 1))
+                }
+            }
+            def t:string (trim line)
+            ; a fence: up to the closing one (or the end)
+            if ((indexOf t "```") == 0) {
+                def rest:string (substring t 3 (strlen t))
+                def b (new UiChatBlock())
+                b.kind = "code"
+                def close:int (indexOf rest "```")
+                if (close >= 0) {
+                    ; ```on one line```
+                    b.text = (substring rest 0 close)
+                    push out b
+                    i = (i + 1)
+                } {
+                    if (UiChatText.isLang(rest)) {
+                        b.lang = (trim rest)
+                    }
+                    def body:[string]
+                    if ((((strlen (trim rest)) > 0) && ((UiChatText.isLang(rest)) == false))) {
+                        push body rest
+                    }
+                    def k:int (i + 1)
+                    def closed:boolean false
+                    while ((k < n) && (closed == false)) {
+                        def l:string (itemAt lines k)
+                        def at:int (indexOf l "```")
+                        if (at >= 0) {
+                            if (at > 0) {
+                                push body (substring l 0 at)
+                            }
+                            closed = true
+                        } {
+                            push body l
+                        }
+                        k = (k + 1)
+                    }
+                    b.text = (join body "\n")
+                    push out b
+                    i = k
+                }
+            } {
+                push out (this.lineBlock(line))
+                i = (i + 1)
+            }
+        }
+        ; the empty lines at the ends say nothing
+        while ((array_length out) > 0) {
+            def last:UiChatBlock (itemAt out ((array_length out) - 1))
+            if (last.kind != "gap") {
+                break
+            }
+            remove_index out ((array_length out) - 1)
+        }
+        while ((array_length out) > 0) {
+            def first:UiChatBlock (itemAt out 0)
+            if (first.kind != "gap") {
+                break
+            }
+            remove_index out 0
+        }
+        return out
+    }
+
+    ; a fence's word that names a language: one word, no spaces
+    sfn isLang:boolean (s:string) {
+        def t:string (trim s)
+        if (((strlen t) == 0) || ((strlen t) > 20)) {
+            return false
+        }
+        def i:int 0
+        while (i < (strlen t)) {
+            def c:int (charAt t i)
+            if (((UiChatText.isNameChar(c)) || (c == 43)) == false) {
+                return false
+            }
+            i = (i + 1)
+        }
+        return true
+    }
+
+    fn lineBlock:UiChatBlock (line:string) {
+        def b (new UiChatBlock())
+        def t:string (trim line)
+        if ((strlen t) == 0) {
+            b.kind = "gap"
+            return b
+        }
+        if (this.embedLine(t b)) {
+            return b
+        }
+        if ((indexOf t ">") == 0) {
+            b.kind = "quote"
+            def q:string (substring t 1 (strlen t))
+            if ((indexOf q " ") == 0) {
+                q = (substring q 1 (strlen q))
+            }
+            b.spans = (this.inline(q))
+            return b
+        }
+        if ((((indexOf t "- ") == 0) || ((indexOf t "* ") == 0)) || ((indexOf t "• ") == 0)) {
+            b.kind = "li"
+            def at:int ((indexOf t " ") + 1)
+            b.spans = (this.inline((trim (substring t at (strlen t)))))
+            return b
+        }
+        def num:int (UiChatText.listNumber(t))
+        if (num > 0) {
+            b.kind = "ol"
+            b.num = num
+            def dot:int (indexOf t ".")
+            b.spans = (this.inline((trim (substring t (dot + 1) (strlen t)))))
+            return b
+        }
+        b.spans = (this.inline(line))
+        return b
+    }
+
+    ; "12. words" → 12; 0 when the line is not numbered
+    sfn listNumber:int (t:string) {
+        def i:int 0
+        def v:int 0
+        while ((i < (strlen t)) && (i < 4)) {
+            def c:int (charAt t i)
+            if ((c >= 48) && (c <= 57)) {
+                v = ((v * 10) + (c - 48))
+                i = (i + 1)
+            } {
+                break
+            }
+        }
+        if ((i == 0) || (i >= ((strlen t) - 1))) {
+            return 0
+        }
+        if (((charAt t i) == 46) && ((charAt t (i + 1)) == 32)) {
+            return v
+        }
+        return 0
+    }
+
+    ; [[slides:<deck>#n]], or a link to a shared presentation alone on the
+    ; line
+    fn embedLine:boolean (t:string b:UiChatBlock) {
+        if (((indexOf t "[[slides:") == 0) && ((UiChatText.endsWithStr(t "]]")))) {
+            def inner:string (substring t 9 ((strlen t) - 2))
+            return (this.embedOf(inner t b))
+        }
+        if ((((indexOf t "https://") == 0) || ((indexOf t "http://") == 0)) && ((indexOf t " ") < 0)) {
+            def at:int (indexOf t "/s/")
+            if (at > 0) {
+                def tail:string (substring t (at + 3) (strlen t))
+                ; ?slides=… a picked set is a view, not the deck itself
+                if ((indexOf tail "?") >= 0) {
+                    return false
+                }
+                if (UiChatText.endsWithStr(tail "/")) {
+                    tail = (substring tail 0 ((strlen tail) - 1))
+                }
+                return (this.embedOf(tail t b))
+            }
+        }
+        return false
+    }
+
+    fn embedOf:boolean (spec:string href:string b:UiChatBlock) {
+        def deck:string spec
+        def slide:int 0
+        def hash:int (indexOf spec "#")
+        if (hash >= 0) {
+            deck = (substring spec 0 hash)
+            def num:string (substring spec (hash + 1) (strlen spec))
+            if (((strlen num) == 0) || ((strlen num) > 4)) {
+                return false
+            }
+            def k:int 0
+            while (k < (strlen num)) {
+                def c:int (charAt num k)
+                if ((c < 48) || (c > 57)) {
+                    return false
+                }
+                slide = ((slide * 10) + (c - 48))
+                k = (k + 1)
+            }
+        }
+        if (((strlen deck) < 6) || ((strlen deck) > 32)) {
+            return false
+        }
+        def i:int 0
+        while (i < (strlen deck)) {
+            def c:int (charAt deck i)
+            if ((((c >= 48) && (c <= 57)) || (((c >= 65) && (c <= 90)) || ((c >= 97) && (c <= 122)))) == false) {
+                return false
+            }
+            i = (i + 1)
+        }
+        b.kind = "embed"
+        b.deck = deck
+        b.slide = slide
+        b.href = href
+        return true
+    }
+
+    sfn endsWithStr:boolean (s:string w:string) {
+        if ((strlen w) > (strlen s)) {
+            return false
+        }
+        return ((substring s ((strlen s) - (strlen w)) (strlen s)) == w)
+    }
+
+    ; --- spans ------------------------------------------------------------------
+
+    fn inline:[UiChatSpan] (s:string) {
+        def out:[UiChatSpan]
+        this.inlineInto(s false false false out)
+        return out
+    }
+
+    ; text as a span with the styles it is in, joined to the last one when
+    ; that is plain text with the same styles
+    sfn addText:void (out:[UiChatSpan] text:string bold:boolean italic:boolean strike:boolean) {
+        if ((strlen text) == 0) {
+            return
+        }
+        def n:int (array_length out)
+        if (n > 0) {
+            def last:UiChatSpan (itemAt out (n - 1))
+            if ((((last.kind == "text") && (last.bold == bold)) && (last.italic == italic)) && (last.strike == strike)) {
+                last.text = (last.text + text)
+                return
+            }
+        }
+        def sp (new UiChatSpan())
+        sp.text = text
+        sp.bold = bold
+        sp.italic = italic
+        sp.strike = strike
+        push out sp
+    }
+
+    sfn addKind:void (out:[UiChatSpan] kind:string text:string href:string bold:boolean italic:boolean strike:boolean) {
+        def sp (new UiChatSpan())
+        sp.kind = kind
+        sp.text = text
+        sp.href = href
+        sp.bold = bold
+        sp.italic = italic
+        sp.strike = strike
+        push out sp
+    }
+
+    ; Where the marker `m` that opens at `i` closes: its place, or -1. The
+    ; opener must be followed by a non-space, the closer preceded by one, and
+    ; for _ (word markers) the closer must not be inside a word.
+    sfn closer:int (s:string i:int m:string wordy:boolean) {
+        def from:int (i + (strlen m))
+        if (from >= (strlen s)) {
+            return -1
+        }
+        if (UiChatText.isSpace((charAt s from))) {
+            return -1
+        }
+        def k:int (from + 1)
+        while (k <= ((strlen s) - (strlen m))) {
+            if (UiChatText.startsAt(s k m)) {
+                def before:int (charAt s (k - 1))
+                def after:int (UiChatText.codeAt(s (k + (strlen m))))
+                def okEnd:boolean ((UiChatText.isSpace(before)) == false)
+                if (wordy && (UiChatText.isWordChar(after))) {
+                    okEnd = false
+                }
+                ; ** is not two closing *
+                if (((strlen m) == 1) && (after == (charAt m 0))) {
+                    okEnd = false
+                }
+                if okEnd {
+                    return k
+                }
+            }
+            ; a code span inside is skipped whole
+            if ((charAt s k) == 96) {
+                def end:int (UiChatText.findFrom(s "`" (k + 1)))
+                if (end > k) {
+                    k = end
+                }
+            }
+            k = (k + 1)
+        }
+        return -1
+    }
+
+    sfn findFrom:int (s:string w:string from:int) {
+        if (from >= (strlen s)) {
+            return -1
+        }
+        def at:int (indexOf (substring s from (strlen s)) w)
+        if (at < 0) {
+            return -1
+        }
+        return (from + at)
+    }
+
+    ; the end of a bare link from i: up to a space, less the punctuation that
+    ; ends a sentence
+    sfn linkEnd:int (s:string i:int) {
+        def k:int i
+        while ((k < (strlen s)) && ((UiChatText.isSpace((charAt s k))) == false)) {
+            def c:int (charAt s k)
+            if ((c == 60) || (c == 62)) {
+                break
+            }
+            k = (k + 1)
+        }
+        while (k > i) {
+            def c:int (charAt s (k - 1))
+            def trailing:boolean ((((c == 46) || (c == 44)) || ((c == 59) || (c == 58))) || (((c == 33) || (c == 63)) || ((c == 41) || (c == 39))))
+            if (trailing == false) {
+                break
+            }
+            ; a ) that closes a ( in the link stays (wikipedia/Foo_(bar))
+            if (c == 41) {
+                def part:string (substring s i k)
+                if ((UiChatText.countOf(part "(")) >= (UiChatText.countOf(part ")"))) {
+                    break
+                }
+            }
+            k = (k - 1)
+        }
+        return k
+    }
+
+    fn inlineInto:void (s:string bold:boolean italic:boolean strike:boolean out:[UiChatSpan]) {
+        def i:int 0
+        def n:int (strlen s)
+        def buf:string ""
+        while (i < n) {
+            def c:int (charAt s i)
+            def prev:int (UiChatText.codeAt(s (i - 1)))
+            def atWord:boolean ((i == 0) || ((UiChatText.isWordChar(prev)) == false))
+            ; \x: x as it is
+            if ((c == 92) && ((i + 1) < n)) {
+                buf = (buf + (substring s (i + 1) (i + 2)))
+                i = (i + 2)
+                continue
+            }
+            ; `code`
+            if (c == 96) {
+                def end:int (UiChatText.findFrom(s "`" (i + 1)))
+                if (end > (i + 1)) {
+                    UiChatText.addText(out buf bold italic strike)
+                    buf = ""
+                    UiChatText.addKind(out "code" (substring s (i + 1) end) "" bold italic strike)
+                    i = (end + 1)
+                    continue
+                }
+            }
+            ; ** * ~~ ~ _ styles
+            def mark:string ""
+            if (UiChatText.startsAt(s i "**")) {
+                mark = "**"
+            } {
+                if (UiChatText.startsAt(s i "~~")) {
+                    mark = "~~"
+                } {
+                    if (((c == 42) || (c == 126)) || ((c == 95) && atWord)) {
+                        mark = (substring s i (i + 1))
+                    }
+                }
+            }
+            if ((strlen mark) > 0) {
+                def end:int (UiChatText.closer(s i mark (mark == "_")))
+                if (end > 0) {
+                    UiChatText.addText(out buf bold italic strike)
+                    buf = ""
+                    def inner:string (substring s (i + (strlen mark)) end)
+                    def b2:boolean bold
+                    def i2:boolean italic
+                    def s2:boolean strike
+                    if ((mark == "**") || (mark == "*")) {
+                        b2 = true
+                    }
+                    if (mark == "_") {
+                        i2 = true
+                    }
+                    if ((mark == "~~") || (mark == "~")) {
+                        s2 = true
+                    }
+                    this.inlineInto(inner b2 i2 s2 out)
+                    i = (end + (strlen mark))
+                    continue
+                }
+            }
+            ; [words](https://…)
+            if (c == 91) {
+                def close:int (UiChatText.findFrom(s "](" (i + 1)))
+                if (close > (i + 1)) {
+                    def urlEnd:int (UiChatText.findFrom(s ")" (close + 2)))
+                    def url:string ""
+                    if (urlEnd > 0) {
+                        url = (substring s (close + 2) urlEnd)
+                    }
+                    if ((UiChatText.isUrl(url)) && ((indexOf (substring s (i + 1) close) "[") < 0)) {
+                        UiChatText.addText(out buf bold italic strike)
+                        buf = ""
+                        UiChatText.addKind(out "link" (substring s (i + 1) close) url bold italic strike)
+                        i = (urlEnd + 1)
+                        continue
+                    }
+                }
+            }
+            ; <https://…|words> or <https://…>
+            if (c == 60) {
+                def gt:int (UiChatText.findFrom(s ">" (i + 1)))
+                if (gt > (i + 1)) {
+                    def inner:string (substring s (i + 1) gt)
+                    def bar:int (indexOf inner "|")
+                    def url:string inner
+                    def words:string inner
+                    if (bar > 0) {
+                        url = (substring inner 0 bar)
+                        words = (substring inner (bar + 1) (strlen inner))
+                    }
+                    if ((UiChatText.isUrl(url)) && ((indexOf url " ") < 0)) {
+                        UiChatText.addText(out buf bold italic strike)
+                        buf = ""
+                        UiChatText.addKind(out "link" words url bold italic strike)
+                        i = (gt + 1)
+                        continue
+                    }
+                }
+            }
+            ; a bare link
+            if (atWord && ((UiChatText.startsAt(s i "https://")) || (UiChatText.startsAt(s i "http://")))) {
+                def end:int (UiChatText.linkEnd(s i))
+                def url:string (substring s i end)
+                if (UiChatText.isUrl(url)) {
+                    UiChatText.addText(out buf bold italic strike)
+                    buf = ""
+                    UiChatText.addKind(out "link" url url bold italic strike)
+                    i = end
+                    continue
+                }
+            }
+            ; :shortcode:
+            if (c == 58) {
+                def end:int (UiChatText.findFrom(s ":" (i + 1)))
+                if ((end > (i + 1)) && ((end - i) <= 40)) {
+                    def code:string (substring s (i + 1) end)
+                    if (UiChatText.isCode(code)) {
+                        def e:string (this.emoji(code))
+                        if ((strlen e) > 0) {
+                            UiChatText.addText(out buf bold italic strike)
+                            buf = ""
+                            UiChatText.addKind(out "emoji" e code bold italic strike)
+                            i = (end + 1)
+                            continue
+                        }
+                    }
+                }
+            }
+            ; @name, #name
+            if (((c == 64) || (c == 35)) && atWord) {
+                def k:int (i + 1)
+                while ((k < n) && (UiChatText.isNameChar((charAt s k)))) {
+                    k = (k + 1)
+                }
+                ; a name does not end in . or - (the end of a sentence)
+                while ((k > (i + 1)) && (((charAt s (k - 1)) == 46) || ((charAt s (k - 1)) == 45))) {
+                    k = (k - 1)
+                }
+                def name:string (substring s (i + 1) k)
+                if ((strlen name) > 0) {
+                    def kind:string "mention"
+                    if (c == 35) {
+                        kind = "channel"
+                    }
+                    if ((kind == "mention") || (UiChatText.hasLetter(name))) {
+                        UiChatText.addText(out buf bold italic strike)
+                        buf = ""
+                        UiChatText.addKind(out kind name "" bold italic strike)
+                        i = k
+                        continue
+                    }
+                }
+            }
+            buf = (buf + (substring s i (i + 1)))
+            i = (i + 1)
+        }
+        UiChatText.addText(out buf bold italic strike)
+    }
+
+    sfn countOf:int (s:string w:string) {
+        def n:int 0
+        def at:int (indexOf s w)
+        while (at >= 0) {
+            n = (n + 1)
+            at = (UiChatText.findFrom(s w (at + (strlen w))))
+        }
+        return n
+    }
+
+    sfn isUrl:boolean (u:string) {
+        if ((indexOf u " ") >= 0) {
+            return false
+        }
+        if ((indexOf u "https://") == 0) {
+            return ((strlen u) > 8)
+        }
+        if ((indexOf u "http://") == 0) {
+            return ((strlen u) > 7)
+        }
+        return false
+    }
+
+    ; a shortcode: letters, digits, _ + -
+    sfn isCode:boolean (s:string) {
+        def i:int 0
+        while (i < (strlen s)) {
+            def c:int (charAt s i)
+            def ok:boolean (((((c >= 97) && (c <= 122)) || ((c >= 65) && (c <= 90))) || ((c >= 48) && (c <= 57))) || (((c == 95) || (c == 43)) || (c == 45)))
+            if (ok == false) {
+                return false
+            }
+            i = (i + 1)
+        }
+        return ((strlen s) > 0)
+    }
+
+    sfn hasLetter:boolean (s:string) {
+        def i:int 0
+        while (i < (strlen s)) {
+            def c:int (charAt s i)
+            if ((((c >= 97) && (c <= 122)) || ((c >= 65) && (c <= 90))) || (c >= 128)) {
+                return true
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    ; --- folding --------------------------------------------------------------------
+
+    sfn lineCount:int (src:string) {
+        return (array_length (strsplit src "\n"))
+    }
+
+    fn isLong:boolean (src:string) {
+        return (((UiChatText.lineCount(src)) > foldLines) || ((strlen src) > foldChars))
+    }
+
+    ; The part of a long message shown folded: whole lines while they fit in
+    ; `clipLines` and `clipChars` (a first line longer than that cut at a
+    ; space), and a code fence cut open closed again.
+    fn clip:string (src:string) {
+        def lines:[string] (strsplit src "\n")
+        def out:[string]
+        def used:int 0
+        def open:boolean false
+        def i:int 0
+        while (i < (array_length lines)) {
+            def l:string (itemAt lines i)
+            if (((array_length out) >= clipLines) || ((used + (strlen l)) > clipChars)) {
+                if ((array_length out) == 0) {
+                    def cut:string (substring l 0 clipChars)
+                    def sp:int (UiChatText.lastSpace(cut))
+                    if (sp > (idiv clipChars 2)) {
+                        cut = (substring cut 0 sp)
+                    }
+                    push out (cut + "…")
+                }
+                break
+            }
+            if ((indexOf (trim l) "```") == 0) {
+                def rest:string (substring (trim l) 3 (strlen (trim l)))
+                if ((indexOf rest "```") < 0) {
+                    open = (open == false)
+                }
+            }
+            push out l
+            used = (used + (strlen l) + 1)
+            i = (i + 1)
+        }
+        if open {
+            push out "```"
+        }
+        return (join out "\n")
+    }
+
+    sfn lastSpace:int (s:string) {
+        def i:int ((strlen s) - 1)
+        while (i >= 0) {
+            if ((charAt s i) == 32) {
+                return i
+            }
+            i = (i - 1)
+        }
+        return -1
+    }
+
+    ; --- what the text says ----------------------------------------------------------
+
+    ; The names a message @mentions, each once, in order.
+    fn mentions:[string] (src:string) {
+        def out:[string]
+        def blocks:[UiChatBlock] (this.parse(src))
+        for blocks b:UiChatBlock i {
+            for b.spans sp:UiChatSpan k {
+                if ((sp.kind == "mention") && ((UiChatText.inList(out sp.text)) == false)) {
+                    push out sp.text
+                }
+            }
+        }
+        return out
+    }
+
+    ; One line of plain text for a list or a notice: the first block's words,
+    ; cut to `max` characters.
+    fn preview:string (src:string max:int) {
+        def blocks:[UiChatBlock] (this.parse(src))
+        def out:string ""
+        for blocks b:UiChatBlock i {
+            if ((strlen out) == 0) {
+                out = (trim (b.plain()))
+            }
+        }
+        if ((strlen out) > max) {
+            out = ((substring out 0 (max - 1)) + "…")
+        }
+        return out
+    }
+}
