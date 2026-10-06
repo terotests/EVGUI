@@ -296,6 +296,12 @@ class ChannelCheck {
         this.ok(((indexOf (this.classes(r)) "|ch-dot ch-dot-on|") >= 0) "those here are marked")
         c.activate("ch-here")
         this.ok((c.peopleOpen == false) "and closes it")
+        c.closable = true
+        c.build()
+        def rc:EVGElement (unwrap c.rootEl)
+        this.ok(((indexOf (this.ids(rc)) "|ch-close|") >= 0) "a closable channel has a ×")
+        c.activate("ch-close")
+        this.ok(((c.take()) == "close") "which asks the host to close it")
         ; the profile
         c.activate("ch-me")
         this.ok((c.profileOpen && (c.pAvatar == "knight")) "the reader's profile opens with their character")
@@ -446,20 +452,58 @@ class ChannelCheck {
         def fe:EVGElement (unwrap fld)
         def hit:string (h6.hitTest((fe.calculatedX + 20.0) (fe.calculatedY + 10.0)))
         this.ok((c.input.owns(hit)) ("the field is hit: " + hit))
+        def frm@(optional):EVGElement (h6.findEl(r6 "ch-frame"))
+        def fre:EVGElement (unwrap frm)
+        this.ok(((fe.calculatedWidth > (fre.calculatedWidth - 4.0)) && (fe.calculatedWidth <= fre.calculatedWidth)) ("the field is as wide as its frame: " + (to_string fe.calculatedWidth) + " / " + (to_string fre.calculatedWidth)))
+        ; the suggestions above the composer
+        this.type(c ":tad")
+        def h8:UiHost (this.lay(c css))
+        def r8:EVGElement (unwrap h8.root)
+        def sg@(optional):EVGElement (h8.findEl(r8 "ch-sugs"))
+        def cp@(optional):EVGElement (h8.findEl(r8 "ch-composer"))
+        def sge:EVGElement (unwrap sg)
+        def cpe:EVGElement (unwrap cp)
+        this.ok((((sge.calculatedY + sge.calculatedHeight) <= (cpe.calculatedY + 1.0)) && (sge.calculatedHeight > 20.0)) ("the suggestions above the composer: " + (to_string sge.calculatedY) + "+" + (to_string sge.calculatedHeight) + " / " + (to_string cpe.calculatedY)))
+        c.keyDownWith("" "Escape" false false)
+        c.input.applyEdit("" 0 0)
         ; the hover bar, the people and the profile sit on the channel
-        c.hover("ch-m30-b0-s0")
+        ; (the latest one, at the end: a message scrolled out of view is
+        ; not under the pointer)
+        c.toLatest()
+        def lastM:UiFeedMsg (itemAt c.feed.msgs ((array_length c.feed.msgs) - 1))
+        def mid:string ("ch-m" + (to_string lastM.seq))
+        c.hover((mid + "-b0-s0"))
         c.peopleOpen = true
         def h7:UiHost (this.lay(c css))
         def r7:EVGElement (unwrap h7.root)
-        def acts@(optional):EVGElement (h7.findEl(r7 "ch-m30-acts"))
-        def row@(optional):EVGElement (h7.findEl(r7 "ch-m30"))
+        def acts@(optional):EVGElement (h7.findEl(r7 (mid + "-acts")))
+        def row@(optional):EVGElement (h7.findEl(r7 mid))
         def ae:EVGElement (unwrap acts)
         def re:EVGElement (unwrap row)
         this.ok(((ae.calculatedY < re.calculatedY) && ((ae.calculatedX + ae.calculatedWidth) > 850.0)) ("the actions at the message's top right: " + (to_string ae.calculatedX) + "," + (to_string ae.calculatedY)))
-        this.ok(((h7.hitTest((ae.calculatedX + 6.0) (ae.calculatedY + 10.0))) == "ch-m30-q-0") "and pressed there")
+        def actHit:string (h7.hitTest((ae.calculatedX + 6.0) (ae.calculatedY + 10.0)))
+        this.ok((actHit == (mid + "-q-0")) ("and pressed there: " + actHit))
+        ; one scrolled out of view is not
+        def first:UiFeedMsg (itemAt c.feed.msgs 0)
+        c.hover(("ch-m" + (to_string first.seq) + "-b0-s0"))
+        def h9:UiHost (this.lay(c css))
+        def r9:EVGElement (unwrap h9.root)
+        def hid@(optional):EVGElement (h9.findEl(r9 ("ch-m" + (to_string first.seq) + "-acts")))
+        def hide:EVGElement (unwrap hid)
+        def hidHit:string (h9.hitTest((hide.calculatedX + 6.0) (hide.calculatedY + 10.0)))
+        this.ok((hide.calculatedY < 140.0) ("the first message is scrolled above: " + (to_string hide.calculatedY)))
+        this.ok((hidHit != ("ch-m" + (to_string first.seq) + "-q-0")) ("and its actions are not pressed: " + hidHit))
         def pp@(optional):EVGElement (h7.findEl(r7 "ch-people"))
         def pe:EVGElement (unwrap pp)
         this.ok(((pe.calculatedY > 60.0) && (pe.calculatedX > 600.0)) ("the people under the count: " + (to_string pe.calculatedX) + "," + (to_string pe.calculatedY)))
+        ; the head's buttons are pressed anywhere on them, their words too
+        def heads:[string] ([] _:string ("ch-here" "ch-me"))
+        for heads hid:string hi {
+            def hb@(optional):EVGElement (h7.findEl(r7 hid))
+            def hbe:EVGElement (unwrap hb)
+            def at:string (h7.hitTest((hbe.calculatedX + (hbe.calculatedWidth - 8.0)) (hbe.calculatedY + (hbe.calculatedHeight / 2.0))))
+            this.ok((at == hid) (hid + " pressed on its words: " + at))
+        }
     }
 
     sfn main:void () {

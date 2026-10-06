@@ -29,6 +29,7 @@
 ;   describe text                  the new description
 ;   profile  name avatar color     the reader's new name and character
 ;   copy     text                  put a message's text on the clipboard
+;   close                          the × in the head (`closable`)
 ;
 ; The host answers with what the server says (`feed.put`, `thread.put`):
 ; nothing a request asks for is shown before the server has it, so every
@@ -90,6 +91,8 @@ class ChannelCtl extends UiCtl {
     def readOnlyText:string "This room is archived."
     ; a line under the head ("" none), e.g. why the channel is not live
     def notice:string ""
+    ; a × in the head that asks the host to close the channel
+    def closable:boolean false
 
     ; --- the reader ---------------------------------------------------------------------
     def me:string ""
@@ -965,6 +968,10 @@ class ChannelCtl extends UiCtl {
             this.editProfile()
             return target
         }
+        if (target == (t + "close")) {
+            this.ask("close")
+            return target
+        }
         if (target == (t + "latest")) {
             this.toLatest()
             return target
@@ -1266,12 +1273,15 @@ class ChannelCtl extends UiCtl {
                 faces = (faces + 1)
             }
         }
-        h.addChild((UiTree.label((tid + "-here-n") "ch-here-n" ((to_string here) + " " + hereText))))
+        h.addChild((UiTree.label("" "ch-here-n" ((to_string here) + " " + hereText))))
         right.addChild(h)
         def mine:EVGElement (UiTree.div((tid + "-me") "ch-me"))
         mine.addChild((this.avatarEl("" myAvatar myColor me "person" "ch-me-av")))
-        mine.addChild((UiTree.label((tid + "-me-n") "ch-me-n" myName)))
+        mine.addChild((UiTree.label("" "ch-me-n" myName)))
         right.addChild(mine)
+        if closable {
+            right.addChild((UiTree.label((tid + "-close") "ch-x" "×")))
+        }
         head.addChild(right)
         return head
     }
@@ -1625,12 +1635,13 @@ class ChannelCtl extends UiCtl {
             return box
         }
         UiTree.inline(box "height" ((to_string (ChannelCtl.composerH(f.sizedLines))) + "px"))
-        UiTree.anchor(box)
         def mineKeys:boolean ((keys == "thread") == inThread)
         if ((this.sugOpen()) && mineKeys) {
             box.addChild((this.sugEl()))
         }
         def frame:EVGElement (UiTree.div((tid + "-" + pre + "frame") "ch-frame"))
+        ; the suggestions (a sibling before it) open above it
+        UiTree.anchor(frame)
         f.name = ph
         f.placeholder = ph
         f.boxClass = "ch-field"
@@ -1673,6 +1684,9 @@ class ChannelCtl extends UiCtl {
     fn sugEl:EVGElement () {
         def list:EVGElement (UiTree.div((tid + "-sugs") "ch-sugs"))
         UiTree.surface(list "top" "start")
+        ; its height said, so the layout can put it above the composer
+        ; (28px a row, the sheet's padding and border)
+        UiTree.inline(list "height" ((to_string ((28 * (array_length sugItems)) + 10)) + "px"))
         def i:int 0
         while (i < (array_length sugItems)) {
             def parts:[string] (strsplit (itemAt sugItems i) "\t")
@@ -1858,6 +1872,9 @@ class ChannelCtl extends UiCtl {
         }
         push out (this.btnRow((tid + "-here") ((to_string here) + " " + hereText) tid))
         push out (this.btnRow((tid + "-me") (profileText + ": " + myName) tid))
+        if closable {
+            push out (this.btnRow((tid + "-close") closeText tid))
+        }
         def log:UiRow (UiRow.of((tid + "-feed") (EVGA11yRole.log()) title))
         log.parentTid = tid
         push out log

@@ -1235,11 +1235,15 @@ class UiHost {
     ; A modal's backdrop covers the page, so with this order it is what a click
     ; outside the dialog lands on — which is what makes a modal modal, rather
     ; than a thing that merely looks like one.
+    ;
+    ; What a clipping box hides is not under the pointer: a scrolled list's
+    ; rows above its top are left out (EVGHitTest.paintOrderAt), or they
+    ; would take presses meant for what is drawn there.
     fn hitTest:string (px:double py:double) {
         if lastPage {
             def page:EVGElement (unwrap lastPage)
             def hit (new EVGHitTest())
-            def order:[EVGElement] (hit.paintOrder(page))
+            def order:[EVGElement] (hit.paintOrderAt(page px py))
             def i:int ((array_length order) - 1)
             while (i >= 0) {
                 def el:EVGElement (itemAt order i)

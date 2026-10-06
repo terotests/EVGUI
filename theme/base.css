@@ -1920,7 +1920,7 @@
 
 .ch-composer { flex-shrink: 0; padding: 0 16px 14px 16px; }
 .ch-frame { display: flex; flex-direction: column; flex-wrap: nowrap; border: 1px solid #a1a1aa; border-radius: 8px; background-color: #ffffff; }
-.ch-field { display: flex; flex-direction: row; align-items: flex-start; min-height: 36px; padding: 8px 10px 0 10px; cursor: text; flex-shrink: 0; }
+.ch-field { display: flex; flex-direction: row; align-items: flex-start; min-height: 36px; padding: 8px 10px 0 10px; cursor: text; flex-shrink: 0; width: 100%; }
 .ch-draft { font-size: 14px; line-height: 20px; color: #18181b; }
 .ch-ph { font-size: 14px; line-height: 20px; }
 .ch-tools { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 2px; height: 32px; padding: 0 4px; flex-shrink: 0; }
