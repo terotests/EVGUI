@@ -275,7 +275,7 @@ class InputFieldCheck {
     fn multiline:void () {
         def h (new UiHost())
         h.setPageSize(320.0 440.0)
-        h.addStyleSheet(".ui-input { display: flex; width: 220px; height: 34px; padding: 0 10px; } .chat-panel { display: flex; flex-direction: column; width: 300px; } .chat-composer { display: flex; flex-direction: row; align-items: center; gap: 6px; padding: 8px 10px; } .chat-field { display: flex; align-items: center; flex-grow: 1; flex-shrink: 1; width: 0px; min-width: 0px; height: 30px; padding: 0 8px; } .chat-send { height: 30px; padding: 0 12px; font-size: 13px; } .ui-input-text { font-size: 13px; } .ui-input-caret { width: 1px; }")
+        h.addStyleSheet(".ui-input { display: flex; width: 220px; height: 34px; padding: 0 10px; } .chat-panel { display: flex; flex-direction: column; width: 300px; } .chat-composer { display: flex; flex-direction: row; align-items: center; gap: 6px; padding: 8px 10px; } .chat-field { display: flex; align-items: center; flex-grow: 1; flex-shrink: 1; width: 0px; min-width: 0px; height: 30px; padding: 0 8px; } .chat-send { height: 30px; padding: 0 12px; font-size: 13px; } .ui-input-text { font-size: 13px; height: 18px; } .ui-input-caret { width: 1px; }")
         def ch (new ChatCtl())
         ch.setup("ch" "Chat")
         ch.build()
@@ -293,6 +293,14 @@ class InputFieldCheck {
         def p:UiTextLines (unwrap ch.input.placed)
         this.ok(((p.count()) >= 2) ("long text wraps: " + (to_string (p.count()))))
         this.ok((InputFieldCheck.near(fld2.calculatedHeight (one + ((to_double ((p.count()) - 1)) * lb)))) ("the box grows by a line per line: " + (to_string fld2.calculatedHeight)))
+        ; every line in sight: the view is as tall as the lines (it stayed
+        ; one line high and cut the others) and the lines sit in it
+        def vw:EVGElement (this.el(h "ch-field-view"))
+        this.ok(((vw.calculatedHeight + 0.5) >= ((to_double (p.count())) * lb)) ("the view is as tall as its lines: " + (to_string vw.calculatedHeight) + " for " + (to_string (p.count())) + " × " + (to_string lb)))
+        def l0:UiTextLine (itemAt p.lines 0)
+        def ln:UiTextLine (itemAt p.lines ((p.count()) - 1))
+        this.ok(((l0.y >= (vw.calculatedY - 0.5)) && ((ln.y + lb) <= ((vw.calculatedY + vw.calculatedHeight) + 0.5))) ("the lines are inside the view: " + (to_string l0.y) + "…" + (to_string (ln.y + lb)) + " in " + (to_string vw.calculatedY) + "+" + (to_string vw.calculatedHeight)))
+        this.ok(((ch.input.linesChanged()) == false) "placed as tall as it was built")
         def car:EVGElement (this.el(h "ch-field-caret"))
         def last:UiTextLine (itemAt p.lines ((p.count()) - 1))
         this.ok(((car.calculatedWidth > 0.0) && (InputFieldCheck.near(car.calculatedY last.y))) "the caret is on the last line")
@@ -321,6 +329,24 @@ class InputFieldCheck {
         this.ok((InputFieldCheck.near(fld4.calculatedHeight one)) ("sent: the box is one line again: " + (to_string fld4.calculatedHeight)))
     }
 
+    ; Text put in before the field was ever placed: it is built one line
+    ; high, and says so once placed, so the host builds it again.
+    fn pastedFirst:void () {
+        def h (new UiHost())
+        h.setPageSize(320.0 440.0)
+        h.addStyleSheet(".chat-panel { display: flex; flex-direction: column; width: 300px; } .chat-composer { display: flex; flex-direction: row; align-items: center; padding: 8px 10px; } .chat-field { display: flex; align-items: center; flex-grow: 1; width: 0px; min-width: 0px; height: 30px; padding: 0 8px; } .ui-input-text { font-size: 13px; }")
+        def ch (new ChatCtl())
+        ch.setup("cp" "Chat")
+        ch.input.setValue("one two three four five six seven eight nine ten eleven twelve thirteen")
+        ch.build()
+        h.add(ch)
+        h.layout()
+        this.ok((ch.input.linesChanged()) "pasted before it was placed: it asks to be built again")
+        ch.build()
+        h.layout()
+        this.ok(((ch.input.linesChanged()) == false) "built again: as tall as its lines")
+    }
+
     sfn main:void () {
         def c (new InputFieldCheck())
         c.bandOverText()
@@ -332,6 +358,7 @@ class InputFieldCheck {
         c.chatField()
         c.placeholder()
         c.multiline()
+        c.pastedFirst()
         print ((to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
         if (c.fails > 0) {
             print "RESULT FAIL"

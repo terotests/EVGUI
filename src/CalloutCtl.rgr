@@ -94,6 +94,12 @@ class CalloutCtl extends UiCtl {
         geo.setPage(w h)
     }
 
+    ; the room it may use: from `t` down to `b` of the page (a bar above or
+    ; below it stays clear)
+    fn setRows:void (t:double b:double) {
+        geo.setRows(t b)
+    }
+
     ; the head (title bar) is the handle; the × is not
     fn isHandle:boolean (target:string) {
         return ((target == (this.headTid())) || (target == (tid + "-title")))
