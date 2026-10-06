@@ -508,6 +508,55 @@ class ChannelCheck {
 
     ; files: attached in the composer, sent with a message, drawn with it;
     ; link previews; an embedded presentation's slide
+    ; what the pointer is over: pressed where it is drawn, and the cursor says
+    ; whether pressing does something
+    fn pointer:void () {
+        def css:string (?? (read_file "." "gallery/evgui/theme/base.css") "")
+        if ((strlen css) == 0) {
+            css = (?? (read_file "." "theme/base.css") "")
+        }
+        def c:ChannelCtl (this.channel())
+        c.width = 900.0
+        c.height = 600.0
+        c.activate("ch-me")
+        def h:UiHost (this.lay(c css))
+        def r:EVGElement (unwrap h.root)
+        def cell@(optional):EVGElement (h.findEl(r "ch-pf-a-owl"))
+        def x:double 0.0
+        def y:double 0.0
+        if (!null? cell) {
+            def ce:EVGElement (unwrap cell)
+            x = (ce.calculatedX + (ce.calculatedWidth / 2.0))
+            y = (ce.calculatedY + (ce.calculatedHeight / 2.0))
+        }
+        def hit:string (h.hitTest(x y))
+        this.ok((hit == "ch-pf-a-owl") ("a press on a character's picture is the character's: " + hit))
+        c.activate(hit)
+        this.ok((c.pAvatar == "owl") ("and picks it: " + c.pAvatar))
+        this.ok(((c.cursorFor(hit)) == "pointer") "a character shows the hand")
+        this.ok((((c.cursorFor("ch-pf-c-3")) == "pointer") && ((c.cursorFor("ch-pf-save")) == "pointer")) "so do a colour and Save")
+        this.ok((((c.cursorFor("ch-pf-title")) == "") && ((c.cursorFor("ch-pf-back")) == "")) "the sheet's title and backdrop do not")
+        def fld@(optional):EVGElement (h.findEl(r "ch-pin"))
+        def fx:double 0.0
+        def fy:double 0.0
+        if (!null? fld) {
+            def fe:EVGElement (unwrap fld)
+            fx = (fe.calculatedX + 20.0)
+            fy = (fe.calculatedY + (fe.calculatedHeight / 2.0))
+        }
+        def pf:string (h.hitTest(fx fy))
+        this.ok(((c.cursorFor(pf)) == "text") ("the name field shows the text cursor: " + pf))
+        c.activate("ch-pf-cancel")
+        this.ok((((c.cursorFor("ch-send")) == "pointer") && ((c.cursorFor("ch-fmt-b")) == "pointer")) "the composer's buttons show the hand")
+        this.ok((((c.cursorFor("ch-m1")) == "") && ((c.cursorFor("ch-feed")) == "")) "a message and the feed do not")
+        this.ok((((c.cursorFor("ch-m1-reply")) == "pointer") && ((c.cursorFor("ch-m1-q-0")) == "pointer")) "a message's actions do")
+        this.ok(((c.cursorFor("ch-m3-b0-emb")) == "pointer") "a deck embed does")
+        this.ok((((c.cursorFor("ch-m1-del")) == "") && ((c.cursorFor("ch-m2-del")) == "pointer")) "Delete only on one's own")
+        this.ok(((c.cursorFor("ch-m4-b0-s0")) == "") "plain text does not")
+        c.readOnly = true
+        this.ok((((c.cursorFor("ch-desc")) == "") && ((c.cursorFor("ch-attach")) == "")) "nor what an archived room does not allow")
+    }
+
     fn files:void () {
         def c:ChannelCtl (this.channel())
         c.activate("ch-attach")
@@ -587,6 +636,7 @@ class ChannelCheck {
         k.a11y()
         k.files()
         k.laidOut()
+        k.pointer()
         print ((to_string k.passes) + " passed, " + (to_string k.fails) + " failed")
         if (k.fails > 0) {
             print "RESULT FAIL"

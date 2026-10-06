@@ -1144,6 +1144,47 @@ class ChannelCtl extends UiCtl {
         return ""
     }
 
+    ; the pointer's cursor over `target`: "text" over a field, "pointer"
+    ; over what does something when pressed, "" elsewhere
+    fn cursorFor:string (target:string) {
+        if ((((input.owns(target)) || (tinput.owns(target))) || (dinput.owns(target))) || (pinput.owns(target))) {
+            return "text"
+        }
+        return (? (this.pressable(target)) "pointer" "")
+    }
+
+    ; true when pressing `target` does something (activate reads the same ids)
+    fn pressable:boolean (target:string) {
+        def t:string (tid + "-")
+        if ((indexOf target t) != 0) {
+            return false
+        }
+        def rest:string (substring target (strlen t) (strlen target))
+        if (rest == "desc") {
+            return (readOnly == false)
+        }
+        if ((rest == "attach") || (rest == "tattach")) {
+            return (readOnly == false)
+        }
+        def named:[string] ([] _:string ("desc-save" "desc-cancel" "here" "me" "close" "latest" "older" "tolder" "send" "tsend" "tclose" "pf-save" "pf-cancel"))
+        for named n:string i {
+            if (rest == n) {
+                return true
+            }
+        }
+        if (((indexOf rest "pend-") == 0) || ((indexOf rest "tpend-") == 0)) {
+            return (ChannelCtl.endsIn(rest "-x"))
+        }
+        if ((((indexOf rest "fmt-") == 0) || ((indexOf rest "sug-") == 0)) || (((indexOf rest "pf-a-") == 0) || ((indexOf rest "pf-c-") == 0))) {
+            return true
+        }
+        def w:string (this.msgWhere(target))
+        if ((strlen w) > 0) {
+            return ((strlen (this.msgAction(w (this.msgSeq(target)) (this.msgPart(target))))) > 0)
+        }
+        return false
+    }
+
     ; the number written in `s` (its digits; 0 none)
     sfn digits:int (s:string) {
         def v:int 0
@@ -1204,6 +1245,30 @@ class ChannelCtl extends UiCtl {
     ; A press on a message's part: its reactions, the hover bar, a link, a
     ; thread's summary, Show more.
     fn msgPress:string (where:string seq:int part:string target:string) {
+        def act:string (this.msgAction(where seq part))
+        if ((strlen act) == 0) {
+            return ""
+        }
+        if ((indexOf act "open\t") == 0) {
+            this.openThread((substring act 5 (strlen act)))
+            return target
+        }
+        if (act == "fold") {
+            def m:UiFeedMsg (this.msgOf(where seq))
+            if (where == "o") {
+                m = (this.threadRoot())
+            }
+            m.unfolded = (m.unfolded == false)
+            return target
+        }
+        this.ask(act)
+        return target
+    }
+
+    ; what pressing a part of a message does: a request for the host,
+    ; "open\t<id>" (its thread) or "fold" (Show more / less); "" nothing.
+    ; Pressing and the pointer's cursor both read it.
+    fn msgAction:string (where:string seq:int part:string) {
         def m:UiFeedMsg (this.msgOf(where seq))
         if (where == "o") {
             m = (this.threadRoot())
@@ -1214,59 +1279,59 @@ class ChannelCtl extends UiCtl {
         if ((indexOf part "rx-") == 0) {
             def k:int (ChannelCtl.digits((substring part 3 (strlen part))))
             if ((k >= 0) && (k < (array_length m.reactEmoji))) {
-                this.ask(("react\t" + m.id + "\t" + (itemAt m.reactEmoji k)))
+                return ("react\t" + m.id + "\t" + (itemAt m.reactEmoji k))
             }
-            return target
+            return ""
         }
         if ((indexOf part "q-") == 0) {
             def k:int (ChannelCtl.digits((substring part 2 (strlen part))))
             if ((k >= 0) && (k < (array_length quick))) {
-                this.ask(("react\t" + m.id + "\t" + (itemAt quick k)))
+                return ("react\t" + m.id + "\t" + (itemAt quick k))
             }
-            return target
+            return ""
         }
         if ((part == "reply") || (part == "thr")) {
-            this.openThread(m.id)
-            return target
+            return ("open\t" + m.id)
         }
         if (part == "copy") {
-            this.ask(("copy\t" + m.text))
-            return target
+            return ("copy\t" + m.text)
         }
         if (part == "del") {
             if (m.who == me) {
-                this.ask(("delete\t" + m.id))
+                return ("delete\t" + m.id)
             }
-            return target
+            return ""
         }
         if (part == "more") {
-            m.unfolded = (m.unfolded == false)
-            return target
+            return "fold"
         }
         if ((indexOf part "lk") == 0) {
             def k:int (ChannelCtl.digits((substring part 2 (strlen part))))
             if ((k >= 0) && (k < (array_length m.links))) {
                 def l:UiFeedLink (itemAt m.links k)
-                this.ask(("link\t" + l.url))
+                return ("link\t" + l.url)
             }
-            return target
+            return ""
         }
-        if ((indexOf part "f") == 0) {
-            def k:int (ChannelCtl.digits((substring part 1 (strlen part))))
-            if ((k >= 0) && (k < (array_length m.files))) {
-                def fl:UiFeedFile (itemAt m.files k)
-                this.ask(("file\t" + fl.url + "\t" + fl.name))
+        if (((indexOf part "f") == 0) && ((strlen part) > 1)) {
+            def c:int (charAt part 1)
+            if ((c >= 48) && (c <= 57)) {
+                def k:int (ChannelCtl.digits((substring part 1 (strlen part))))
+                if (k < (array_length m.files)) {
+                    def fl:UiFeedFile (itemAt m.files k)
+                    return ("file\t" + fl.url + "\t" + fl.name)
+                }
             }
-            return target
+            return ""
         }
         ; a span: b<block>-s<span>, an embed: b<block>-emb
         if ((indexOf part "b") == 0) {
-            return (this.spanPress(m part target))
+            return (this.spanAction(m part))
         }
         return ""
     }
 
-    fn spanPress:string (m:UiFeedMsg part:string target:string) {
+    fn spanAction:string (m:UiFeedMsg part:string) {
         def dash:int (indexOf part "-")
         if (dash < 0) {
             return ""
@@ -1279,8 +1344,7 @@ class ChannelCtl extends UiCtl {
         }
         def b:UiChatBlock (itemAt blocks bi)
         if ((indexOf rest "emb") == 0) {
-            this.ask(("deck\t" + b.deck + "\t" + (to_string b.slide)))
-            return target
+            return ("deck\t" + b.deck + "\t" + (to_string b.slide))
         }
         if ((indexOf rest "s") != 0) {
             return ""
@@ -1296,12 +1360,10 @@ class ChannelCtl extends UiCtl {
         }
         def sp:UiChatSpan (itemAt b.spans si)
         if (sp.kind == "link") {
-            this.ask(("link\t" + sp.href))
-            return target
+            return ("link\t" + sp.href)
         }
         if (sp.kind == "channel") {
-            this.ask(("channel\t" + sp.text))
-            return target
+            return ("channel\t" + sp.text)
         }
         return ""
     }
@@ -2081,7 +2143,8 @@ class ChannelCtl extends UiCtl {
                 c = "ch-pf-a ch-pf-on"
             }
             def cell:EVGElement (UiTree.div((tid + "-pf-a-" + a) c))
-            cell.addChild((this.avatarEl((tid + "-pf-a-" + a + "-i") a pColor me "person" "ch-pf-ai")))
+            ; the picture has no id of its own: a press on it is the cell's
+            cell.addChild((this.avatarEl("" a pColor me "person" "ch-pf-ai")))
             grid.addChild(cell)
         }
         box.addChild(grid)
