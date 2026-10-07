@@ -336,8 +336,9 @@ class CropCtl extends UiCtl {
         return ((strlen dragPart) > 0)
     }
 
-    fn release:void () {
+    fn release:string () {
         dragPart = ""
+        return ""
     }
 
     fn dragAt:void (fx:double fy:double) {

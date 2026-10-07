@@ -207,8 +207,9 @@ class CalloutCtl extends UiCtl {
         this.shapeTail()
     }
 
-    fn release:void () {
+    fn release:string () {
         dragging = false
+        return ""
     }
 
     fn activate:string (target:string) {

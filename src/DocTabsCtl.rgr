@@ -25,11 +25,11 @@
 ;
 ;   hitAt(x y)       "tab:<key>" | "close:<key>" | "add" | ""
 ;   pressAt(x y)     the same, and a tab pressed may be dragged
-;   dragTo(x)        true when the drag moved the tab to another place;
+;   dragTabTo(x)     true when the drag moved the tab to another place;
 ;                    meanwhile its place is a slot (state "slot") and a
 ;                    copy, div.ui-doctab-ghost `<tid>-ghost` (state
 ;                    "ghost"), follows x
-;   release()        true when the press was a drag (not a click)
+;   releaseTab()     true when the press was a drag (not a click)
 ;   swipeDir(dx dy ms)  -1 / +1 for a flick left / right, else 0
 ;
 ; With `room` set, only the tabs that fit are in the row (`first`, `shown`),
@@ -364,7 +364,7 @@ class DocTabsCtl extends UiCtl {
         return n
     }
 
-    fn dragTo:boolean (x:double) {
+    fn dragTabTo:boolean (x:double) {
         if ((strlen dragKey) == 0) {
             return false
         }
@@ -386,7 +386,7 @@ class DocTabsCtl extends UiCtl {
         return true
     }
 
-    fn release:boolean () {
+    fn releaseTab:boolean () {
         def was:boolean dragged
         dragKey = ""
         dragged = false

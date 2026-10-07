@@ -1209,18 +1209,20 @@ class WindowCtl extends UiCtl {
         return (animT < 1.0)
     }
 
-    fn tickCtl:void (dtMs:double) {
+    ; Returns "" like UiCtl.tickCtl: the animation never moves focus.
+    fn tickCtl:string (dtMs:double) {
         if (animT >= 1.0) {
-            return
+            return ""
         }
         if (animMs <= 0.0) {
             animT = 1.0
-            return
+            return ""
         }
         animT = (animT + (dtMs / animMs))
         if (animT > 1.0) {
             animT = 1.0
         }
+        return ""
     }
 
     ; ease-out: fast away, gentle arrival.

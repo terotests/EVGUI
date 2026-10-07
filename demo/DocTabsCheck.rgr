@@ -107,8 +107,8 @@ class DocTabsCheck {
         this.ok((UiTree.hasClass((third.getChild(0)) "ui-doctab-wing-state-active")) "and its wings say so")
         ; a drag: the first tab past the middle of the second
         c.pressAt(50.0 20.0)
-        this.ok(((c.dragTo(53.0)) == false) "a few pixels are not a drag")
-        this.ok((c.dragTo(160.0)) "past the next tab's middle moves it")
+        this.ok(((c.dragTabTo(53.0)) == false) "a few pixels are not a drag")
+        this.ok((c.dragTabTo(160.0)) "past the next tab's middle moves it")
         this.ok(((DocTabsCheck.joined(c.tabs.tabs)) == "d2,d1,d3") ("dragged to second: " + (DocTabsCheck.joined(c.tabs.tabs))))
         this.ok((c.ghostShown()) "a dragged tab has a ghost")
         c.build()
@@ -123,12 +123,12 @@ class DocTabsCheck {
         root2.calculatedX = 0.0
         root2.calculatedWidth = 500.0
         this.ok(((c.ghostX()) == 110.0) ("the ghost follows the pointer: " + (to_string (c.ghostX()))))
-        c.dragTo(900.0)
+        c.dragTabTo(900.0)
         this.ok(((c.ghostX()) == 400.0) ("and stays inside the row: " + (to_string (c.ghostX()))))
-        this.ok((c.release()) "the press was a drag")
+        this.ok((c.releaseTab()) "the press was a drag")
         this.ok(((c.ghostShown()) == false) "letting go takes the ghost away")
         c.pressAt(150.0 20.0)
-        this.ok(((c.release()) == false) "a press without moving is a click")
+        this.ok(((c.releaseTab()) == false) "a press without moving is a click")
         def rows:[UiRow] (c.rows())
         def named:boolean false
         def i:int 0
