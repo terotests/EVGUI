@@ -1696,14 +1696,17 @@
 /* A thread (ChatCtl.subtitle, addAction, readOnly): a line under the title,
  * a row of buttons under it, and a line where the composer was. */
 .chat-sub { flex-shrink: 0; height: 22px; line-height: 22px; padding: 0 10px; font-size: 11px; color: #64748b; border-bottom: 1px solid #e2e8f0; }
+/* The buttons wrap onto more rows when the panel is narrower than they are,
+ * and the row grows with them; the messages' box (it shrinks, .chat-log)
+ * gives up the room, so no button ends up under the first message. */
 .chat-acts {
   display: flex;
   flex-shrink: 0;
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  height: 40px;
-  padding: 0 10px;
+  padding: 7px 10px;
   border-bottom: 1px solid #e2e8f0;
 }
 .chat-act { height: 26px; line-height: 26px; padding: 0 10px; font-size: 12px; color: #0f172a; background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; }
