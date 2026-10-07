@@ -195,6 +195,22 @@ const tr = c.rows().map((r) => r.tid);
 ok("a reader hears the subtitle and the buttons", tr.includes("ch-sub") && tr.includes("ch-act-delete") && !tr.includes("ch-field"), tr);
 c.clearActions();
 c.readOnly = false;
+// more buttons than one row holds: they wrap, the row grows with them, and
+// the messages start under the last one (none hidden under a message)
+c.addAction("resolve", "Resolve", "primary");
+for (const v of ["Minor", "Moderate", "Serious", "Copy", "All"]) c.addAction(v.toLowerCase(), "● " + v, "");
+d.rebuild();
+const wrapped = ["resolve", "minor", "moderate", "serious", "copy", "all"].map((v) => rect("ch-act-" + v));
+const row = rect("ch-acts");
+const first = rect(c.msgTid(0));
+const lowest = Math.max(...wrapped.map((r) => r[1] + r[3]));
+const p4 = rect("ch");
+const comp4 = rect("ch-composer");
+ok("many buttons wrap onto a second row", wrapped.some((r) => r[1] > wrapped[0][1] + 10), wrapped);
+ok("…the row is as tall as its buttons", lowest <= row[1] + row[3] + 0.5, [row, lowest]);
+ok("…the first message under the last button", first[1] >= lowest, [first, lowest]);
+ok("…and the composer still at the foot", Math.abs(comp4[1] + comp4[3] - (p4[1] + p4[3])) < 2, [comp4, p4]);
+c.clearActions();
 
 // --- bare ----------------------------------------------------------------------
 console.log("bare");

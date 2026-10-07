@@ -95,6 +95,12 @@ class ChatCtl extends UiCtl {
     ; the panel's height in px when the host gives it one (0: the sheet's);
     ; the messages get what the title bar and the composer leave (84 px)
     def height:double 0.0
+    ; what the panel's other parts took at the last layout (0: not laid out
+    ; yet): the buttons wrap onto more rows in a narrow panel and the draft
+    ; grows with its lines, so `settle` measures it and gives the messages'
+    ; box what is left
+    def chromeAt:double 0.0
+    def logEl:EVGElement (EVGElement.createDiv())
     ; arrived while the reader was scrolled up
     def unseenBelow:int 0
     ; a line under the title ("" none)
@@ -290,6 +296,9 @@ class ChatCtl extends UiCtl {
     ; what the title bar and the composer (or the line in its place), the
     ; subtitle and the buttons leave the messages
     fn chromeH:double () {
+        if (chromeAt > 0.0) {
+            return chromeAt
+        }
         def used:double 84.0
         if bare {
             used = (used - 36.0)
@@ -301,6 +310,43 @@ class ChatCtl extends UiCtl {
             used = (used + 40.0)
         }
         return used
+    }
+
+    ; the messages' box: what the panel's other parts leave of `height`
+    fn logH:double () {
+        def lh:double (height - (this.chromeH()))
+        if (lh < 40.0) {
+            lh = 40.0
+        }
+        return lh
+    }
+
+    ; After a layout: the panel's parts other than the messages, as laid out
+    ; (top of the panel to the bottom of its last part, less the messages'
+    ; box). True when that differs from what the box was given; the box gets
+    ; the rest and the host lays the page out again.
+    fn settle:boolean () {
+        if (height <= 0.0) {
+            return false
+        }
+        def r:EVGElement (unwrap rootEl)
+        def n:int (r.getChildCount())
+        if ((n == 0) || (logEl.calculatedHeight <= 0.0)) {
+            return false
+        }
+        def last:EVGElement (r.getChild((n - 1)))
+        def bottom:double (((last.calculatedY + last.calculatedHeight) + r.box.paddingBottomPx) + r.box.borderWidthPx)
+        def m:double ((bottom - r.calculatedY) - logEl.calculatedHeight)
+        if (m <= 0.0) {
+            return false
+        }
+        def d:double (m - (this.chromeH()))
+        if ((d * d) < 0.25) {
+            return false
+        }
+        chromeAt = m
+        UiTree.inline(logEl "height" ((to_string (this.logH())) + "px"))
+        return true
     }
 
     ; --- the draft -------------------------------------------------------------------
@@ -598,12 +644,9 @@ class ChatCtl extends UiCtl {
         def list:EVGElement (UiTree.div((tid + "-log") "chat-log"))
         if (height > 0.0) {
             UiTree.inline(root "height" ((to_string height) + "px"))
-            def lh:double (height - (this.chromeH()))
-            if (lh < 40.0) {
-                lh = 40.0
-            }
-            UiTree.inline(list "height" ((to_string lh) + "px"))
+            UiTree.inline(list "height" ((to_string (this.logH())) + "px"))
         }
+        logEl = list
         if ((array_length messages) == 0) {
             list.addChild((UiTree.label((tid + "-empty") "chat-empty" emptyText)))
         }
