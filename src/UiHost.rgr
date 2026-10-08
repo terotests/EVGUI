@@ -675,6 +675,27 @@ class UiHost {
         }
     }
 
+    ; The pointer at (px, py) on this host's last page, as a surface that
+    ; routes its own pointer reports it: hover what is under it, or nothing
+    ; when nothing is (or `inside` is false: the point is off the surface, or
+    ; another surface is on top). True when the hovered target changed, which
+    ; is when the surface has to paint again.
+    fn hoverTo:boolean (px:double py:double inside:boolean) {
+        def tid:string ""
+        if (inside && (!null? lastPage)) {
+            tid = (this.hitTest(px py))
+        }
+        if (tid == hoverTid) {
+            return false
+        }
+        if ((strlen tid) > 0) {
+            this.hover(tid)
+        } {
+            this.unhover()
+        }
+        return true
+    }
+
     ; The pointer left everything. Broadcast, because the controller that has to
     ; react is the one the pointer is no longer over — asking the new target
     ; would never reach it.
@@ -1006,13 +1027,18 @@ class UiHost {
     ; Publish the interaction state onto the tree, so the stylesheet can match
     ; on it. Before `applyTree`, because a rule cannot ask about a flag that is
     ; set after it ran.
+    ; Hover reaches the hovered control's id-less parts too (UiTree.markHover).
     fn markStates:void (el:EVGElement) {
-        el.isHovered = ((strlen hoverTid) > 0) && (el.id == hoverTid)
+        UiTree.markHover(el hoverTid)
+        this.markFocusPress(el)
+    }
+
+    fn markFocusPress:void (el:EVGElement) {
         el.isFocused = ((strlen focusId) > 0) && (el.id == focusId)
         el.isPressed = ((strlen pressTidValue) > 0) && (el.id == pressTidValue)
         def i:int 0
         while (i < (array_length el.children)) {
-            this.markStates((itemAt el.children i))
+            this.markFocusPress((itemAt el.children i))
             i = (i + 1)
         }
     }

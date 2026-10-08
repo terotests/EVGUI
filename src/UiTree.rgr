@@ -19,6 +19,7 @@
 
 Import "pkg:evg/EVGElement.rgr"
 Import "pkg:evg/EVGA11yTree.rgr"
+Import "pkg:evg/EVGStyleSheet.rgr"
 Import "UiCtl.rgr"
 
 class UiTree {
@@ -329,6 +330,114 @@ class UiTree {
         while (i < (array_length root.children)) {
             def c:EVGElement (itemAt root.children i)
             if (UiTree.reachable(c id)) {
+                return true
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    ; Put the pointer's hover on a tree, as a browser does and one step more.
+    ; The element whose id is `id` is hovered, and so is every element around
+    ; it: the pointer over a select's value is over its trigger too. So are
+    ; the parts of it that have no id of their own: a test id is what a hit
+    ; test can name, so it is usually the box around a control's painted
+    ; parts — a tab's body and its slanted edges — and a rule on one of those
+    ; (`.ui-doctab-body:hover`) has to see the hover the tab got. A part with
+    ; an id of its own is a target of its own (a tab's ×). "" clears it all.
+    sfn markHover:void (el:EVGElement id:string) {
+        UiTree.markHoverIn(el id false)
+    }
+
+    ; → whether `el` holds the hovered element (itself or below it).
+    sfn markHoverIn:boolean (el:EVGElement id:string inside:boolean) {
+        def own:boolean ((strlen el.id) > 0)
+        def target:boolean false
+        def part:boolean false
+        if ((strlen id) > 0) {
+            if own {
+                target = (el.id == id)
+            } {
+                part = inside
+            }
+        }
+        def holds:boolean target
+        def i:int 0
+        while (i < (array_length el.children)) {
+            if (UiTree.markHoverIn((itemAt el.children i) id (target || part))) {
+                holds = true
+            }
+            i = (i + 1)
+        }
+        el.isHovered = (holds || part)
+        return holds
+    }
+
+    ; The classes a sheet has a `:hover` rule for, each once. A surface that
+    ; hit-tests its own tree (an app's chrome, outside any UiHost) asks
+    ; `hoverIdAt` with these, so a hover look is a CSS rule and nothing more.
+    sfn hoverClasses:[string] (sheet:EVGStyleSheet) {
+        def out:[string]
+        def i:int 0
+        while (i < (array_length sheet.rules)) {
+            def r:EVGStyleRule (itemAt sheet.rules i)
+            if ((r.pseudo == (EVGPseudo.hover())) && ((UiTree.listHas(out r.className)) == false)) {
+                push out r.className
+            }
+            i = (i + 1)
+        }
+        return out
+    }
+
+    sfn listHas:boolean (list:[string] s:string) {
+        def i:int 0
+        while (i < (array_length list)) {
+            if ((itemAt list i) == s) {
+                return true
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    ; The id of the topmost element under (x, y) that a hover rule would show
+    ; on: it has an id (what `markHover` takes), and it or one of its id-less
+    ; parts wears a class in `classes`. Paint order, backwards: a later sibling
+    ; and a child are drawn over what comes before them. "" for none.
+    sfn hoverIdAt:string (el:EVGElement x:double y:double classes:[string]) {
+        def i:int ((array_length el.children) - 1)
+        while (i >= 0) {
+            def hit:string (UiTree.hoverIdAt((itemAt el.children i) x y classes))
+            if ((strlen hit) > 0) {
+                return hit
+            }
+            i = (i - 1)
+        }
+        if ((strlen el.id) == 0) {
+            return ""
+        }
+        if ((((x < el.calculatedX) || (y < el.calculatedY)) || (x >= (el.calculatedX + el.calculatedWidth))) || (y >= (el.calculatedY + el.calculatedHeight))) {
+            return ""
+        }
+        if (UiTree.wearsHover(el classes)) {
+            return el.id
+        }
+        return ""
+    }
+
+    sfn wearsHover:boolean (el:EVGElement classes:[string]) {
+        def own:[string] (UiTree.splitWs(el.className))
+        def k:int 0
+        while (k < (array_length own)) {
+            if (UiTree.listHas(classes (itemAt own k))) {
+                return true
+            }
+            k = (k + 1)
+        }
+        def i:int 0
+        while (i < (array_length el.children)) {
+            def c:EVGElement (itemAt el.children i)
+            if (((strlen c.id) == 0) && (UiTree.wearsHover(c classes))) {
                 return true
             }
             i = (i + 1)

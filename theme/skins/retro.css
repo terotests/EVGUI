@@ -216,13 +216,14 @@
   color: var(--retro-ink);
   font-weight: 700;
 }
-.theme-retro .ui-tab:hover { background-color: var(--retro-screen-3); }
+.theme-retro .ui-tab:hover { background-color: var(--retro-screen-3); color: var(--retro-ink); }
 .theme-retro .ui-tab-state-active {
   background: linear-gradient(180deg, var(--retro-play-a), var(--retro-play-b));
   border-color: var(--retro-edge);
   color: var(--retro-btn-ink);
   shadow-color: var(--retro-glow); shadow-radius: 6px; shadow-offset-y: 0px;
 }
+.theme-retro .ui-tab-state-active:hover { color: var(--retro-btn-ink); }
 .theme-retro .ui-tabpanel {
   background-color: var(--retro-screen);
   border-color: var(--retro-edge);
@@ -244,6 +245,12 @@
 .theme-retro .ui-doctab-wing-state-ghost { fill: var(--retro-hot-b); }
 .theme-retro .ui-doctab-body-state-ghost { background-color: var(--retro-hot-b); shadow-color: var(--retro-glow); shadow-radius: 10px; shadow-offset-y: 3px; }
 .theme-retro .ui-doctab-name-state-ghost { color: var(--retro-btn-ink); }
+.theme-retro .ui-doctab-wing:hover { fill: var(--retro-chin-a); }
+.theme-retro .ui-doctab-body:hover { background-color: var(--retro-chin-a); }
+.theme-retro .ui-doctab-wing-state-active:hover { fill: var(--retro-shell-a); }
+.theme-retro .ui-doctab-body-state-active:hover { background-color: var(--retro-shell-a); }
+.theme-retro .ui-doctab-wing-state-slot:hover { fill: rgba(0, 0, 0, 0); }
+.theme-retro .ui-doctab-body-state-slot:hover { background-color: rgba(0, 0, 0, 0); }
 .theme-retro .ui-doctab-add {
   background: linear-gradient(180deg, var(--retro-btn-a), var(--retro-btn-b));
   border: 1.5px solid var(--retro-edge);
@@ -492,3 +499,12 @@
 .theme-retro .ch-pf-on { border-color: var(--retro-hot-b); }
 .theme-retro .ch-pf-c { border-color: var(--retro-screen-2); }
 .theme-retro .ch-pf-c-on { border-color: var(--retro-ink); }
+/* under the pointer: the lit cap of the player's hot buttons */
+.theme-retro .ch-sendb:hover,
+.theme-retro .ch-latest:hover { background: linear-gradient(180deg, var(--retro-hot-a), var(--retro-hot-b)); }
+.theme-retro .ch-sendb-off:hover { background: linear-gradient(180deg, var(--retro-screen-3), var(--retro-screen-2)); }
+.theme-retro .ch-sug:hover { background-color: var(--retro-screen-3); }
+.theme-retro .ch-sug-on:hover { background-color: var(--retro-fill-b); }
+.theme-retro .ch-pic:hover { border-color: var(--retro-ink-dim); }
+.theme-retro .ch-pf-c:hover { border-color: var(--retro-ink-dim); }
+.theme-retro .ch-pf-c-on:hover { border-color: var(--retro-ink); }

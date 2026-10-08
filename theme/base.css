@@ -74,6 +74,15 @@
 .ui-button-ghost { background-color: rgba(0,0,0,0); color: #2563eb; border-color: transparent; }
 .ui-button-danger { background-color: #dc2626; color: #ffffff; border-color: #dc2626; }
 
+/* Under the pointer: a step deeper in the variant's own colour. Every variant
+   says its own, because `:hover` outranks a plain class — one rule for
+   `.ui-button` would paint a primary button grey. */
+.ui-button:hover { background-color: #cbd5e1; }
+.ui-button-primary:hover { background-color: #1d4ed8; border-color: #1d4ed8; }
+.ui-button-secondary:hover { background-color: #cbd5e1; }
+.ui-button-ghost:hover { background-color: rgba(37, 99, 235, 0.08); }
+.ui-button-danger:hover { background-color: #b91c1c; border-color: #b91c1c; }
+
 /* Held down. Not latched — a button has nothing to remember, so this is
    painted while the finger is on it and painted back when it lifts. */
 .ui-button-state-pressed { transform: scale(0.97); }
@@ -82,6 +91,11 @@
 .theme-dark .ui-button { background-color: #1e293b; color: #e2e8f0; border-color: #334155; }
 .theme-dark .ui-button-secondary { background-color: #1e293b; color: #e2e8f0; border-color: #334155; }
 .theme-dark .ui-button-ghost { background-color: rgba(0,0,0,0); color: #60a5fa; }
+.theme-dark .ui-button:hover { background-color: #334155; }
+.theme-dark .ui-button-secondary:hover { background-color: #334155; }
+.theme-dark .ui-button-ghost:hover { background-color: rgba(96, 165, 250, 0.12); }
+.theme-dark .ui-button-primary:hover { background-color: #1d4ed8; }
+.theme-dark .ui-button-danger:hover { background-color: #b91c1c; }
 .theme-dark .ui-button-icon { stroke: #e2e8f0; }
 .theme-dark .ui-button-icon-ui-button-ghost { stroke: #60a5fa; }
 .theme-dark .ui-button-icon-ui-button-primary { stroke: #ffffff; }
@@ -625,6 +639,8 @@
 .theme-dark .ui-radio-state-checked { background-color: #3b82f6; color: #0f172a; }
 .theme-dark .ui-tab { background-color: #1e293b; color: #cbd5e1; }
 .theme-dark .ui-tab-state-active { background-color: #3b82f6; color: #0f172a; }
+.theme-dark .ui-tab:hover { background-color: #334155; }
+.theme-dark .ui-tab-state-active:hover { background-color: #3b82f6; }
 .theme-dark .ui-tabpanel { background-color: #0b1222; color: #cbd5e1; }
 .theme-dark .ui-accordion-trigger { background-color: #1e293b; color: #e2e8f0; }
 .theme-dark .ui-accordion-content { background-color: #0b1222; color: #cbd5e1; }
@@ -1191,6 +1207,8 @@
 .ui-togglegroup-item:hover,
 .ui-accordion-trigger:hover,
 .ui-collapsible-trigger:hover { background-color: #e2e8f0; }
+/* the open tab keeps its colour under the pointer */
+.ui-tab-state-active:hover { background-color: #2563eb; }
 
 .ui-checkbox-box:hover,
 .ui-switch-track:hover { background-color: #cbd5e1; }
@@ -1852,15 +1870,25 @@
 .ui-doctab-name { font-size: 13px; color: #52525b; white-space: nowrap; height: 18px; line-height: 18px; flex-shrink: 1; }
 .ui-doctab-name-state-active { color: #09090b; }
 .ui-doctab-close { width: 16px; min-width: 16px; height: 16px; line-height: 16px; border-radius: 8px; text-align: center; font-size: 12px; color: #ffffff; background-color: #a1a1aa; }
+/* a tab under the pointer lights a step toward the open one (its body and
+   edges share the tab's hover: UiTree.markHover); the open one stays as it is */
+.ui-doctab-wing:hover { fill: #f1f1f3; }
+.ui-doctab-body:hover { background-color: #f1f1f3; }
+.ui-doctab-wing-state-active:hover { fill: #ffffff; }
+.ui-doctab-body-state-active:hover { background-color: #ffffff; }
+.ui-doctab-close:hover { background-color: #52525b; }
 /* a tab dragged: its place an empty slot where it lands, a see-through copy following the pointer */
 .ui-doctab-wing-state-slot { fill: rgba(0,0,0,0); }
 .ui-doctab-body-state-slot { background-color: rgba(0,0,0,0); border: 2px dashed #a1a1aa; border-radius: 6px; }
 .ui-doctab-name-state-slot { color: rgba(0,0,0,0); }
 .ui-doctab-wing-state-ghost { fill: #bfdbfe; }
 .ui-doctab-body-state-ghost { background-color: #bfdbfe; shadow-color: rgba(30, 64, 175, 0.35); shadow-radius: 10px; shadow-offset-y: 3px; }
+.ui-doctab-wing-state-slot:hover { fill: rgba(0,0,0,0); }
+.ui-doctab-body-state-slot:hover { background-color: rgba(0,0,0,0); }
 .ui-doctab-name-state-ghost { color: #1e3a8a; }
 .ui-doctab-ghost { opacity: 0.8; }
 .ui-doctab-add { width: 22px; height: 22px; line-height: 22px; border-radius: 11px; margin: 0 0 5px 8px; text-align: center; font-size: 16px; color: #ffffff; background-color: #a1a1aa; cursor: pointer; }
+.ui-doctab-add:hover { background-color: #71717a; }
 
 /* --- drawing palette ------------------------------------------------------------
  * DrawToolsCtl: a floating bar of tools, colours and line sizes beside what is
@@ -1896,7 +1924,9 @@
   border: 2px solid transparent;
   border-radius: 13px;
 }
+.drawtools-swatch:hover { border-color: rgba(255, 255, 255, 0.45); }
 .drawtools-swatch-on { border-color: #fafafa; }
+.drawtools-swatch-on:hover { border-color: #fafafa; }
 .drawtools-dot { width: 16px; height: 16px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.35); }
 .drawtools-size {
   display: flex; align-items: center; justify-content: center;
@@ -2056,6 +2086,7 @@
 .ch-emb-row { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 10px; }
 .ch-pics { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
 .ch-pic { border-radius: 6px; border: 1px solid #e4e4e7; background-color: #f4f4f5; cursor: pointer; flex-shrink: 0; }
+.ch-pic:hover { border-color: #a1a1aa; }
 .ch-docs { display: flex; flex-direction: column; flex-wrap: nowrap; gap: 4px; margin: 4px 0; }
 .ch-doc { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 10px; width: 300px; padding: 8px 10px; border: 1px solid #e4e4e7; border-radius: 6px; background-color: #ffffff; cursor: pointer; }
 .ch-doc:hover { background-color: #f8fafc; }
@@ -2097,6 +2128,7 @@
   flex-shrink: 0; height: 28px; line-height: 28px; padding: 0 14px; margin-top: -40px; margin-bottom: 12px; align-self: center; font-size: 12px; font-weight: bold;
   color: #ffffff; background-color: #1d4ed8; border-radius: 14px; shadow-color: rgba(0, 0, 0, 0.2); shadow-radius: 6px; cursor: pointer;
 }
+.ch-latest:hover { background-color: #1e40af; }
 
 .ch-composer { flex-shrink: 0; padding: 0 24px 20px 24px; }
 .ch-frame { display: flex; flex-direction: column; flex-wrap: nowrap; border: 1px solid #a1a1aa; border-radius: 8px; background-color: #f4f4f5; }
@@ -2119,6 +2151,8 @@
 .ch-grow { flex-grow: 1; }
 .ch-sendb { width: 32px; height: 26px; line-height: 26px; text-align: center; font-size: 13px; color: #ffffff; background-color: #15803d; border-radius: 4px; cursor: pointer; }
 .ch-sendb-off { color: #a1a1aa; background-color: #f4f4f5; }
+.ch-sendb:hover { background-color: #166534; }
+.ch-sendb-off:hover { background-color: #f4f4f5; }
 .ch-ro { padding: 12px; font-size: 13px; color: #71717a; text-align: center; border: 1px solid #e4e4e7; border-radius: 8px; background-color: #f8fafc; }
 .ch-sugs {
   display: flex; flex-direction: column; flex-wrap: nowrap; width: 300px; padding: 4px 0; margin-bottom: 4px;
@@ -2126,6 +2160,8 @@
 }
 .ch-sug { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 8px; height: 28px; padding: 0 10px; cursor: pointer; }
 .ch-sug-on { background-color: #1d4ed8; }
+.ch-sug:hover { background-color: #f4f4f5; }
+.ch-sug-on:hover { background-color: #1d4ed8; }
 .ch-sug-g { width: 20px; font-size: 16px; text-align: center; }
 .ch-sug-av { width: 20px; height: 20px; border-radius: 4px; }
 .ch-sug-t { font-size: 13px; color: #18181b; white-space: nowrap; }
@@ -2171,6 +2207,8 @@
 .ch-pf-sw { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; }
 .ch-pf-c { width: 24px; height: 24px; border-radius: 12px; border: 2px solid #ffffff; cursor: pointer; }
 .ch-pf-c-on { border-color: #18181b; }
+.ch-pf-c:hover { border-color: #a1a1aa; }
+.ch-pf-c-on:hover { border-color: #18181b; }
 .ch-pf-acts { display: flex; flex-direction: row; flex-wrap: nowrap; justify-content: flex-end; gap: 8px; margin-top: 6px; }
 .ch-btn { height: 28px; line-height: 28px; padding: 0 12px; font-size: 13px; color: #18181b; border: 1px solid #d4d4d8; border-radius: 6px; background-color: #ffffff; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
 .ch-btn:hover { background-color: #f4f4f5; }
