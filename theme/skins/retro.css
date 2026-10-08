@@ -216,14 +216,15 @@
   color: var(--retro-ink);
   font-weight: 700;
 }
-.theme-retro .ui-tab:hover { background-color: var(--retro-screen-3); color: var(--retro-ink); }
+/* a tab's resting background is a clear gradient, which a colour would sit under */
+.theme-retro .ui-tab:hover { background: linear-gradient(180deg, var(--retro-screen-3), var(--retro-screen-3)); color: var(--retro-ink); }
 .theme-retro .ui-tab-state-active {
   background: linear-gradient(180deg, var(--retro-play-a), var(--retro-play-b));
   border-color: var(--retro-edge);
   color: var(--retro-btn-ink);
   shadow-color: var(--retro-glow); shadow-radius: 6px; shadow-offset-y: 0px;
 }
-.theme-retro .ui-tab-state-active:hover { color: var(--retro-btn-ink); }
+.theme-retro .ui-tab-state-active:hover { background: linear-gradient(180deg, var(--retro-play-a), var(--retro-play-b)); color: var(--retro-btn-ink); }
 .theme-retro .ui-tabpanel {
   background-color: var(--retro-screen);
   border-color: var(--retro-edge);
