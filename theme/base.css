@@ -1131,6 +1131,9 @@
 .ui-sortable-item:focus,
 .ui-dropdownmenu-item:focus,
 .ui-contextmenu-item:focus { background-color: #e0e7ff; }
+/* a menu drawn by a host of one frame (ChannelCtl's message menu): the row
+   the keys or the pointer are on */
+.ch-cm-on { background-color: #e0e7ff; }
 
 /* --- motion ------------------------------------------------------------------
    Everything above says what a control LOOKS like. This says what it looks
@@ -2099,6 +2102,9 @@
 }
 
 .ch-composer { flex-shrink: 0; padding: 0 24px 20px 24px; }
+.ch-editing { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 8px; height: 22px; flex-shrink: 0; }
+.ch-editing-t { font-size: 12px; font-weight: bold; color: #b45309; white-space: nowrap; }
+.ch-editing-k { font-size: 12px; color: #71717a; white-space: nowrap; }
 .ch-frame { display: flex; flex-direction: column; flex-wrap: nowrap; border: 1px solid #a1a1aa; border-radius: 8px; background-color: #f4f4f5; }
 .ch-cbody { display: flex; flex-direction: column; flex-wrap: nowrap; flex-grow: 1; margin-top: -8px; background-color: #ffffff; border-radius: 7px; }
 .ch-field { display: flex; flex-direction: row; align-items: flex-start; min-height: 36px; padding: 8px 10px 0 10px; cursor: text; flex-shrink: 0; width: 100%; border: 1px solid rgba(0, 0, 0, 0); background-color: rgba(0, 0, 0, 0); }

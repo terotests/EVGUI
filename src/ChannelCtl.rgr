@@ -19,6 +19,7 @@
 ; for the host (`take`), one string each, TAB between the fields:
 ;
 ;   send     thread text           post (thread "" the channel)
+;   edit     message-id text       one's own message's new text
 ;   react    message-id emoji      add or take back a reaction
 ;   delete   message-id            delete one's own message
 ;   thread   root-id               a thread was opened: load its replies
@@ -28,7 +29,7 @@
 ;   channel  name                  open the room called #name
 ;   describe text                  the new description
 ;   profile  name avatar color     the reader's new name and character
-;   copy     text                  put a message's text on the clipboard
+;   copy     text                  put a message's text (or a link) on the clipboard
 ;   close                          the × in the head (`closable`)
 ;
 ; The host answers with what the server says (`feed.put`, `thread.put`):
@@ -48,6 +49,14 @@
 ; letters lists emojis, people or channels above the composer: Up/Down
 ; choose, Enter or Tab puts it in, Escape closes the list.
 ;
+; THE MESSAGE MENU (`openMenuAt`, the host's right click on a message): a
+; MenuCtl in context mode at the point, with Add reaction ▸ (the quick
+; six), Reply in thread, Quote (the text as "> " lines into that pane's
+; composer), Open link / Copy link (on a link or a file), Copy text, and on
+; one's own message Edit message and Delete message. Edit puts the text in
+; the composer (the draft there is kept aside and comes back): Enter asks
+; `edit`, Escape gives up. An archived room keeps only the copying rows.
+;
 ; NOT HERE: selecting part of a message's words (Copy takes the whole
 ; message), a full emoji picker for reactions (six quick ones on the
 ; hover bar; ":" in the composer finds any emoji).
@@ -55,6 +64,7 @@
 
 Import "UiCtl.rgr"
 Import "InputCtl.rgr"
+Import "MenuCtl.rgr"
 Import "UiTree.rgr"
 Import "UiChatText.rgr"
 Import "UiChatFeed.rgr"
@@ -154,6 +164,22 @@ class ChannelCtl extends UiCtl {
     def requests:[string]
     def quick:[string]
 
+    ; --- a message's context menu -----------------------------------------------------------
+    def menu:MenuCtl (new MenuCtl())
+    ; the message it is for (where m, r, o and its seq), the link or file
+    ; pressed in it ("" none), and the point it opened at
+    def menuWhere:string ""
+    def menuSeq:int 0
+    def menuLink:string ""
+    def menuX:double 0.0
+    def menuY:double 0.0
+    ; one's own message being edited in a composer ("" none), and the draft
+    ; that was there before
+    def editMain:string ""
+    def editThread:string ""
+    def keptMain:string ""
+    def keptThread:string ""
+
     ; --- files ------------------------------------------------------------------------------
     ; files waiting to go with the next message (the host puts them in the
     ; room's files first: addPending), and how many are still on the way
@@ -219,6 +245,16 @@ class ChannelCtl extends UiCtl {
     def attachText:string "Attach a file"
     def uploadingText:string "Uploading…"
     def removeText:string "Remove"
+    def addReactionText:string "Add reaction"
+    def quoteText:string "Quote"
+    def copyTextText:string "Copy text"
+    def openLinkText:string "Open link"
+    def copyLinkText:string "Copy link"
+    def editMessageText:string "Edit message"
+    def deleteMessageText:string "Delete message"
+    def editingText:string "Editing message"
+    def escCancelsText:string "Esc to cancel"
+    def messageMenuText:string "Message"
 
     Constructor () {
         def q:[string] ([] _:string ("👍" "❤️" "😂" "🎉" "👀" "✅"))
@@ -240,6 +276,8 @@ class ChannelCtl extends UiCtl {
         tinput.maxLength = 40000
         dinput.maxLength = 500
         pinput.maxLength = 40
+        menu.tid = (id + "-cm")
+        menu.contextMode = true
     }
 
     ; --- the host's side ----------------------------------------------------------------------
@@ -343,6 +381,11 @@ class ChannelCtl extends UiCtl {
         peopleOpen = false
         hoverSeq = 0
         this.closeSug()
+        this.closeMenu()
+        editMain = ""
+        editThread = ""
+        keptMain = ""
+        keptThread = ""
         input.setValue("")
         input.moveTo(0 false)
         ; files waiting were put in the other room's files
@@ -452,6 +495,12 @@ class ChannelCtl extends UiCtl {
     }
 
     fn closeThread:void () {
+        if ((strlen editThread) > 0) {
+            this.endEdit(true)
+        }
+        if (menuWhere != "m") {
+            this.closeMenu()
+        }
         threadId = ""
         tfeed.clear()
         tfeed.thread = ""
@@ -493,6 +542,11 @@ class ChannelCtl extends UiCtl {
     }
 
     fn typeChar:boolean (target:string ch:string) {
+        ; Space chooses the menu's row, a letter finds one
+        if menu.open {
+            this.menuKey(ch)
+            return true
+        }
         if ((this.hasField()) == false) {
             return false
         }
@@ -661,6 +715,16 @@ class ChannelCtl extends UiCtl {
         def code:boolean (this.codeOn(inThread))
         if (code && ((strlen t) > 0)) {
             t = ("```\n" + (ChannelCtl.codeBody(f.value)) + "\n```")
+        }
+        ; one's own message edited: its new text (files stay as they were)
+        def ed:string (this.editing(inThread))
+        if ((strlen ed) > 0) {
+            if ((strlen t) == 0) {
+                return false
+            }
+            this.ask(("edit\t" + ed + "\t" + t))
+            this.endEdit(inThread)
+            return true
         }
         def pend:[UiFeedFile] (this.pending(inThread))
         if (((strlen t) == 0) && ((array_length pend) == 0)) {
@@ -845,6 +909,10 @@ class ChannelCtl extends UiCtl {
     }
 
     fn keyDownWith:string (target:string key:string shift:boolean ctrl:boolean) {
+        if menu.open {
+            this.menuKey(key)
+            return ""
+        }
         if (this.sugOpen()) {
             def n:int (array_length sugItems)
             if (key == "ArrowDown") {
@@ -900,6 +968,10 @@ class ChannelCtl extends UiCtl {
                 peopleOpen = false
                 return ""
             }
+            if ((strlen (this.editing(inThread))) > 0) {
+                this.endEdit(inThread)
+                return ""
+            }
             if inThread {
                 this.closeThread()
             }
@@ -925,6 +997,288 @@ class ChannelCtl extends UiCtl {
         f.keyDownWith(f.tid key shift ctrl)
         this.findSug()
         return ""
+    }
+
+    ; --- a message's context menu ------------------------------------------------------------
+
+    fn menuOpen:boolean () {
+        return menu.open
+    }
+
+    ; The menu of the message `target` is part of, at x, y (the channel's own
+    ; coordinates). False when `target` is no message, or a deleted one.
+    fn openMenuAt:boolean (target:string x:double y:double) {
+        this.closeMenu()
+        def w:string (this.msgWhere(target))
+        if ((strlen w) == 0) {
+            return false
+        }
+        def seq:int (this.msgSeq(target))
+        def m:UiFeedMsg (this.menuMsgOf(w seq))
+        if (((strlen m.id) == 0) || m.deleted) {
+            return false
+        }
+        ; a link or a file under the pointer
+        def link:string ""
+        def act:string (this.msgAction(w seq (this.msgPart(target))))
+        if ((indexOf act "link\t") == 0) {
+            link = (substring act 5 (strlen act))
+        }
+        if ((indexOf act "file\t") == 0) {
+            def fs:[string] (strsplit act "\t")
+            link = (itemAt fs 1)
+        }
+        def mm (new MenuCtl())
+        mm.tid = (tid + "-cm")
+        mm.name = messageMenuText
+        mm.contextMode = true
+        if (readOnly == false) {
+            def rx:UiItem (mm.addSub("react" addReactionText false))
+            for quick q:string qi {
+                MenuCtl.addKid(rx ("rx" + (to_string qi)) q false)
+            }
+            if (w == "m") {
+                mm.addItem("reply" replyInThreadText false)
+            }
+            mm.addItem("quote" quoteText false)
+            mm.addSeparator()
+        }
+        if ((strlen link) > 0) {
+            mm.addItem("open" openLinkText false)
+            mm.addItem("copylink" copyLinkText false)
+        }
+        mm.addItem("copy" copyTextText ((strlen m.text) == 0))
+        if ((m.who == me) && (readOnly == false)) {
+            mm.addSeparator()
+            mm.addItem("edit" editMessageText ((strlen m.text) == 0))
+            mm.addItem("delete" deleteMessageText false)
+            mm.setVariant("delete" "destructive")
+        }
+        mm.openMenu()
+        menu = mm
+        menuWhere = w
+        menuSeq = seq
+        menuLink = link
+        menuX = x
+        menuY = y
+        ; the message stays lit while its menu is open
+        hoverWhere = w
+        hoverSeq = seq
+        this.closeSug()
+        return true
+    }
+
+    fn closeMenu:void () {
+        if menu.open {
+            menu.closeMenu()
+        }
+        menuWhere = ""
+        menuSeq = 0
+        menuLink = ""
+    }
+
+    ; a message by where it is drawn ("o" the open thread's root)
+    fn menuMsgOf:UiFeedMsg (where:string seq:int) {
+        if (where == "o") {
+            return (this.threadRoot())
+        }
+        return (this.msgOf(where seq))
+    }
+
+    fn inMenu:boolean (target:string) {
+        return ((indexOf target (menu.tid + "-")) == 0)
+    }
+
+    ; the value of the row `rtid` when choosing it does something ("" a
+    ; submenu's row, a disabled one or none)
+    fn menuValueAt:string (rtid:string) {
+        def idx:int (menu.rowIndexOf(rtid))
+        if (idx < 0) {
+            return ""
+        }
+        if ((itemAt menu.rowIsSub idx) || (itemAt menu.rowDisabled idx)) {
+            return ""
+        }
+        def it:UiItem (itemAt menu.rowItem idx)
+        return it.value
+    }
+
+    ; a press while the menu is open: a row chosen, a submenu's row opens
+    ; it; anywhere else the menu closes and nothing else happens
+    fn menuPress:string (target:string) {
+        if ((this.inMenu(target)) == false) {
+            this.closeMenu()
+            return target
+        }
+        def v:string (this.menuValueAt(target))
+        if ((strlen v) > 0) {
+            this.menuChoose(v)
+            return target
+        }
+        if ((menu.rowIndexOf(target)) >= 0) {
+            menu.activate(target)
+        }
+        return target
+    }
+
+    ; the pointer over the menu: its row lights up, a submenu's row opens
+    ; it (at once: this host has no clock for the menu's delay)
+    fn menuHover:void (target:string) {
+        if ((this.inMenu(target)) == false) {
+            return
+        }
+        menu.hover(target)
+        if ((strlen menu.pendingTid) > 0) {
+            menu.tickCtl(menu.subOpenDelayMs)
+        }
+    }
+
+    ; a key while the menu is open: Up/Down walk it, Right/Left in and out
+    ; of Add reaction, Enter or Space chooses, Escape closes
+    fn menuKey:void (key:string) {
+        def at:string menu.activeTid
+        if ((strlen at) == 0) {
+            at = (menu.activeOwner())
+        }
+        if (UiCtl.activatesOn(key)) {
+            def v:string (this.menuValueAt(at))
+            if ((strlen v) > 0) {
+                this.menuChoose(v)
+                return
+            }
+        }
+        def got:string (menu.keyDown(at key))
+        if ((menu.rowIndexOf(got)) >= 0) {
+            menu.activeTid = got
+        }
+        if (menu.open == false) {
+            this.closeMenu()
+        }
+    }
+
+    ; what a row of the menu does to its message
+    fn menuChoose:void (v:string) {
+        def w:string menuWhere
+        def m:UiFeedMsg (this.menuMsgOf(w menuSeq))
+        def link:string menuLink
+        this.closeMenu()
+        if ((strlen m.id) == 0) {
+            return
+        }
+        def inThread:boolean (w != "m")
+        if (((indexOf v "rx") == 0) && ((strlen v) > 2)) {
+            def k:int (ChannelCtl.digits((substring v 2 (strlen v))))
+            if ((k >= 0) && (k < (array_length quick))) {
+                this.ask(("react\t" + m.id + "\t" + (itemAt quick k)))
+            }
+            return
+        }
+        if (v == "reply") {
+            this.openThread(m.id)
+            return
+        }
+        if (v == "quote") {
+            this.quote(m inThread)
+            return
+        }
+        if (v == "open") {
+            this.ask(("link\t" + link))
+            return
+        }
+        if (v == "copylink") {
+            this.ask(("copy\t" + link))
+            return
+        }
+        if (v == "copy") {
+            this.ask(("copy\t" + m.text))
+            return
+        }
+        if (v == "edit") {
+            this.startEdit(m inThread)
+            return
+        }
+        if (v == "delete") {
+            if (editMain == m.id) {
+                this.endEdit(false)
+            }
+            if (editThread == m.id) {
+                this.endEdit(true)
+            }
+            this.ask(("delete\t" + m.id))
+        }
+    }
+
+    ; "> " in front of each of the message's lines, after what the
+    ; composer of its pane already has
+    sfn quoted:string (said:string) {
+        def lines:[string] (strsplit said "\n")
+        def out:string ""
+        for lines l:string i {
+            out = (out + "> " + l + "\n")
+        }
+        return out
+    }
+
+    fn quote:void (m:UiFeedMsg inThread:boolean) {
+        if readOnly {
+            return
+        }
+        keys = (? inThread "thread" "main")
+        def f:InputCtl (this.field())
+        def v:string f.value
+        if (((strlen v) > 0) && ((ChannelCtl.endsIn(v "\n")) == false)) {
+            v = (v + "\n")
+        }
+        def nv:string (v + (ChannelCtl.quoted(m.text)))
+        f.applyEdit(nv (strlen nv) (strlen nv))
+    }
+
+    fn editing:string (inThread:boolean) {
+        return (? inThread editThread editMain)
+    }
+
+    ; one's own message into its pane's composer, the draft there kept aside
+    fn startEdit:void (m:UiFeedMsg inThread:boolean) {
+        if ((readOnly || (m.who != me)) || m.deleted) {
+            return
+        }
+        keys = (? inThread "thread" "main")
+        def f:InputCtl (this.field())
+        if ((strlen (this.editing(inThread))) == 0) {
+            if inThread {
+                keptThread = f.value
+            } {
+                keptMain = f.value
+            }
+        }
+        if inThread {
+            editThread = m.id
+        } {
+            editMain = m.id
+        }
+        this.setCode(inThread false)
+        f.setValue(m.text)
+        f.moveTo((strlen m.text) false)
+        this.closeSug()
+    }
+
+    ; the edit is over (saved or given up): the kept draft comes back
+    fn endEdit:void (inThread:boolean) {
+        def f:InputCtl (? inThread tinput input)
+        def back:string (? inThread keptThread keptMain)
+        if inThread {
+            editThread = ""
+            keptThread = ""
+        } {
+            editMain = ""
+            keptMain = ""
+        }
+        this.setCode(inThread false)
+        f.setValue(back)
+        f.moveTo((strlen back) false)
+        f.scrollX = 0.0
+        f.scrollY = 0.0
+        this.closeSug()
     }
 
     ; --- the head ------------------------------------------------------------------------------
@@ -1044,6 +1398,10 @@ class ChannelCtl extends UiCtl {
     }
 
     fn hover:string (target:string) {
+        if menu.open {
+            this.menuHover(target)
+            return ""
+        }
         def w:string (this.msgWhere(target))
         if ((strlen w) == 0) {
             if (((indexOf target (tid + "-feed")) == 0) || ((indexOf target (tid + "-tfeed")) == 0)) {
@@ -1059,6 +1417,9 @@ class ChannelCtl extends UiCtl {
     }
 
     fn unhover:string () {
+        if menu.open {
+            return ""
+        }
         hoverSeq = 0
         hoverWhere = ""
         return ""
@@ -1070,6 +1431,10 @@ class ChannelCtl extends UiCtl {
 
     ; a press in a text field: the caret, a word, a drag
     fn textPointerDownAt:boolean (target:string px:double py:double clicks:int shift:boolean) {
+        ; a press with the menu open closes it first (activate)
+        if menu.open {
+            return false
+        }
         def f:InputCtl input
         def which:string ""
         if (input.owns(target)) {
@@ -1147,6 +1512,9 @@ class ChannelCtl extends UiCtl {
     }
 
     fn activate:string (target:string) {
+        if menu.open {
+            return (this.menuPress(target))
+        }
         def t:string (tid + "-")
         if (target == (t + "desc")) {
             this.editDesc()
@@ -1268,6 +1636,13 @@ class ChannelCtl extends UiCtl {
     fn pressable:boolean (target:string) {
         def t:string (tid + "-")
         if ((indexOf target t) != 0) {
+            return false
+        }
+        if menu.open {
+            if (this.inMenu(target)) {
+                def idx:int (menu.rowIndexOf(target))
+                return ((idx >= 0) && ((itemAt menu.rowDisabled idx) == false))
+            }
             return false
         }
         def rest:string (substring target (strlen t) (strlen target))
@@ -1557,7 +1932,30 @@ class ChannelCtl extends UiCtl {
         if profileOpen {
             root.addChild((this.profileEl()))
         }
+        if menu.open {
+            root.addChild((this.menuEl()))
+        }
         rootEl = root
+    }
+
+    ; the message menu at its point: its trigger is an empty spot there, so
+    ; the menu opens under it (or above, where the page ends); the host's
+    ; UiHost.fitSurfaces makes the card as wide as its rows
+    fn menuEl:EVGElement () {
+        menu.build()
+        def r:EVGElement (unwrap menu.rootEl)
+        UiTree.inline(r "position" "absolute")
+        UiTree.inline(r "left" ((to_string menuX) + "px"))
+        UiTree.inline(r "top" ((to_string menuY) + "px"))
+        ; the row the keys or the pointer are on (a host of one frame has no
+        ; :focus of its own to show it)
+        if ((strlen menu.activeTid) > 0) {
+            def on@(optional):EVGElement (UiTree.findById(r menu.activeTid))
+            if (!null? on) {
+                UiTree.addClass((unwrap on) "ch-cm-on")
+            }
+        }
+        return r
     }
 
     fn headEl:EVGElement () {
@@ -1747,7 +2145,8 @@ class ChannelCtl extends UiCtl {
             body.addChild((this.threadSummary(m id)))
         }
         row.addChild(body)
-        if ((hovered && (m.deleted == false)) && (readOnly == false)) {
+        ; (not under the message's open menu, which says the same)
+        if (((hovered && (m.deleted == false)) && (readOnly == false)) && (menu.open == false)) {
             row.addChild((this.actionsEl(m id where)))
         }
         return row
@@ -2153,10 +2552,20 @@ class ChannelCtl extends UiCtl {
         if (this.codeOn(inThread)) {
             boxH = (boxH + ChannelCtl.codeExtra())
         }
+        def ed:boolean ((strlen (this.editing(inThread))) > 0)
+        if ed {
+            boxH = (boxH + ChannelCtl.editExtra())
+        }
         UiTree.inline(box "height" ((to_string boxH) + "px"))
         def mineKeys:boolean ((keys == "thread") == inThread)
         if ((this.sugOpen()) && mineKeys) {
             box.addChild((this.sugEl()))
+        }
+        if ed {
+            def band:EVGElement (UiTree.div((tid + "-" + pre + "editing") "ch-editing"))
+            band.addChild((UiTree.label("" "ch-editing-t" ("✎ " + editingText))))
+            band.addChild((UiTree.label("" "ch-editing-k" escCancelsText)))
+            box.addChild(band)
         }
         def frame:EVGElement (UiTree.div((tid + "-" + pre + "frame") "ch-frame"))
         ; the suggestions (a sibling before it) open above it
@@ -2245,6 +2654,11 @@ class ChannelCtl extends UiCtl {
             return (h + 36.0)
         }
         return h
+    }
+
+    ; what the "Editing message" line over the composer adds
+    sfn editExtra:double () {
+        return 22.0
     }
 
     ; what a code block adds: the box's 6px above it and its border
