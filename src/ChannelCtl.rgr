@@ -168,6 +168,11 @@ class ChannelCtl extends UiCtl {
     ; where an embedded presentation's slide is drawn from, with {deck} and
     ; {slide} put in ("" no picture, only its card)
     def embedPicture:string ""
+    ; the same for a link to a presentation shared on another site than
+    ; ownOrigin (sliqtly.com in a server of one's own), with {origin} too
+    ; ("" no picture); such an embed opens its link
+    def linkPicture:string ""
+    def ownOrigin:string ""
 
     ; --- words (the host's language) ----------------------------------------------------
     def placeholderText:string "Message"
@@ -1462,6 +1467,9 @@ class ChannelCtl extends UiCtl {
         }
         def b:UiChatBlock (itemAt blocks bi)
         if ((indexOf rest "emb") == 0) {
+            if (this.elsewhere(b)) {
+                return ("link\t" + b.href)
+            }
             return ("deck\t" + b.deck + "\t" + (to_string b.slide))
         }
         if ((indexOf rest "s") != 0) {
@@ -1874,10 +1882,47 @@ class ChannelCtl extends UiCtl {
         return ((substring s (n - k) n) == ending)
     }
 
+    ; an embed of a presentation shared on another site (its link names
+    ; another origin than ownOrigin), whose picture and title come from there
+    fn elsewhere:boolean (b:UiChatBlock) {
+        if (((indexOf b.href "https://") != 0) && ((indexOf b.href "http://") != 0)) {
+            return false
+        }
+        return ((ChannelCtl.originOf(b.href)) != ownOrigin)
+    }
+
+    ; "https://host:port" of an address
+    sfn originOf:string (href:string) {
+        def at:int (indexOf href "://")
+        if (at < 0) {
+            return ""
+        }
+        def end:int (indexOfFrom href "/" (at + 3))
+        if (end < 0) {
+            return href
+        }
+        return (substring href 0 end)
+    }
+
+    ; the link an embed of the message stands for: its preview is the
+    ; embed's card, not a card of its own
+    fn embedded:boolean (m:UiFeedMsg url:string) {
+        for (this.blocksOf(m)) b:UiChatBlock bi {
+            if ((b.kind == "embed") && (b.href == url)) {
+                return true
+            }
+        }
+        return false
+    }
+
     ; what the message's links lead to: the site, the page's title and its
-    ; summary, as the server read them
+    ; summary, as the server read them. A link that is an embed lends the
+    ; embed its title, when the presentation's own is not known here.
     fn linksInto:void (body:EVGElement m:UiFeedMsg id:string) {
         for m.links l:UiFeedLink k {
+            if (this.embedded(m l.url)) {
+                continue
+            }
             def card:EVGElement (UiTree.div((id + "-lk" + (to_string k)) "ch-lk"))
             if ((strlen l.site) > 0) {
                 card.addChild((UiTree.label("" "ch-lk-s" l.site)))
@@ -1896,6 +1941,15 @@ class ChannelCtl extends UiCtl {
     ; words that wrap (a line of plain words is one wrapping run)
     fn textInto:void (body:EVGElement m:UiFeedMsg id:string) {
         def blocks:[UiChatBlock] (this.blocksOf(m))
+        for blocks eb:UiChatBlock ebi {
+            if ((eb.kind == "embed") && ((strlen (this.deckTitle(eb.deck))) == 0)) {
+                for m.links el:UiFeedLink eli {
+                    if ((el.url == eb.href) && ((strlen el.title) > 0)) {
+                        this.setDeckTitle(eb.deck el.title)
+                    }
+                }
+            }
+        }
         def bi:int 0
         while (bi < (array_length blocks)) {
             def b:UiChatBlock (itemAt blocks bi)
@@ -1926,11 +1980,16 @@ class ChannelCtl extends UiCtl {
         if (b.kind == "embed") {
             def card:EVGElement (UiTree.div((id + "-emb") "ch-emb"))
             def row:EVGElement card
-            if ((strlen embedPicture) > 0) {
+            def remote:boolean (this.elsewhere(b))
+            def pattern:string (? remote linkPicture embedPicture)
+            if (remote) {
+                pattern = (ChannelCtl.fill(pattern "{origin}" (ChannelCtl.originOf(b.href))))
+            }
+            if ((strlen pattern) > 0) {
                 ; the slide itself above the presentation's name
                 card.className = "ch-emb ch-emb-big"
                 def sl:int (? (b.slide > 0) b.slide 1)
-                def src:string (ChannelCtl.fill(embedPicture "{deck}" b.deck))
+                def src:string (ChannelCtl.fill(pattern "{deck}" b.deck))
                 src = (ChannelCtl.fill(src "{slide}" (to_string sl)))
                 def im (EVGElement.createImg())
                 im.id = (id + "-emb-p")

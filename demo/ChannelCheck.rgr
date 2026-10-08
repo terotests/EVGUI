@@ -667,6 +667,42 @@ class ChannelCheck {
         }
         c.activate("ch-m3-b0-emb-p")
         this.ok(((c.take()) == "deck\tabc123\t2") "and opens the presentation")
+        ; a presentation shared on another site: its picture and title from
+        ; there, its preview the embed's card, pressed it opens the link
+        c.linkPicture = "{origin}/api/card/{deck}.jpg?slide={slide}"
+        c.ownOrigin = "http://localhost:8080"
+        def rm:UiFeedMsg (this.msg(10 "p-bob" "Bob" "https://sliqtly.com/s/Rem0te123?slide=2" 4))
+        def rl (new UiFeedLink())
+        rl.url = "https://sliqtly.com/s/Rem0te123?slide=2"
+        rl.site = "Sliqtly"
+        rl.title = "Kvartaali · Myynti"
+        push rm.links rl
+        c.feed.put(rm)
+        def own:UiFeedMsg (this.msg(11 "p-bob" "Bob" "http://localhost:8080/s/abc123" 5))
+        c.feed.put(own)
+        c.build()
+        def r2:EVGElement (unwrap c.rootEl)
+        def rp@(optional):EVGElement (host.findEl(r2 "ch-m10-b0-emb-p"))
+        this.ok((!null? rp) "a presentation on another site shows its slide")
+        if (!null? rp) {
+            def rpe:EVGElement (unwrap rp)
+            this.ok((rpe.src == "https://sliqtly.com/api/card/Rem0te123.jpg?slide=2") ("from that site: " + rpe.src))
+        }
+        def rn@(optional):EVGElement (host.findEl(r2 "ch-m10-b0-emb-n"))
+        if (!null? rn) {
+            def rne:EVGElement (unwrap rn)
+            this.ok((rne.textContent == "Kvartaali · Myynti") ("its title from the link's preview: " + rne.textContent))
+        }
+        this.ok((null? (host.findEl(r2 "ch-m10-lk0"))) "and no second card for the same link")
+        c.activate("ch-m10-b0-emb-p")
+        this.ok(((c.take()) == "link\thttps://sliqtly.com/s/Rem0te123?slide=2") "pressed, it opens the link")
+        def op@(optional):EVGElement (host.findEl(r2 "ch-m11-b0-emb-p"))
+        if (!null? op) {
+            def ope:EVGElement (unwrap op)
+            this.ok((ope.src == "/s/abc123/1.jpg") ("a link to this server is its own: " + ope.src))
+        }
+        c.activate("ch-m11-b0-emb-p")
+        this.ok(((c.take()) == "deck\tabc123\t0") "and opens here")
     }
 
     sfn main:void () {
