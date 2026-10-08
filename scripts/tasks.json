@@ -36,6 +36,7 @@
   "ui:hover:check": "node dist/rgrc.js -es6 gallery/evgui/demo/HoverCheck.rgr -d=gallery/evgui/bin -o=HoverCheck.js -nodecli && node gallery/evgui/bin/HoverCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
   "ui:doctabs:check": "node dist/rgrc.js -es6 gallery/evgui/demo/DocTabsCheck.rgr -d=gallery/evgui/bin -o=DocTabsCheck.js -nodecli && node gallery/evgui/bin/DocTabsCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
   "ui:button:check": "node dist/rgrc.js -es6 gallery/evgui/demo/ButtonCheck.rgr -d=gallery/evgui/bin -o=ButtonCheck.js -nodecli && node gallery/evgui/bin/ButtonCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
+  "ui:hostsheet:check": "node dist/rgrc.js -es6 gallery/evgui/demo/HostSheetCheck.rgr -d=gallery/evgui/bin -o=HostSheetCheck.js -nodecli && node gallery/evgui/bin/HostSheetCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
   "ui:rail:check": "node dist/rgrc.js -es6 gallery/evgui/demo/RailCheck.rgr -d=gallery/evgui/bin -o=RailCheck.js -nodecli && node gallery/evgui/bin/RailCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
   "ui:menufit:check": "node dist/rgrc.js -es6 gallery/evgui/demo/MenuFitCheck.rgr -d=gallery/evgui/bin -o=MenuFitCheck.js -nodecli && node gallery/evgui/bin/MenuFitCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
   "ui:windowfit:check": "node dist/rgrc.js -es6 gallery/evgui/demo/WindowFitCheck.rgr -d=gallery/evgui/bin -o=WindowFitCheck.js -nodecli && node gallery/evgui/bin/WindowFitCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
