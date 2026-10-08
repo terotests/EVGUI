@@ -1,0 +1,73 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; A host built in another's place takes its parsed stylesheet (UiHost
+; addStyleSheetFrom), on Node: `ui:hostsheet:check`.
+Import "../src/UiHost.rgr"
+
+class HostSheetCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    fn inkRed:int (el:EVGElement) {
+        if el.color {
+            def c:EVGColor (unwrap el.color)
+            return (c.red())
+        }
+        return (0 - 1)
+    }
+
+    fn run:void () {
+        def css:string "@vars { --ink: rgb(40,0,0); } .box { color: var(--ink); } .theme-tb .box { color: rgb(41,0,0); }"
+        def a (new UiHost())
+        a.addStyleSheet(css)
+        def sa:EVGStyleSheet (unwrap a.sheet)
+        def b (new UiHost())
+        b.addStyleSheetFrom(css a)
+        def sb:EVGStyleSheet (unwrap b.sheet)
+        this.ok(((sb.getRuleCount()) == (sa.getRuleCount())) "the same text: the rules taken")
+        this.ok(((sb.getVarCount()) == 1) "with the palette")
+        this.ok((b.sheetParses == 1) "counted as one stylesheet")
+        sb.setViewport(400.0 300.0 false)
+        def el (EVGElement.createDiv())
+        el.className = "box"
+        sb.applyTree(el "")
+        this.ok(((this.inkRed(el)) == 40) "and it styles as a parse does")
+        def el2 (EVGElement.createDiv())
+        el2.className = "box"
+        sb.applyTree(el2 "tb")
+        this.ok(((this.inkRed(el2)) == 41) "themed too")
+        ; a chain of rebuilds keeps taking them
+        def c (new UiHost())
+        c.addStyleSheetFrom(css b)
+        def sc:EVGStyleSheet (unwrap c.sheet)
+        this.ok(((sc.getRuleCount()) == (sa.getRuleCount())) "from a host that took them itself")
+        ; another text is parsed
+        def d (new UiHost())
+        d.addStyleSheetFrom(".box { color: rgb(42,0,0); }" c)
+        def sd:EVGStyleSheet (unwrap d.sheet)
+        this.ok(((sd.getRuleCount()) == 1) "another text: parsed, not taken")
+        this.ok(((sd.getVarCount()) == 0) "without the other's palette")
+        ; a host given two sheets is not taken from: its text says only the last
+        def e (new UiHost())
+        e.addStyleSheet(css)
+        e.addStyleSheet(".more { color: rgb(1,0,0); }")
+        def f (new UiHost())
+        f.addStyleSheetFrom(".more { color: rgb(1,0,0); }" e)
+        def sf:EVGStyleSheet (unwrap f.sheet)
+        this.ok(((sf.getRuleCount()) == 1) "two sheets in the one before: parsed")
+        print (((("hostsheet: " + (to_string passes)) + " passed, ") + (to_string fails)) + " failed")
+    }
+
+    sfn main:void () {
+        def t (new HostSheetCheck())
+        t.run()
+    }
+}

@@ -75,6 +75,10 @@ class UiHost {
     def root:EVGElement
     def ctls:[UiCtl]
     def sheet:EVGStyleSheet
+    ; what addStyleSheet was given: how many times, and the last text
+    ; (addStyleSheetFrom takes the rules of a host given one same text)
+    def sheetParses:int 0
+    def sheetCss:string ""
     def theme:string ""
     def focusId:string ""
     ; The last laid-out page, kept so a pointer can be turned into a test id.
@@ -132,6 +136,25 @@ class UiHost {
     fn addStyleSheet:void (css:string) {
         def s:EVGStyleSheet (unwrap sheet)
         s.parse(css)
+        sheetParses = (sheetParses + 1)
+        sheetCss = css
+    }
+
+    ; The sheet of a host built in the place of `before`: that one's parsed
+    ; rules when it was given this same text, a parse otherwise. A control
+    ; that builds a fresh host for every change (a toolbar, a panel) parsed
+    ; its whole stylesheet each time; in Sliqtly, opening another
+    ; presentation spent a sixth of its time there.
+    fn addStyleSheetFrom:void (css:string before:UiHost) {
+        if (((sheetParses == 0) && (before.sheetParses == 1)) && (before.sheetCss == css)) {
+            def s:EVGStyleSheet (unwrap sheet)
+            def b:EVGStyleSheet (unwrap before.sheet)
+            s.adopt(b)
+            sheetParses = 1
+            sheetCss = css
+            return
+        }
+        this.addStyleSheet(css)
     }
 
     fn styleErrorCount:int () {
