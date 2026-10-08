@@ -1,0 +1,97 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; Hover on a control's parts (UiTree.markHover) and finding the hovered
+; element in a tree a surface hit-tests itself (UiTree.hoverIdAt), on Node:
+; `ui:hover:check`.
+Import "../src/UiTree.rgr"
+
+class HoverCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    sfn at:EVGElement (id:string cls:string x:double y:double w:double h:double) {
+        def el (EVGElement.createDiv())
+        el.id = id
+        el.className = cls
+        el.calculatedX = x
+        el.calculatedY = y
+        el.calculatedWidth = w
+        el.calculatedHeight = h
+        return el
+    }
+
+    ; a row of two tabs: each a box with an id, its body and edge without
+    ; one, and a × with an id of its own; a plain bar under them
+    fn tree:EVGElement () {
+        def root:EVGElement (HoverCheck.at("row" "row" 0.0 0.0 400.0 40.0))
+        root.addChild((HoverCheck.at("bar" "bar" 0.0 0.0 400.0 40.0)))
+        def i:int 0
+        while (i < 2) {
+            def x0:double ((to_double i) * 100.0)
+            def tab:EVGElement (HoverCheck.at(("t" + (to_string i)) "tab" x0 4.0 100.0 32.0))
+            def body:EVGElement (HoverCheck.at("" "tab-body" (x0 + 10.0) 4.0 80.0 32.0))
+            body.addChild((HoverCheck.at(("x" + (to_string i)) "tab-x" (x0 + 70.0) 12.0 16.0 16.0)))
+            tab.addChild((HoverCheck.at("" "tab-edge" x0 4.0 10.0 32.0)))
+            tab.addChild(body)
+            root.addChild(tab)
+            i = (i + 1)
+        }
+        return root
+    }
+
+    fn marks:void () {
+        def root:EVGElement (this.tree())
+        UiTree.markHover(root "t1")
+        def t1:EVGElement (root.getChild(2))
+        def t0:EVGElement (root.getChild(1))
+        def body1:EVGElement (t1.getChild(1))
+        def x1:EVGElement (body1.getChild(0))
+        def edge1:EVGElement (t1.getChild(0))
+        def body0:EVGElement (t0.getChild(1))
+        this.ok(t1.isHovered "the hovered tab")
+        this.ok(edge1.isHovered "its edge, which has no id, shares the hover")
+        this.ok(body1.isHovered "its body shares the hover")
+        this.ok((x1.isHovered == false) "its ×, a target of its own, does not")
+        this.ok((t0.isHovered == false) "the other tab does not")
+        this.ok((body0.isHovered == false) "nor the other tab's body")
+        this.ok(root.isHovered "the row around it is under the pointer too, as in a browser")
+        UiTree.markHover(root "x1")
+        this.ok(x1.isHovered "the × on its own")
+        this.ok(body1.isHovered "and the body it sits in, around it")
+        this.ok(((t1.isHovered && root.isHovered) && (t0.isHovered == false)) "and the tab around that, not its neighbour")
+        UiTree.markHover(root "")
+        this.ok((((t1.isHovered == false) && (body1.isHovered == false)) && (root.isHovered == false)) "an empty id clears every flag")
+    }
+
+    fn finds:void () {
+        def sheet (new EVGStyleSheet())
+        sheet.parse(".tab-body { background-color: #e4e4e7; } .tab-body:hover { background-color: #f1f1f3; } .tab-x:hover { color: red; } .theme-dark .tab-body:hover { background-color: #333333; } .bar { color: blue; }")
+        def cls:[string] (UiTree.hoverClasses(sheet))
+        this.ok(((array_length cls) == 2) ("each hover class once: " + (to_string (array_length cls))))
+        def root:EVGElement (this.tree())
+        this.ok(((UiTree.hoverIdAt(root 150.0 20.0 cls)) == "t1") "over a tab's body: the tab")
+        this.ok(((UiTree.hoverIdAt(root 105.0 20.0 cls)) == "t1") "over its edge: the tab")
+        this.ok(((UiTree.hoverIdAt(root 175.0 20.0 cls)) == "x1") "over its ×: the ×, drawn on top")
+        this.ok(((UiTree.hoverIdAt(root 50.0 20.0 cls)) == "t0") "over the first tab: that tab")
+        this.ok(((UiTree.hoverIdAt(root 300.0 20.0 cls)) == "") "over the bar, which has no hover look: nothing")
+        this.ok(((UiTree.hoverIdAt(root 150.0 39.0 cls)) == "") "under the tabs: nothing")
+    }
+
+    sfn main:void () {
+        def c (new HoverCheck())
+        c.marks()
+        c.finds()
+        print ((to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
+        if (c.fails > 0) {
+            print "RESULT FAIL"
+        }
+    }
+}

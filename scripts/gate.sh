@@ -85,6 +85,7 @@ SUITES=(
   # The drawing palette (src/DrawToolsCtl.rgr).
   ui:drawtools:check
   ui:doctabs:check
+  ui:hover:check
   # The left icon rail (src/RailCtl.rgr).
   ui:rail:check
   ui:input:field
