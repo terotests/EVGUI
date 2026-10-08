@@ -1278,6 +1278,32 @@ class UiHost {
         return ""
     }
 
+    ; Whether the point is on an open floating surface of this host — a
+    ; window's frame, a select's list, a menu card, a popover — wherever it
+    ; hangs. A surface
+    ; hangs off its trigger and is drawn past the box that holds the trigger
+    ; (a dropdown near a window's bottom opens below the window), so an owner
+    ; that asks "is this press mine?" by its frame alone sent a press on the
+    ; list outside: Sliqtly's chart settings closed instead of choosing.
+    ; A modal's page-sized backdrop is a surface too and is left out: it is
+    ; what a press OUTSIDE a dialog lands on.
+    fn surfaceAt:boolean (px:double py:double) {
+        if lastPage {
+            def page:EVGElement (unwrap lastPage)
+            def hit (new EVGHitTest())
+            def order:[EVGElement] (hit.paintOrderAt(page px py))
+            def i:int ((array_length order) - 1)
+            while (i >= 0) {
+                def el:EVGElement (itemAt order i)
+                if (((el.isSurface()) && (el.overlaySide != "cover")) && (this.containsPoint(el px py))) {
+                    return true
+                }
+                i = (i - 1)
+            }
+        }
+        return false
+    }
+
     ; Press at a point: same rules as click(), including the blur that follows
     ; a press on empty space or on a disabled control.
     fn pointerDown:string (px:double py:double) {
