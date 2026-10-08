@@ -17,7 +17,8 @@
 ;   code     ``` … ``` a fenced block, kept as typed (`text`, `lang`); one
 ;            line ```like this``` too
 ;   embed    [[slides:<deck>]] or [[slides:<deck>#3]] alone on a line, or a
-;            line that is only a link to a shared presentation (…/s/<id>):
+;            line that is only a link to a shared presentation (…/s/<id>,
+;            …/s/<id>?slide=3 one slide of it):
 ;            `deck`, `slide` (0: the first), `href`
 ;   gap      an empty line
 ;
@@ -485,12 +486,33 @@ class UiChatText {
             def at:int (indexOf t "/s/")
             if (at > 0) {
                 def tail:string (substring t (at + 3) (strlen t))
-                ; ?slides=… a picked set is a view, not the deck itself
-                if ((indexOf tail "?") >= 0) {
-                    return false
+                ; ?slide=3 or #slide=3: the link to one slide (the viewer's
+                ; Share slide); ?slides=… a picked set is a view, not the
+                ; deck itself; other parameters (?edit) say nothing of it
+                def cut:int (UiChatText.firstOf(tail "?" "#"))
+                def slide:string ""
+                if (cut >= 0) {
+                    def params:[string] (strsplit (substring tail (cut + 1) (strlen tail)) "&")
+                    tail = (substring tail 0 cut)
+                    for params pr:string pi {
+                        def p:string pr
+                        def hash:int (indexOf p "#")
+                        if (hash >= 0) {
+                            p = (substring p (hash + 1) (strlen p))
+                        }
+                        if ((indexOf p "slides=") == 0) {
+                            return false
+                        }
+                        if ((indexOf p "slide=") == 0) {
+                            slide = (substring p 6 (strlen p))
+                        }
+                    }
                 }
                 if (UiChatText.endsWithStr(tail "/")) {
                     tail = (substring tail 0 ((strlen tail) - 1))
+                }
+                if ((strlen slide) > 0) {
+                    tail = (tail + "#" + slide)
                 }
                 return (this.embedOf(tail t b))
             }
@@ -534,6 +556,16 @@ class UiChatText {
         b.slide = slide
         b.href = href
         return true
+    }
+
+    ; where the first of a or b is in s, -1 for neither
+    sfn firstOf:int (s:string a:string b:string) {
+        def i:int (indexOf s a)
+        def j:int (indexOf s b)
+        if ((i < 0) || ((j >= 0) && (j < i))) {
+            return j
+        }
+        return i
     }
 
     sfn endsWithStr:boolean (s:string w:string) {

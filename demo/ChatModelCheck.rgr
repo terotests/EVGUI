@@ -126,6 +126,14 @@ class ChatModelCheck {
         this.ok((((itemAt ul 0).kind == "embed") && ((itemAt ul 0).deck == "AbC123xyz")) "a share link alone embeds")
         this.eqs((this.kinds(t "see https://sliqtly.com/s/AbC123xyz")) "p" "a share link in words is a link")
         this.eqs((this.kinds(t "https://sliqtly.com/s/AbC123xyz?slides=1,2")) "p" "a picked view is a link")
+        def us:[UiChatBlock] (t.parse("https://sliqtly.com/s/AbC123xyz?slide=4"))
+        def us0:UiChatBlock (itemAt us 0)
+        this.ok((((us0.kind == "embed") && (us0.deck == "AbC123xyz")) && (us0.slide == 4)) "a link to one slide embeds that slide")
+        this.ok((us0.href == "https://sliqtly.com/s/AbC123xyz?slide=4") ("its link kept: " + us0.href))
+        this.ok(((itemAt (t.parse("https://sliqtly.com/s/AbC123xyz#slide=2")) 0).slide == 2) "so does #slide=")
+        this.ok(((itemAt (t.parse("http://localhost:8080/s/AbC123xyz/?edit")) 0).kind == "embed") "?edit says nothing of the slide")
+        this.eqs((this.kinds(t "https://sliqtly.com/s/AbC123xyz?slide=4&slides=a")) "p" "one slide of a picked view is a link")
+        this.eqs((this.kinds(t "https://sliqtly.com/s/AbC123xyz?slide=x")) "p" "a slide that is not a number")
         this.eqs((this.kinds(t "[[slides:no]]")) "p" "a bad deck id")
 
         def long:string ""
