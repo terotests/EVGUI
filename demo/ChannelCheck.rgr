@@ -705,6 +705,102 @@ class ChannelCheck {
         this.ok(((c.take()) == "deck\tabc123\t0") "and opens here")
     }
 
+    ; a message's context menu: its rows, what each asks for, the keys,
+    ; Quote and Edit in the composer
+    fn menu:void () {
+        def c:ChannelCtl (this.channel())
+        this.ok(((c.openMenuAt("ch-feed" 10.0 10.0)) == false) "no menu off a message")
+        this.ok((c.openMenuAt("ch-m1-b0-s0" 40.0 50.0)) "a right click on another's message opens its menu")
+        c.build()
+        def r1:EVGElement (unwrap c.rootEl)
+        def ids1:string (this.ids(r1))
+        this.ok(((indexOf ids1 "|ch-cm-item-react|") >= 0) "Add reaction")
+        this.ok(((indexOf ids1 "|ch-cm-item-reply|") >= 0) "Reply in thread")
+        this.ok(((indexOf ids1 "|ch-cm-item-quote|") >= 0) "Quote")
+        this.ok(((indexOf ids1 "|ch-cm-item-copy|") >= 0) "Copy text")
+        this.ok(((indexOf ids1 "|ch-cm-item-edit|") < 0) "no Edit on another's")
+        this.ok(((indexOf ids1 "|ch-cm-item-delete|") < 0) "no Delete on another's")
+        this.ok(((indexOf ids1 "|ch-cm-item-open|") < 0) "no link rows off a link")
+        this.ok(((c.hoverSeq == 1) && (c.hoverWhere == "m")) "the message stays lit")
+        ; Add reaction opens on the pointer, its emoji react
+        c.hover("ch-cm-item-react")
+        c.build()
+        def r2:EVGElement (unwrap c.rootEl)
+        this.ok(((indexOf (this.ids(r2)) "|ch-cm-item-react-item-rx0|") >= 0) "the pointer on Add reaction opens the quick ones")
+        this.ok(((indexOf (this.classes(r2)) "ch-cm-on") >= 0) "the row under the pointer is lit")
+        c.activate("ch-cm-item-react-item-rx2")
+        this.ok(((c.take()) == "react\tid1\t😂") "an emoji of the menu reacts")
+        this.ok(((c.menuOpen()) == false) "and the menu closes")
+        ; Copy text
+        c.openMenuAt("ch-m1-b0-s0" 40.0 50.0)
+        c.activate("ch-cm-item-copy")
+        this.ok(((c.take()) == "copy\tHi all") "Copy text")
+        ; a press elsewhere only closes it
+        c.openMenuAt("ch-m1-b0-s0" 40.0 50.0)
+        c.activate("ch-m1-q-0")
+        this.ok((((c.take()) == "") && ((c.menuOpen()) == false)) "a press outside closes the menu and does nothing else")
+        ; a link
+        c.openMenuAt("ch-m2-b0-s1" 40.0 50.0)
+        c.build()
+        def r3:EVGElement (unwrap c.rootEl)
+        this.ok(((indexOf (this.ids(r3)) "|ch-cm-item-open|") >= 0) "on a link: Open link")
+        c.activate("ch-cm-item-copylink")
+        this.ok(((c.take()) == "copy\thttps://example.com/x") "Copy link")
+        ; one's own: Edit and Delete, by the keys
+        c.openMenuAt("ch-m2-b0-s0" 40.0 50.0)
+        c.build()
+        def r4:EVGElement (unwrap c.rootEl)
+        def ids4:string (this.ids(r4))
+        this.ok((((indexOf ids4 "|ch-cm-item-edit|") >= 0) && ((indexOf ids4 "|ch-cm-item-delete|") >= 0)) "one's own: Edit and Delete")
+        this.ok(((indexOf (this.classes(r4)) "ui-contextmenu-item-destructive") >= 0) "Delete is red")
+        c.keyDownWith("" "ArrowUp" false false)
+        this.ok((c.menu.activeTid == "ch-cm-item-delete") ("Up from the menu: its last row: " + c.menu.activeTid))
+        c.keyDownWith("" "Enter" false false)
+        this.ok(((c.take()) == "delete\tid2") "Enter on Delete deletes")
+        c.openMenuAt("ch-m2-b0-s0" 40.0 50.0)
+        c.keyDownWith("" "Escape" false false)
+        this.ok(((c.menuOpen()) == false) "Escape closes the menu")
+        ; Quote: the text as "> " lines after the draft
+        this.type(c "see")
+        c.openMenuAt("ch-m1-b0-s0" 40.0 50.0)
+        c.activate("ch-cm-item-quote")
+        this.ok((c.input.value == "see\n> Hi all\n") ("Quote: " + c.input.value))
+        ; Edit: the text in the composer, the draft kept aside
+        c.openMenuAt("ch-m2-b0-s0" 40.0 50.0)
+        c.activate("ch-cm-item-edit")
+        this.ok((c.input.value == "see https://example.com/x now") ("Edit puts the text in the composer: " + c.input.value))
+        c.build()
+        def r5:EVGElement (unwrap c.rootEl)
+        this.ok(((indexOf (this.ids(r5)) "|ch-editing|") >= 0) "the composer says it is editing")
+        c.keyDownWith("" "Escape" false false)
+        this.ok(((c.input.value == "see\n> Hi all\n") && ((strlen c.editMain) == 0)) "Escape gives up and the draft comes back")
+        c.openMenuAt("ch-m2-b0-s0" 40.0 50.0)
+        c.activate("ch-cm-item-edit")
+        this.type(c "!")
+        c.keyDownWith("" "Enter" false false)
+        this.ok(((c.take()) == "edit\tid2\tsee https://example.com/x now!") "Enter saves the edit")
+        this.ok((c.input.value == "see\n> Hi all\n") "and the draft comes back")
+        ; in the thread: Quote goes to its composer, no Reply in thread
+        c.openThread("id1")
+        c.take()
+        def rep:UiFeedMsg (this.msg(9 "p-bob" "Bob" "a reply" 3))
+        rep.thread = "id1"
+        c.tfeed.put(rep)
+        this.ok((c.openMenuAt("ch-r9-b0-s0" 40.0 50.0)) "a reply in the thread has the menu")
+        c.build()
+        def r6:EVGElement (unwrap c.rootEl)
+        this.ok(((indexOf (this.ids(r6)) "|ch-cm-item-reply|") < 0) "a reply has no Reply in thread")
+        c.activate("ch-cm-item-quote")
+        this.ok(((c.tinput.value == "> a reply\n") && (c.keys == "thread")) ("Quote in the thread: " + c.tinput.value))
+        ; an archived room: only copying
+        c.readOnly = true
+        c.openMenuAt("ch-m2-b0-s0" 40.0 50.0)
+        c.build()
+        def r7:EVGElement (unwrap c.rootEl)
+        def ids7:string (this.ids(r7))
+        this.ok((((indexOf ids7 "|ch-cm-item-copy|") >= 0) && (((indexOf ids7 "|ch-cm-item-react|") < 0) && ((indexOf ids7 "|ch-cm-item-edit|") < 0))) "an archived room: Copy only")
+    }
+
     sfn main:void () {
         def k (new ChannelCheck())
         k.writing()
@@ -717,6 +813,7 @@ class ChannelCheck {
         k.files()
         k.laidOut()
         k.pointer()
+        k.menu()
         print ((to_string k.passes) + " passed, " + (to_string k.fails) + " failed")
         if (k.fails > 0) {
             print "RESULT FAIL"

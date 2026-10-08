@@ -170,6 +170,7 @@
 .theme-retro .ui-dropdownmenu-subtrigger-state-open,
 .theme-retro .ui-contextmenu-item:hover,
 .theme-retro .ui-contextmenu-item:focus,
+.theme-retro .ch-cm-on,
 .theme-retro .ui-menubar-item:hover,
 .theme-retro .ui-menubar-item:focus { background-color: var(--retro-screen-3); }
 .theme-retro .ui-select-item-state-checked,
