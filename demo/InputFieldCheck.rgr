@@ -347,6 +347,54 @@ class InputFieldCheck {
         this.ok(((ch.input.linesChanged()) == false) "built again: as tall as its lines")
     }
 
+    ; A comment's words as a chat writes them (ChatCtl markup): **bold**,
+    ; `code` and a link are drawn as such, words alone stay a selectable run,
+    ; a press selects a formatted message whole and copies it without the
+    ; markers, a press on its link asks the host to open it.
+    fn chatMarkup:void () {
+        def h (new UiHost())
+        h.setPageSize(400.0 400.0)
+        h.addStyleSheet(".chat-panel { display: flex; flex-direction: column; width: 360px; } .chat-log { display: flex; flex-direction: column; } .chat-msg { display: flex; flex-direction: column; } .chat-rich { display: flex; flex-direction: column; } .ch-line { display: flex; flex-direction: row; } .ch-words { display: flex; flex-direction: row; flex-wrap: wrap; flex-grow: 1; width: 0px; } .ch-w { font-size: 14px; white-space: nowrap; } .ch-b { font-weight: bold; }")
+        def ch (new ChatCtl())
+        ch.setup("ch" "Comment")
+        ch.add("a" "u1" "Ada" "#336699" "just words" "" false)
+        ch.add("b" "u1" "Ada" "#336699" "**Fix** the `title`, see https://sliqtly.com/help" "" false)
+        ch.build()
+        h.add(ch)
+        h.layout()
+        def run0:EVGElement (this.el(h "ch-m-0-text"))
+        this.ok((run0.id == "ch-m-0-text") "a message of words stays a selectable run")
+        def bold:EVGElement (this.el(h "ch-m-1-b0-s0"))
+        this.ok(((bold.textContent == "Fix") && ((indexOf bold.className "ch-b") >= 0)) ("**Fix** is drawn bold without its stars: " + bold.textContent + " " + bold.className))
+        def code:EVGElement (this.el(h "ch-m-1-b0-s2"))
+        this.ok(((code.textContent == "title") && ((indexOf code.className "ch-icode") >= 0)) ("`title` is inline code: " + code.textContent + " " + code.className))
+        this.ok((ch.owns("ch-m-1-rich")) "the formatted message is the chat's to press")
+        def lks:[string] (ch.linkTids(1))
+        this.ok(((array_length lks) == 1) ("one link word: " + (to_string (array_length lks))))
+        ch.textPointerDownAt("ch-m-1-rich" 10.0 10.0 1 false)
+        this.ok(((ch.selectedText()) == "Fix the title, see https://sliqtly.com/help") ("a press selects it whole, copied without markers: " + (ch.selectedText())))
+        ch.build()
+        def h2 (new UiHost())
+        h2.setPageSize(400.0 400.0)
+        h2.add(ch)
+        h2.layout()
+        def selBox:EVGElement (this.el(h2 "ch-m-1-rich"))
+        this.ok(((indexOf selBox.className "chat-rich-sel") >= 0) "the selected message shows it")
+        ch.dropSelection()
+        this.ok(((ch.selectedText()) == "") "a press elsewhere lets it go")
+        ch.textPointerDownAt((itemAt lks 0) 10.0 10.0 1 false)
+        this.ok(((ch.takeLink()) == "https://sliqtly.com/help") "a press on the link asks for it")
+        this.ok(((ch.takeLink()) == "") "taken once")
+        ch.markup = false
+        ch.build()
+        def h3 (new UiHost())
+        h3.setPageSize(400.0 400.0)
+        h3.add(ch)
+        h3.layout()
+        def asTyped:EVGElement (this.el(h3 "ch-m-1-text-text"))
+        this.ok((asTyped.textContent == "**Fix** the `title`, see https://sliqtly.com/help") "markup off: the words as typed")
+    }
+
     sfn main:void () {
         def c (new InputFieldCheck())
         c.bandOverText()
@@ -359,6 +407,7 @@ class InputFieldCheck {
         c.placeholder()
         c.multiline()
         c.pastedFirst()
+        c.chatMarkup()
         print ((to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
         if (c.fails > 0) {
             print "RESULT FAIL"

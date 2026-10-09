@@ -980,6 +980,44 @@ class UiChatText {
         return out
     }
 
+    ; Whether a message is only words: lines of unstyled text and empty
+    ; lines, with no markup, link, emoji, mention, list, quote or code. Such
+    ; a message draws the same as one run of text (ChatCtl keeps it a
+    ; selectable TextCtl); any other is drawn from its blocks.
+    fn isPlain:boolean (src:string) {
+        def blocks:[UiChatBlock] (this.parse(src))
+        for blocks b:UiChatBlock i {
+            if ((b.kind != "p") && (b.kind != "gap")) {
+                return false
+            }
+            for b.spans sp:UiChatSpan k {
+                if ((sp.kind != "text") || (sp.styled())) {
+                    return false
+                }
+            }
+        }
+        return true
+    }
+
+    ; The words as a reader sees them, a line per block, markers gone
+    ; ("**done**" is "done"); a bullet is "• ", a numbered line its number.
+    ; What is copied from a message drawn from its blocks.
+    fn plainOf:string (src:string) {
+        def lines:[string]
+        def blocks:[UiChatBlock] (this.parse(src))
+        for blocks b:UiChatBlock i {
+            def t:string (b.plain())
+            if (b.kind == "li") {
+                t = ("• " + t)
+            }
+            if (b.kind == "ol") {
+                t = ((to_string b.num) + ". " + t)
+            }
+            push lines t
+        }
+        return (join lines "\n")
+    }
+
     ; One line of plain text for a list or a notice: the first block's words,
     ; cut to `max` characters.
     fn preview:string (src:string max:int) {

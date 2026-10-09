@@ -1,0 +1,194 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; UiChatView — a chat message's blocks (UiChatText) as elements
+; =============================================================================
+; One drawing of what UiChatText reads, shared by the controls that show
+; typed messages: ChannelCtl (a room's chat) and ChatCtl (a conversation
+; beside the work, such as a comment on a slide). The classes are the
+; ch-* ones of theme/base.css; a host sizes them for its own panel with
+; descendant rules.
+;
+;   p, quote, li, ol   a line: its spans as words that wrap (a line of plain
+;                      words is one wrapping run, ch-run)
+;   code               a fenced block, one ch-code-l per line
+;   gap                an empty line
+;   embed              not here: a presentation card is ChannelCtl's;
+;                      `blockEl` draws its link as a line
+;
+; Ids: the line is `id`, its spans `id`-s<n> (a span's later words
+; `id`-s<n>-<k>), so a press on a word finds its span.
+; =============================================================================
+
+Import "UiTree.rgr"
+Import "UiChatText.rgr"
+Import "pkg:evg/EVGElement.rgr"
+
+class UiChatView {
+    ; the reader's own handle: an @mention of it is marked (ch-mention-me)
+    def me:string ""
+
+    Constructor () {
+    }
+
+    ; The spans a line is drawn from: an embed's are its link.
+    sfn spansOf:[UiChatSpan] (b:UiChatBlock) {
+        if (b.kind != "embed") {
+            return b.spans
+        }
+        def one:[UiChatSpan]
+        def lk (new UiChatSpan())
+        lk.kind = "link"
+        lk.text = b.href
+        lk.href = b.href
+        push one lk
+        return one
+    }
+
+    fn blockEl:EVGElement (b:UiChatBlock id:string) {
+        if (b.kind == "gap") {
+            return (UiTree.div("" "ch-gap"))
+        }
+        if (b.kind == "code") {
+            def pre:EVGElement (UiTree.div((id + "-code") "ch-code"))
+            def lines:[string] (strsplit b.text "\n")
+            for lines l:string i {
+                def t:string l
+                if ((strlen t) == 0) {
+                    t = " "
+                }
+                pre.addChild((UiTree.label("" "ch-code-l" t)))
+            }
+            return pre
+        }
+        def spans:[UiChatSpan] (UiChatView.spansOf(b))
+        def cls:string "ch-line"
+        if (b.kind == "quote") {
+            cls = "ch-line ch-quote"
+        }
+        def line:EVGElement (UiTree.div(id cls))
+        if (b.kind == "li") {
+            line.addChild((UiTree.label("" "ch-bullet" "•")))
+        }
+        if (b.kind == "ol") {
+            line.addChild((UiTree.label("" "ch-bullet" ((to_string b.num) + "."))))
+        }
+        if (((array_length spans) == 1) && ((b.kind == "p") || (b.kind == "quote"))) {
+            def only:UiChatSpan (itemAt spans 0)
+            if ((only.kind == "text") && ((only.styled()) == false)) {
+                line.addChild((UiTree.label((id + "-s0") "ch-run" only.text)))
+                return line
+            }
+        }
+        def words:EVGElement (UiTree.div("" "ch-words"))
+        def si:int 0
+        while (si < (array_length spans)) {
+            def sp:UiChatSpan (itemAt spans si)
+            this.spanInto(words sp (id + "-s" + (to_string si)))
+            si = (si + 1)
+        }
+        line.addChild(words)
+        return line
+    }
+
+    ; The ids `spanInto` gives a span's words, in order.
+    sfn spanIds:[string] (sp:UiChatSpan id:string) {
+        def out:[string]
+        if ((sp.kind == "code") || (sp.kind == "emoji")) {
+            push out id
+            return out
+        }
+        def shown:string sp.text
+        if ((sp.kind == "mention") || (sp.kind == "channel")) {
+            shown = ("@" + sp.text)
+        }
+        def parts:[string] (strsplit shown " ")
+        def k:int 0
+        while (k < (array_length parts)) {
+            if ((strlen (itemAt parts k)) > 0) {
+                push out (? (k > 0) (id + "-" + (to_string k)) id)
+            }
+            k = (k + 1)
+        }
+        return out
+    }
+
+    fn spanClass:string (sp:UiChatSpan) {
+        def c:string "ch-w"
+        if (sp.kind == "code") {
+            c = "ch-w ch-icode"
+        }
+        if (sp.kind == "link") {
+            c = "ch-w ch-link"
+        }
+        if (sp.kind == "emoji") {
+            c = "ch-w ch-emoji"
+        }
+        if (sp.kind == "mention") {
+            c = "ch-w ch-mention"
+            if (((strlen me) > 0) && ((to_lowercase sp.text) == (to_lowercase me))) {
+                c = "ch-w ch-mention ch-mention-me"
+            }
+        }
+        if (sp.kind == "channel") {
+            c = "ch-w ch-channel"
+        }
+        if sp.bold {
+            c = (c + " ch-b")
+        }
+        if sp.italic {
+            c = (c + " ch-i")
+        }
+        if sp.strike {
+            c = (c + " ch-s")
+        }
+        return c
+    }
+
+    ; A span as words: each ends where a space was (ch-sp puts the space
+    ; after it), so a line of several looks wraps between words.
+    fn spanInto:void (words:EVGElement sp:UiChatSpan id:string) {
+        def cls:string (this.spanClass(sp))
+        def shown:string sp.text
+        if (sp.kind == "mention") {
+            shown = ("@" + sp.text)
+        }
+        if (sp.kind == "channel") {
+            shown = ("#" + sp.text)
+        }
+        if ((sp.kind == "code") || (sp.kind == "emoji")) {
+            words.addChild((UiTree.label(id cls shown)))
+            return
+        }
+        def parts:[string] (strsplit shown " ")
+        def n:int (array_length parts)
+        def k:int 0
+        while (k < n) {
+            def w:string (itemAt parts k)
+            def spaced:boolean (k < (n - 1))
+            if ((strlen w) > 0) {
+                def c:string cls
+                if spaced {
+                    c = (c + " ch-sp")
+                }
+                def wid:string id
+                if (k > 0) {
+                    wid = (id + "-" + (to_string k))
+                }
+                words.addChild((UiTree.label(wid c w)))
+            } {
+                ; a space at the start: after what came before
+                if ((k == 0) && spaced) {
+                    def nk:int (array_length words.children)
+                    if (nk > 0) {
+                        def prev:EVGElement (itemAt words.children (nk - 1))
+                        if ((indexOf prev.className "ch-sp") < 0) {
+                            prev.className = (prev.className + " ch-sp")
+                        }
+                    }
+                }
+            }
+            k = (k + 1)
+        }
+    }
+}
