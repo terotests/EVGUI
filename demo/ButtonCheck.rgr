@@ -55,6 +55,23 @@ class ButtonCheck {
         this.ok(((indexOf only.className "ui-button-icononly") >= 0) "iconOnly class")
         def oic:EVGElement (only.getChild(0))
         this.ok(((indexOf oic.className "my-add") > 0) "the screen's own icon class")
+        ; a picture: a tile, the picture over the words, kept through a press
+        def tb (new ButtonCtl())
+        tb.tid = "t"
+        tb.name = "pearl"
+        tb.picture = "/__theme/pearl"
+        tb.picW = 192.0
+        tb.picH = 108.0
+        tb.build()
+        def tile:EVGElement (unwrap tb.rootEl)
+        this.ok(((tile.getChildCount()) == 2) "a picture, then the words")
+        this.ok(((indexOf tile.className "ui-button-tile") >= 0) ("tile class: " + tile.className))
+        def pic:EVGElement (tile.getChild(0))
+        this.ok((pic.src == "/__theme/pearl") ("the picture's source: " + pic.src))
+        this.ok((pic.id == "t-picture") ("its id: " + pic.id))
+        this.ok(pic.a11yHidden "the picture is not read out; the name is")
+        tb.press(true)
+        this.ok(((tile.getChildCount()) == 2) "a press keeps the picture")
         def rows:[UiRow] ((this.button("M12 5v14" true)).rows())
         this.ok(((array_length rows) == 1) "a reader still gets the button")
         this.ok(((itemAt rows 0).name == "Close") "named by its name")
