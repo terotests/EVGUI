@@ -9,6 +9,7 @@
 ; left there with the "Latest messages" button.
 Import "../src/UiHost.rgr"
 Import "../src/ChannelCtl.rgr"
+Import "../src/UiText.rgr"
 
 class ChannelCheck {
     def fails:int 0
@@ -801,6 +802,53 @@ class ChannelCheck {
         this.ok((((indexOf ids7 "|ch-cm-item-copy|") >= 0) && (((indexOf ids7 "|ch-cm-item-react|") < 0) && ((indexOf ids7 "|ch-cm-item-edit|") < 0))) "an archived room: Copy only")
     }
 
+    ; a presentation with a long name: the name stays inside its card, on
+    ; the near side of Open, and Open inside the card, both card shapes
+    fn longDeckName:void () {
+        def css:string (?? (read_file "." "gallery/evgui/theme/base.css") "")
+        if ((strlen css) == 0) {
+            css = (?? (read_file "." "theme/base.css") "")
+        }
+        def i:int 0
+        while (i < 2) {
+            def c:ChannelCtl (this.channel())
+            if (i == 1) {
+                c.embedPicture = "/s/{deck}/{slide}.jpg"
+            }
+            c.setDeckTitle("abc123" "Quarterly business review for the northern sales region and partners 2026")
+            def h:UiHost (this.lay(c css))
+            def r:EVGElement (unwrap h.root)
+            def card@(optional):EVGElement (h.findEl(r "ch-m3-b0-emb"))
+            def name@(optional):EVGElement (h.findEl(r "ch-m3-b0-emb-n"))
+            def open@(optional):EVGElement (h.findEl(r "ch-m3-b0-emb-open"))
+            this.ok((((!null? card) && (!null? name)) && (!null? open)) "the card, its name and Open are drawn")
+            if (((!null? card) && (!null? name)) && (!null? open)) {
+                def ce:EVGElement (unwrap card)
+                def ne:EVGElement (unwrap name)
+                def oe:EVGElement (unwrap open)
+                def cardR:double (ce.calculatedX + ce.calculatedWidth)
+                def nameR:double (ne.calculatedX + ne.calculatedWidth)
+                def openR:double (oe.calculatedX + oe.calculatedWidth)
+                def eng:EVGTextEngine ((new EVGLayout()).getTextEngine())
+                def drawn:double (UiText.widthOf(eng ne.textContent (ne.effectiveFontFamily()) ne.fontSize.pixels))
+                this.ok((drawn <= (ne.calculatedWidth + 0.5)) ("the name is drawn no wider than its box: " + (to_string drawn) + " / " + (to_string ne.calculatedWidth)))
+                this.ok(((indexOf ne.textContent "…") > 0) ("and ends in …: " + ne.textContent))
+                this.ok((nameR <= (oe.calculatedX + 0.5)) ("the long name ends before Open: " + (to_string nameR) + " / " + (to_string oe.calculatedX)))
+                this.ok((openR <= (cardR + 0.5)) ("Open stays in the card: " + (to_string openR) + " / " + (to_string cardR)))
+                this.ok(((ne.calculatedY + ne.calculatedHeight) <= ((ce.calculatedY + ce.calculatedHeight) + 0.5)) "the name stays above the card's bottom")
+            }
+            i = (i + 1)
+        }
+        ; a short name is left whole
+        def c2:ChannelCtl (this.channel())
+        c2.setDeckTitle("abc123" "Retry plan")
+        def h2:UiHost (this.lay(c2 css))
+        def n2@(optional):EVGElement (h2.findEl((unwrap h2.root) "ch-m3-b0-emb-n"))
+        if (!null? n2) {
+            this.ok(((unwrap n2).textContent == "Retry plan") "a short name is left whole")
+        }
+    }
+
     sfn main:void () {
         def k (new ChannelCheck())
         k.writing()
@@ -814,6 +862,7 @@ class ChannelCheck {
         k.laidOut()
         k.pointer()
         k.menu()
+        k.longDeckName()
         print ((to_string k.passes) + " passed, " + (to_string k.fails) + " failed")
         if (k.fails > 0) {
             print "RESULT FAIL"

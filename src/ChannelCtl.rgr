@@ -66,6 +66,7 @@ Import "UiCtl.rgr"
 Import "InputCtl.rgr"
 Import "MenuCtl.rgr"
 Import "UiTree.rgr"
+Import "UiText.rgr"
 Import "UiChatText.rgr"
 Import "UiChatFeed.rgr"
 Import "UiPixelAvatar.rgr"
@@ -96,6 +97,11 @@ class ChannelCtl extends UiCtl {
     ; presentations' titles by id, for embeds ("" unknown)
     def deckIds:[string]
     def deckTitles:[string]
+    ; one-line texts that end in "…" when wider than their box (an embed's
+    ; name and its line under it): element ids and the whole texts, from
+    ; `build`, fitted in `placeText` once the layout knows the widths
+    def fitIds:[string]
+    def fitTexts:[string]
     ; no composer: `readOnlyText` in its place (an archived room)
     def readOnly:boolean false
     def readOnlyText:string "This room is archived."
@@ -1492,7 +1498,37 @@ class ChannelCtl extends UiCtl {
         return (f.selectedText())
     }
 
+    ; A presentation's name longer than its card is cut to the card with "…"
+    ; (EVG has no `text-overflow`: a `nowrap` line is drawn whole, past its
+    ; box, over Open and out of the card). From the whole text each time, so
+    ; a wider card shows more of it again.
+    fn fitLines:void (eng:EVGTextEngine) {
+        if (null? rootEl) {
+            return
+        }
+        def r:EVGElement (unwrap rootEl)
+        def i:int 0
+        while (i < (array_length fitIds)) {
+            def found@(optional):EVGElement (UiTree.findById(r (itemAt fitIds i)))
+            if (!null? found) {
+                def el:EVGElement (unwrap found)
+                def size:double el.inheritedFontSize
+                if el.fontSize.isSet {
+                    size = el.fontSize.pixels
+                }
+                if (size <= 0.0) {
+                    size = 14.0
+                }
+                if (el.calculatedWidth > 0.0) {
+                    el.textContent = (UiText.fit(eng (itemAt fitTexts i) (el.effectiveFontFamily()) size el.calculatedWidth))
+                }
+            }
+            i = (i + 1)
+        }
+    }
+
     fn placeText:void (eng:EVGTextEngine) {
+        this.fitLines(eng)
         input.setFocused((keys == "main"))
         tinput.setFocused((keys == "thread"))
         dinput.setFocused((keys == "desc"))
@@ -1892,6 +1928,10 @@ class ChannelCtl extends UiCtl {
     }
 
     fn build:void () {
+        def noIds:[string]
+        def noTexts:[string]
+        fitIds = noIds
+        fitTexts = noTexts
         def root:EVGElement (UiTree.div(tid "ch-root"))
         UiTree.inline(root "width" ((to_string width) + "px"))
         UiTree.inline(root "height" ((to_string height) + "px"))
@@ -2410,11 +2450,15 @@ class ChannelCtl extends UiCtl {
                 t = presentationText
             }
             info.addChild((UiTree.label((id + "-emb-n") "ch-emb-n" t)))
+            push fitIds (id + "-emb-n")
+            push fitTexts t
             def sub:string b.deck
             if (b.slide > 0) {
                 sub = (sub + " · " + slideText + " " + (to_string b.slide))
             }
             info.addChild((UiTree.label((id + "-emb-s") "ch-emb-s" sub)))
+            push fitIds (id + "-emb-s")
+            push fitTexts sub
             row.addChild(info)
             row.addChild((UiTree.label((id + "-emb-open") "ch-btn" openText)))
             return card
