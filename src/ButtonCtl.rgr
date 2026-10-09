@@ -60,6 +60,12 @@ class ButtonCtl extends UiCtl {
     ; One more class on the icon, for a screen sizing its own: a sheet styles
     ; an element by its own classes, not by the button it is in.
     def iconClass:string ""
+    ; A picture over the words, the button a tile in a gallery of choices
+    ; (themes, layouts): the picture's source, drawn picW × picH. The host
+    ; resolves the source against its pictures like any image.
+    def picture:string ""
+    def picW:double 160.0
+    def picH:double 90.0
 
     Constructor () {
         rootEl = (EVGElement.createDiv())
@@ -116,6 +122,21 @@ class ButtonCtl extends UiCtl {
                 UiTree.addClass(el "ui-button-icononly")
                 return
             }
+        }
+
+        if ((strlen picture) > 0) {
+            UiTree.addClass(el "ui-button-tile")
+            def im (EVGElement.createImg())
+            im.id = (tid + "-picture")
+            im.className = "ui-button-picture"
+            im.src = picture
+            im.objectFit = "fill"
+            im.sourceWidth = picW
+            im.sourceHeight = picH
+            UiTree.inline(im "width" ((to_string (to_int (picW + 0.5))) + "px"))
+            UiTree.inline(im "height" ((to_string (to_int (picH + 0.5))) + "px"))
+            im.a11yHidden = true
+            el.addChild(im)
         }
 
         def words:EVGElement (EVGElement.createSpan())
