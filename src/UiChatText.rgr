@@ -985,7 +985,11 @@ class UiChatText {
     ; a message draws the same as one run of text (ChatCtl keeps it a
     ; selectable TextCtl); any other is drawn from its blocks.
     fn isPlain:boolean (src:string) {
-        def blocks:[UiChatBlock] (this.parse(src))
+        return (UiChatText.onlyWords((this.parse(src))))
+    }
+
+    ; `isPlain` of blocks already read
+    sfn onlyWords:boolean (blocks:[UiChatBlock]) {
         for blocks b:UiChatBlock i {
             if ((b.kind != "p") && (b.kind != "gap")) {
                 return false

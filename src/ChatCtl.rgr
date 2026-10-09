@@ -622,18 +622,7 @@ class ChatCtl extends UiCtl {
         if (markup == false) {
             return false
         }
-        def bs:[UiChatBlock] (this.blocksOf(m))
-        for bs b:UiChatBlock i {
-            if ((b.kind != "p") && (b.kind != "gap")) {
-                return true
-            }
-            for b.spans sp:UiChatSpan k {
-                if ((sp.kind != "text") || (sp.styled())) {
-                    return true
-                }
-            }
-        }
-        return false
+        return ((UiChatText.onlyWords((this.blocksOf(m)))) == false)
     }
 
     fn richTid:string (i:int) {
