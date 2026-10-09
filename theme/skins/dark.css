@@ -25,3 +25,16 @@
   border-color: #71717a;
   shadow-color: rgba(255, 255, 255, 0.16); shadow-radius: 24px; shadow-offset-y: 0px;
 }
+
+/* A rail on a coloured frame (RailCtl tone "frame"): the frame stays a deep
+   colour in the dark look too, so its light ink stays light (and outranks
+   the derived look of the plain rail's parts). */
+.theme-dark .ui-rail-frame-item:hover,
+.theme-dark .ui-rail-frame-item:focus { background-color: rgba(255, 255, 255, 0.12); }
+.theme-dark .ui-rail-frame-pad { background-color: rgba(0, 0, 0, 0); }
+.theme-dark .ui-rail-frame-pad-state-active { background-color: rgba(255, 255, 255, 0.24); }
+.theme-dark .ui-rail-frame-icon { stroke: rgba(255, 255, 255, 0.86); }
+.theme-dark .ui-rail-frame-icon-state-active { stroke: #ffffff; }
+.theme-dark .ui-rail-frame-label { color: rgba(255, 255, 255, 0.86); }
+.theme-dark .ui-rail-frame-label-state-active { color: #ffffff; }
+.theme-dark .ui-rail-frame-badge { color: #ffffff; }

@@ -86,6 +86,18 @@ class UiShapesCheck {
         this.ok((this.inside(big 4.0 22.0)) ("a cut longer than the tab is kept inside: " + big))
     }
 
+    fn corner:void () {
+        def tl:string (UiShapes.corner(10.0 "tl"))
+        this.ok((tl == "M0 0 L10 0 C4.48 0 0 4.48 0 10 Z") ("top left: " + tl))
+        def br:string (UiShapes.corner(10.0 "br"))
+        this.ok((br == "M10 10 L0 10 C5.52 10 10 5.52 10 0 Z") ("bottom right: " + br))
+        ; each one starts at the box's own corner, which the frame keeps
+        this.ok((startsWith (UiShapes.corner(8.0 "tr")) "M8 0 ") "top right from its corner")
+        this.ok((startsWith (UiShapes.corner(8.0 "bl")) "M0 8 ") "bottom left from its corner")
+        this.ok(((UiShapes.corner(0.0 "tl")) == "") "no radius, no piece")
+        this.ok(((UiShapes.corner(6.0 "middle")) == "") "an unknown corner, no piece")
+    }
+
     fn num:void () {
         this.ok(((UiShapes.num(3.0)) == "3") "3")
         this.ok(((UiShapes.num(2.5)) == "2.5") ("2.5: " + (UiShapes.num(2.5))))
@@ -98,6 +110,7 @@ class UiShapesCheck {
         def c (new UiShapesCheck())
         c.hatch()
         c.tab()
+        c.corner()
         c.num()
         print ("UiShapes: " + (to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
     }
