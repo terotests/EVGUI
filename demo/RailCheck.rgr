@@ -45,6 +45,38 @@ class RailCheck {
         this.ok(((array_length r.itemEls) == 4) "every item kept for the host")
     }
 
+    fn tone:void () {
+        def plain:RailCtl (this.rail())
+        def proot:EVGElement (unwrap plain.rootEl)
+        def p0:EVGElement (proot.getChild(0))
+        def pitem:EVGElement (p0.getChild(0))
+        this.ok(((indexOf pitem.className "ui-rail-frame") < 0) "the plain rail has no frame classes")
+        def r (new RailCtl())
+        r.tid = "rail"
+        r.tone = "frame"
+        r.addItem("home" "Home" "M4 4h16v16H4z")
+        r.addItem("files" "Files" "M3 6h18")
+        r.setBadge("files" "•")
+        r.value = "home"
+        r.build()
+        def rroot:EVGElement (unwrap r.rootEl)
+        def head:EVGElement (rroot.getChild(0))
+        def home:EVGElement (head.getChild(0))
+        this.ok(((indexOf home.className "ui-rail-frame-item-state-active") >= 0) ("the open one on the frame: " + home.className))
+        this.ok(((indexOf home.className "ui-rail-item-state-active") >= 0) "keeps its own state too")
+        def pad:EVGElement (home.getChild(0))
+        this.ok(((indexOf pad.className "ui-rail-frame-pad-state-active") >= 0) ("its pad: " + pad.className))
+        def icon:EVGElement (pad.getChild(0))
+        this.ok(((indexOf icon.className "ui-rail-frame-icon-state-active") >= 0) ("its icon: " + icon.className))
+        def lab:EVGElement (home.getChild(1))
+        this.ok(((indexOf lab.className "ui-rail-frame-label-state-active") >= 0) ("its name: " + lab.className))
+        def files:EVGElement (head.getChild(1))
+        this.ok(((indexOf files.className "ui-rail-frame-item-state-inactive") >= 0) "the others inactive on the frame")
+        def fpad:EVGElement (files.getChild(0))
+        def badge:EVGElement (fpad.getChild(1))
+        this.ok(((indexOf badge.className "ui-rail-frame-badge") >= 0) ("the badge: " + badge.className))
+    }
+
     fn pressing:void () {
         def r:RailCtl (this.rail())
         this.ok(((r.hitFocusId("rail-files-icon")) == "rail-files") "a press on the icon is the item's")
@@ -93,6 +125,7 @@ class RailCheck {
     sfn main:void () {
         def c (new RailCheck())
         c.structure()
+        c.tone()
         c.pressing()
         c.keys()
         c.a11y()

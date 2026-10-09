@@ -19,6 +19,11 @@
 ; stroke): the rail stays one colour per state in every theme. A badge (a
 ; count, or "•") sits on the icon's corner.
 ;
+; `tone` "frame": the rail stands on a coloured app frame (Slack's window,
+; the work set into it) rather than on the page's grey. Every part also
+; carries `ui-rail-frame-<part>` (and its `-state-<word>`), which the theme
+; draws light on the frame's colour; "" keeps the plain look.
+;
 ; Element ids: `<tid>-<value>` an item, `<tid>-<value>-icon` its icon,
 ; `<tid>-<value>-label` its name, `<tid>-<value>-badge` its badge.
 ; =============================================================================
@@ -44,6 +49,8 @@ class RailCtl extends UiCtl {
     ; the last item activated, "" once the host has read it (`takePressed`)
     def pressed:string ""
     def rovingValue:string ""
+    ; "" on the page, "frame" on a coloured frame (see the header)
+    def tone:string ""
     ; the items' elements as the last build made them, in `items`' order
     def itemEls:[EVGElement]
 
@@ -141,6 +148,18 @@ class RailCtl extends UiCtl {
         return m
     }
 
+    ; A part's look on the frame, beside its own class and state.
+    fn toned:void (el:EVGElement part:string word:string) {
+        if (tone != "frame") {
+            return
+        }
+        def cls:string ("ui-rail-frame-" + part)
+        UiTree.addClass(el cls)
+        if ((strlen word) > 0) {
+            UiTree.setState(el cls word)
+        }
+    }
+
     fn itemEl:EVGElement (it:RailItem) {
         def el (EVGElement.createDiv())
         def t:string (this.itemTid(it.value))
@@ -151,6 +170,7 @@ class RailCtl extends UiCtl {
             word = "active"
         }
         UiTree.setState(el "ui-rail-item" word)
+        this.toned(el "item" word)
         if it.disabled {
             UiTree.addClass(el "ui-rail-item-disabled")
         }
@@ -158,17 +178,21 @@ class RailCtl extends UiCtl {
         pad.id = (t + "-pad")
         pad.className = "ui-rail-pad"
         UiTree.setState(pad "ui-rail-pad" word)
+        this.toned(pad "pad" word)
         def ic:EVGElement (RailCtl.iconEl((t + "-icon") it.icon))
         UiTree.setState(ic "ui-rail-icon" word)
+        this.toned(ic "icon" word)
         pad.addChild(ic)
         if ((strlen it.badge) > 0) {
             def b:EVGElement (UiTree.label((t + "-badge") "ui-rail-badge" it.badge))
             b.a11yHidden = true
+            this.toned(b "badge" "")
             pad.addChild(b)
         }
         el.addChild(pad)
         def lb:EVGElement (UiTree.label((t + "-label") "ui-rail-label" it.name))
         UiTree.setState(lb "ui-rail-label" word)
+        this.toned(lb "label" word)
         el.addChild(lb)
         return el
     }

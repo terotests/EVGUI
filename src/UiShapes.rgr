@@ -11,6 +11,9 @@
 ;   - hatch: diagonal stripes filling a w × h box, cut at its edges (a
 ;     hatched area: spacing, a reserved or disabled region)
 ;   - tab: a tab with a cut corner, attached to an edge along its open side
+;   - corner: what lies outside a rounded corner in an r × r box, so a frame
+;     drawn around a square panel shows the panel's corner rounded (Slack's
+;     window: a coloured frame with the work set into it)
 ;
 ; Checked on Node by demo/UiShapesCheck.rgr (`ui:shapes:check`).
 ; ============================================================================
@@ -88,6 +91,33 @@ class UiShapes {
             push ys h
         }
         return (UiShapes.ring(xs ys))
+    }
+
+    ; The frame's piece in an r × r box at one corner of a panel: the box
+    ; less a quarter circle of radius r centred on the panel's side, so
+    ; laid over the panel's square corner in the frame's colour it rounds
+    ; it. `at` is "tl", "tr", "bl" or "br" (the panel's corner the box
+    ; sits in). The arc is a cubic (k = 0.5523), within 0.03% of a circle.
+    sfn corner:string (r:double at:string) {
+        if (r <= 0.0) {
+            return ""
+        }
+        def c:double (r * 0.44772)
+        def n:string (UiShapes.num(r))
+        def m:string (UiShapes.num(c))
+        if (at == "tl") {
+            return ("M0 0 L" + n + " 0 C" + m + " 0 0 " + m + " 0 " + n + " Z")
+        }
+        if (at == "tr") {
+            return ("M" + n + " 0 L" + n + " " + n + " C" + n + " " + m + " " + (UiShapes.num((r - c))) + " 0 0 0 Z")
+        }
+        if (at == "bl") {
+            return ("M0 " + n + " L0 0 C0 " + (UiShapes.num((r - c))) + " " + m + " " + n + " " + n + " " + n + " Z")
+        }
+        if (at == "br") {
+            return ("M" + n + " " + n + " L0 " + n + " C" + (UiShapes.num((r - c))) + " " + n + " " + n + " " + (UiShapes.num((r - c))) + " " + n + " 0 Z")
+        }
+        return ""
     }
 
     ; The part of the polygon where s·(x + y) >= t (Sutherland–Hodgman on

@@ -1865,6 +1865,16 @@
 .ui-rail-label { font-size: 11px; line-height: 14px; height: 14px; color: #52525b; white-space: nowrap; }
 .ui-rail-label-state-active { color: #312e81; font-weight: 600; }
 .ui-rail-badge { position: absolute; left: 28px; top: -4px; font-size: 14px; line-height: 14px; color: #dc2626; }
+/* RailCtl tone "frame": the rail on a coloured app frame (Slack's window), its
+   ink light over whatever deep colour the host gives the frame */
+.ui-rail-frame-item:hover { background-color: rgba(255, 255, 255, 0.12); }
+.ui-rail-frame-item:focus { background-color: rgba(255, 255, 255, 0.12); }
+.ui-rail-frame-pad-state-active { background-color: rgba(255, 255, 255, 0.24); }
+.ui-rail-frame-icon { stroke: rgba(255, 255, 255, 0.86); }
+.ui-rail-frame-icon-state-active { stroke: #ffffff; }
+.ui-rail-frame-label { color: rgba(255, 255, 255, 0.86); }
+.ui-rail-frame-label-state-active { color: #ffffff; font-weight: 600; }
+.ui-rail-frame-badge { color: #ffffff; }
 
 /* --- document tabs (DocTabsCtl): slanted edges, a light shadow ------------ */
 .ui-doctabs { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: flex-end; gap: 0; height: 38px; padding: 0 10px; }
