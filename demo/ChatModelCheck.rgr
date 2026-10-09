@@ -162,6 +162,17 @@ class ChatModelCheck {
         def ms:[string] (t.mentions("@Claude do it, @Ada and @Claude again"))
         this.ok(((join ms ",") == "Claude,Ada") ("mentions: " + (join ms ",")))
         this.ok(((t.preview("> *hi* @Ada\nmore" 40)) == "hi @Ada") ("preview: " + (t.preview("> *hi* @Ada\nmore" 40))))
+
+        ; plain or drawn from blocks (ChatCtl, a comment's words)
+        this.ok((t.isPlain("just words\n\nand a second line")) "words and empty lines are plain")
+        this.ok((t.isPlain("snake_case and 2 * 3")) "markers that do not count stay plain")
+        this.ok(((t.isPlain("this is **done**")) == false) "bold is not plain")
+        this.ok(((t.isPlain("use `npm run build`")) == false) "inline code is not plain")
+        this.ok(((t.isPlain("- one")) == false) "a bullet is not plain")
+        this.ok(((t.isPlain("> quoted")) == false) "a quote is not plain")
+        this.ok(((t.isPlain("see https://sliqtly.com")) == false) "a link is not plain")
+        this.ok(((t.isPlain("```\ncode\n```")) == false) "a fence is not plain")
+        this.eqs((t.plainOf("**Fix** the _title_\n- one\n2. two\n\n`x`")) "Fix the title\n• one\n2. two\n\nx" "plainOf drops the markers")
     }
 
     fn avatars:void () {

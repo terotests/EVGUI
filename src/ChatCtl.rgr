@@ -16,10 +16,18 @@
 ; `sent` for the host to take (`takeSent`) and post; it comes back through
 ; `add` like everyone else's.
 ;
-; COPYING: each message's words are a selectable TextCtl (`<msg>-text`): a
+; MARKUP (`markup`, on): a message is read as a chat reads it (UiChatText:
+; **bold**, _italic_, ~strike~, `code`, links, "- " lists, "> " quotes,
+; ``` blocks) and drawn from its blocks (UiChatView, the ch-* classes, in a
+; `<msg>-rich` box). A message that is only words stays a TextCtl.
+;
+; COPYING: a message of words is a selectable TextCtl (`<msg>-text`): a
 ; press and drag selects (double: a word, triple: all of it), and
 ; `selectedText` is what the host copies: the draft's selection while it has
-; one, else the message's.
+; one, else the message's. A formatted message is selected whole by a press
+; (chat-rich-sel), and its words without the markers are what is copied
+; (UiChatText.plainOf). A press on its link leaves the address in
+; `linkAsked` for the host to open (`takeLink`).
 ;
 ; WINDOW: `shown` messages from `top`; the newest stay in view while the
 ; reader is at the end (`follow`), and a reader who scrolled up is left where
@@ -47,6 +55,8 @@
 Import "UiCtl.rgr"
 Import "InputCtl.rgr"
 Import "TextCtl.rgr"
+Import "UiChatText.rgr"
+Import "UiChatView.rgr"
 Import "UiTree.rgr"
 Import "pkg:evg/EVGElement.rgr"
 Import "pkg:evg/EVGA11yTree.rgr"
@@ -62,6 +72,10 @@ class UiChatMessage {
     ; as the host shows it ("14:05")
     def time:string ""
     def mine:boolean false
+    ; `text` read into blocks (UiChatText), and the text they were read from
+    def blocks:[UiChatBlock]
+    def readText:string ""
+    def read:boolean false
 
     Constructor () {
     }
@@ -122,6 +136,14 @@ class ChatCtl extends UiCtl {
     def selIn:int -1
     ; no head (title and ×): the host frames it (a callout's head, say)
     def bare:boolean false
+    ; messages drawn from their markup (MARKUP above); off: as typed
+    def markup:boolean true
+    def chatText:UiChatText (new UiChatText())
+    def view:UiChatView (new UiChatView())
+    ; the formatted message selected whole: its id, "" none
+    def richSel:string ""
+    ; the address of the link a press asked for, until the host takes it
+    def linkAsked:string ""
 
     Constructor () {
     }
@@ -459,8 +481,10 @@ class ChatCtl extends UiCtl {
         input.placeText(eng)
         def i:int top
         while ((i < (top + shown)) && (i < (array_length messages))) {
-            def t:TextCtl (this.textOf(i))
-            t.placeText(eng)
+            if ((this.isRich((itemAt messages i))) == false) {
+                def t:TextCtl (this.textOf(i))
+                t.placeText(eng)
+            }
             i = (i + 1)
         }
     }
@@ -475,8 +499,25 @@ class ChatCtl extends UiCtl {
         if (input.owns(target)) {
             this.dropTexts(-1)
             selIn = -1
+            richSel = ""
             return (input.textPointerDownAt(target px py clicks shift))
         }
+        def ri:int (this.richIndexOf(target))
+        if (ri >= 0) {
+            ; a formatted message: its link opens, anywhere else it is
+            ; selected whole; nothing to drag
+            this.dropTexts(-1)
+            selIn = -1
+            def href:string (this.linkAt(ri target))
+            if ((strlen href) > 0) {
+                linkAsked = href
+                return false
+            }
+            def rm:UiChatMessage (itemAt messages ri)
+            richSel = rm.id
+            return false
+        }
+        richSel = ""
         def k:int (this.textIndexOf(target))
         if (k < 0) {
             return false
@@ -524,12 +565,20 @@ class ChatCtl extends UiCtl {
             def t:TextCtl (itemAt texts selIn)
             return (t.selectedText())
         }
+        if ((strlen richSel) > 0) {
+            for messages m:UiChatMessage i {
+                if (m.id == richSel) {
+                    return (chatText.plainOf(m.text))
+                }
+            }
+        }
         return ""
     }
 
     fn dropSelection:void () {
         this.dropTexts(-1)
         selIn = -1
+        richSel = ""
     }
 
     ; every message's selection but the `keep`th's
@@ -555,6 +604,94 @@ class ChatCtl extends UiCtl {
             i = (i + 1)
         }
         return -1
+    }
+
+    ; --- markup ------------------------------------------------------------------------------
+
+    fn blocksOf:[UiChatBlock] (m:UiChatMessage) {
+        if ((m.read == false) || (m.readText != m.text)) {
+            m.blocks = (chatText.parse(m.text))
+            m.readText = m.text
+            m.read = true
+        }
+        return m.blocks
+    }
+
+    ; drawn from its blocks: markup is on and the message is more than words
+    fn isRich:boolean (m:UiChatMessage) {
+        if (markup == false) {
+            return false
+        }
+        return ((UiChatText.onlyWords((this.blocksOf(m)))) == false)
+    }
+
+    fn richTid:string (i:int) {
+        return ((this.msgTid(i)) + "-rich")
+    }
+
+    fn blockTid:string (i:int bi:int) {
+        return ((this.msgTid(i)) + "-b" + (to_string bi))
+    }
+
+    ; the formatted message on screen whose box or link `target` is: its
+    ; index in `messages`, -1 none
+    fn richIndexOf:int (target:string) {
+        def i:int top
+        while ((i < (top + shown)) && (i < (array_length messages))) {
+            def m:UiChatMessage (itemAt messages i)
+            if (this.isRich(m)) {
+                def pre:string ((this.msgTid(i)) + "-")
+                if ((target == (this.richTid(i))) || ((indexOf target (pre + "b")) == 0)) {
+                    return i
+                }
+            }
+            i = (i + 1)
+        }
+        return -1
+    }
+
+    ; the ids of the `i`th message's links' words and where they lead
+    fn linkTids:[string] (i:int) {
+        def out:[string]
+        def bs:[UiChatBlock] (this.blocksOf((itemAt messages i)))
+        for bs b:UiChatBlock bi {
+            def spans:[UiChatSpan] (UiChatView.spansOf(b))
+            for spans sp:UiChatSpan si {
+                if (sp.kind == "link") {
+                    def ids:[string] (UiChatView.spanIds(sp ((this.blockTid(i bi)) + "-s" + (to_string si))))
+                    for ids w:string wi {
+                        push out w
+                    }
+                }
+            }
+        }
+        return out
+    }
+
+    ; where the link whose word `target` is leads, "" not a link
+    fn linkAt:string (i:int target:string) {
+        def bs:[UiChatBlock] (this.blocksOf((itemAt messages i)))
+        for bs b:UiChatBlock bi {
+            def spans:[UiChatSpan] (UiChatView.spansOf(b))
+            for spans sp:UiChatSpan si {
+                if (sp.kind == "link") {
+                    def ids:[string] (UiChatView.spanIds(sp ((this.blockTid(i bi)) + "-s" + (to_string si))))
+                    for ids w:string wi {
+                        if (w == target) {
+                            return sp.href
+                        }
+                    }
+                }
+            }
+        }
+        return ""
+    }
+
+    ; the address a press on a link asked for; "" none
+    fn takeLink:string () {
+        def l:string linkAsked
+        linkAsked = ""
+        return l
     }
 
     ; The `i`th message's words, made once per message id (so a selection
@@ -666,12 +803,27 @@ class ChatCtl extends UiCtl {
                 meta.addChild((UiTree.label(((this.msgTid(i)) + "-time") "chat-time" m.time)))
             }
             box.addChild(meta)
-            def body:TextCtl (this.textOf(i))
-            if (body.text != m.text) {
-                body.setText(m.text)
+            if (this.isRich(m)) {
+                def rcls:string "chat-rich"
+                if (richSel == m.id) {
+                    rcls = "chat-rich chat-rich-sel"
+                }
+                def rich:EVGElement (UiTree.div((this.richTid(i)) rcls))
+                def bs:[UiChatBlock] (this.blocksOf(m))
+                def bi:int 0
+                while (bi < (array_length bs)) {
+                    rich.addChild((view.blockEl((itemAt bs bi) (this.blockTid(i bi)))))
+                    bi = (bi + 1)
+                }
+                box.addChild(rich)
+            } {
+                def body:TextCtl (this.textOf(i))
+                if (body.text != m.text) {
+                    body.setText(m.text)
+                }
+                body.build()
+                box.addChild((unwrap body.rootEl))
             }
-            body.build()
-            box.addChild((unwrap body.rootEl))
             list.addChild(box)
             i = (i + 1)
         }
@@ -728,10 +880,18 @@ class ChatCtl extends UiCtl {
         def i:int top
         while ((i < (top + shown)) && (i < (array_length messages))) {
             push a (this.msgTid(i))
-            def wt:TextCtl (this.textOf(i))
-            def words:[string] (wt.tids())
-            for words w:string wi {
-                push a w
+            if (this.isRich((itemAt messages i))) {
+                push a (this.richTid(i))
+                def lks:[string] (this.linkTids(i))
+                for lks lw:string li {
+                    push a lw
+                }
+            } {
+                def wt:TextCtl (this.textOf(i))
+                def words:[string] (wt.tids())
+                for words w:string wi {
+                    push a w
+                }
             }
             i = (i + 1)
         }
@@ -793,7 +953,11 @@ class ChatCtl extends UiCtl {
             if ((strlen m.time) > 0) {
                 said = ((said + ", ") + m.time)
             }
-            def r:UiRow (UiRow.of((this.msgTid(i)) (EVGA11yRole.text()) ((said + ": ") + m.text)))
+            def words:string m.text
+            if (this.isRich(m)) {
+                words = (chatText.plainOf(m.text))
+            }
+            def r:UiRow (UiRow.of((this.msgTid(i)) (EVGA11yRole.text()) ((said + ": ") + words)))
             r.parentTid = (tid + "-log")
             push out r
             i = (i + 1)
