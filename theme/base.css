@@ -2012,9 +2012,10 @@
   display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; justify-content: space-between;
   flex-shrink: 0; height: 64px; padding: 0 20px 0 24px; gap: 16px; border-bottom: 1px solid #e4e4e7;
 }
-.ch-head-l { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 14px; flex-grow: 1; flex-shrink: 1; width: 0px; min-width: 0px; }
-.ch-title { font-size: 18px; font-weight: bold; color: #18181b; white-space: nowrap; height: 26px; line-height: 26px; flex-shrink: 0; }
-.ch-desc { font-size: 13px; color: #616061; white-space: nowrap; height: 20px; line-height: 20px; cursor: pointer; flex-grow: 1; flex-shrink: 1; width: 0px; min-width: 0px; overflow: hidden; text-overflow: ellipsis; }
+.ch-head-l { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 14px; flex-shrink: 1; min-width: 0px; }
+.ch-head-l-edit { flex-grow: 1; width: 0px; }
+.ch-title { font-size: 18px; font-weight: bold; color: #18181b; white-space: nowrap; height: 26px; line-height: 26px; flex-shrink: 1; min-width: 0px; overflow: hidden; text-overflow: ellipsis; }
+.ch-desc { font-size: 13px; color: #616061; white-space: nowrap; height: 20px; line-height: 20px; cursor: pointer; flex-shrink: 4; min-width: 0px; overflow: hidden; text-overflow: ellipsis; }
 .ch-desc:hover { color: #18181b; }
 .ch-desc-empty { color: #a1a1aa; }
 .ch-desc-ro { cursor: default; }
@@ -2025,19 +2026,19 @@
 }
 .ch-desc-draft { font-size: 12px; color: #18181b; }
 .ch-desc-ph { font-size: 12px; }
-.ch-head-r { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 10px; flex-shrink: 0; }
+.ch-head-r { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 10px; flex-shrink: 1; min-width: 0px; }
 .ch-here {
   display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 2px;
-  height: 28px; padding: 0 8px 0 4px; border: 1px solid #e4e4e7; border-radius: 6px; cursor: pointer;
+  height: 28px; padding: 0 8px 0 4px; border: 1px solid #e4e4e7; border-radius: 6px; cursor: pointer; flex-shrink: 0;
 }
 .ch-here:hover { background-color: #f4f4f5; }
 .ch-here-av { width: 20px; height: 20px; border-radius: 4px; background-color: #f4f4f5; }
 .ch-here-n { font-size: 12px; color: #3f3f46; margin-left: 4px; white-space: nowrap; }
-.ch-me { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 6px; height: 28px; padding: 0 8px 0 2px; border-radius: 6px; cursor: pointer; }
+.ch-me { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 6px; height: 28px; padding: 0 8px 0 2px; border-radius: 6px; cursor: pointer; flex-shrink: 1; min-width: 0px; }
 .ch-me:hover { background-color: #f4f4f5; }
-.ch-me-av { width: 24px; height: 24px; border-radius: 5px; background-color: #f4f4f5; }
-.ch-me-n { font-size: 12px; color: #3f3f46; white-space: nowrap; }
-.ch-notice { flex-shrink: 0; height: 32px; line-height: 32px; margin: 12px 24px 0 24px; padding: 0 14px; border-radius: 6px; white-space: nowrap; font-size: 12px; color: #92400e; background-color: #fef3c7; }
+.ch-me-av { flex-shrink: 0; width: 24px; height: 24px; border-radius: 5px; background-color: #f4f4f5; }
+.ch-me-n { font-size: 12px; color: #3f3f46; white-space: nowrap; flex-shrink: 1; min-width: 0px; overflow: hidden; text-overflow: ellipsis; }
+.ch-notice { flex-shrink: 0; line-height: 18px; margin: 12px 24px 0 24px; padding: 7px 14px; border-radius: 6px; white-space: normal; font-size: 12px; color: #92400e; background-color: #fef3c7; }
 
 .ch-feed-wrap { display: flex; flex-direction: column; flex-wrap: nowrap; flex-grow: 1; flex-shrink: 1; min-height: 0px; flex-basis: 0px; }
 .ch-feed { flex-grow: 1; flex-shrink: 1; min-height: 0px; flex-basis: 0px; }
@@ -2198,7 +2199,7 @@
 .ch-thead-l { display: flex; flex-direction: column; flex-wrap: nowrap; }
 .ch-ttitle { font-size: 16px; font-weight: bold; color: #18181b; }
 .ch-tsub { font-size: 11px; color: #71717a; white-space: nowrap; }
-.ch-x { width: 28px; height: 28px; line-height: 28px; text-align: center; font-size: 18px; color: #52525b; border-radius: 4px; cursor: pointer; }
+.ch-x { flex-shrink: 0; width: 28px; height: 28px; line-height: 28px; text-align: center; font-size: 18px; color: #52525b; border-radius: 4px; cursor: pointer; }
 .ch-x:hover { background-color: #f4f4f5; }
 .ch-tcount { margin: 6px 16px; padding-bottom: 4px; font-size: 12px; color: #71717a; border-bottom: 1px solid #e4e4e7; }
 
