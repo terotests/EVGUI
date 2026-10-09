@@ -1,0 +1,108 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; A panel's width dragged by its handle (UiSplitter), on Node:
+; `ui:splitter:check`. No drawing: the width a drag, a window and a kept
+; value come to.
+Import "../src/UiSplitter.rgr"
+
+class SplitterCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    ; a thread pane right of its handle, as ChannelCtl sets it up
+    fn pane:UiSplitter () {
+        def s (new UiSplitter())
+        s.minSize = 280.0
+        s.maxSize = 960.0
+        s.minRest = 360.0
+        s.dir = -1.0
+        s.setHome(380.0)
+        return s
+    }
+
+    fn defaults:void () {
+        def s:UiSplitter (this.pane())
+        this.ok(((s.fit(1400.0)) == 380.0) "the default width where there is room")
+        this.ok(((s.fit(700.0)) == 340.0) ("a narrow whole leaves the rest its share: " + (to_string (s.fit(700.0)))))
+        this.ok(((s.fit(500.0)) == 280.0) "never under the least width")
+        s.setHome(320.0)
+        this.ok(((s.fit(1400.0)) == 320.0) "a new default is taken while none is chosen")
+    }
+
+    fn dragging:void () {
+        def s:UiSplitter (this.pane())
+        s.begin(1000.0 1400.0)
+        this.ok((s.dragTo(900.0)) "a drag to the left changes it")
+        this.ok((s.size == 480.0) ("and widens a pane right of its handle: " + (to_string s.size)))
+        this.ok(((s.dragTo(900.0)) == false) "the same point changes nothing")
+        s.dragTo(1100.0)
+        this.ok((s.size == 280.0) ("to the right it narrows, down to the least: " + (to_string s.size)))
+        s.dragTo(0.0)
+        this.ok((s.size == 960.0) ("and up to the most: " + (to_string s.size)))
+        this.ok((s.end()) "the release says it moved")
+        this.ok(s.chosen "the reader chose it")
+        this.ok(((s.px()) == 960) "kept as whole pixels")
+        this.ok(((s.end()) == false) "a second release is nothing")
+        this.ok(((s.dragTo(10.0)) == false) "nor a move with the button up")
+        ; a narrower window shows less, a wider one gives it back
+        this.ok(((s.fit(1000.0)) == 640.0) ("the messages keep their share: " + (to_string (s.fit(1000.0)))))
+        this.ok(((s.fit(1600.0)) == 960.0) "a wide window shows the chosen width again")
+        ; a drag starts from what is shown
+        s.begin(500.0 1000.0)
+        this.ok((s.size == 640.0) "a drag starts from the shown width")
+        s.dragTo(490.0)
+        this.ok((s.size == 640.0) "and cannot squeeze the messages")
+        s.dragTo(520.0)
+        this.ok((s.size == 620.0) ("but moves back under the pointer: " + (to_string s.size)))
+        s.end()
+    }
+
+    fn untouched:void () {
+        def s:UiSplitter (this.pane())
+        s.begin(800.0 1400.0)
+        this.ok(((s.end()) == false) "a press without a move changes nothing")
+        this.ok((s.chosen == false) "nor makes it chosen")
+        def l (new UiSplitter())
+        l.dir = 1.0
+        l.minSize = 100.0
+        l.minRest = 100.0
+        l.setHome(200.0)
+        l.begin(200.0 1000.0)
+        l.dragTo(260.0)
+        this.ok((l.size == 260.0) "a pane left of its handle widens to the right")
+    }
+
+    fn kept:void () {
+        def s:UiSplitter (this.pane())
+        s.choose(600.0)
+        this.ok((((s.fit(1400.0)) == 600.0) && s.chosen) "a kept width comes back")
+        s.setHome(320.0)
+        this.ok(((s.fit(1400.0)) == 600.0) "and a host's default does not undo it")
+        s.choose(0.0)
+        this.ok((s.size == 600.0) "nothing kept is no width")
+        this.ok((s.reset()) "back to the default")
+        this.ok(((s.fit(1400.0)) == 320.0) "which is the default's width")
+        this.ok((s.chosen == false) "and no longer chosen")
+        this.ok(((s.reset()) == false) "a second reset changes nothing")
+    }
+
+    sfn main:void () {
+        def k (new SplitterCheck())
+        k.defaults()
+        k.dragging()
+        k.untouched()
+        k.kept()
+        print ((to_string k.passes) + " passed, " + (to_string k.fails) + " failed")
+        if (k.fails > 0) {
+            print "RESULT FAIL"
+        }
+    }
+}

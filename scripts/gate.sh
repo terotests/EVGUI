@@ -95,6 +95,8 @@ SUITES=(
   # A room's chat as models: message text, pixel avatars, the feed
   # (src/UiChatText.rgr, src/UiPixelAvatar.rgr, src/UiChatFeed.rgr).
   ui:chatmodel:check
+  # A panel's width dragged by its handle (src/UiSplitter.rgr).
+  ui:splitter:check
   # The channel drawn from them (src/ChannelCtl.rgr).
   ui:channel:check
   ui:participants:check

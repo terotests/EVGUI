@@ -31,6 +31,8 @@
 ;   profile  name avatar color     the reader's new name and character
 ;   copy     text                  put a message's text (or a link) on the clipboard
 ;   close                          the × in the head (`closable`)
+;   threadw  px                    the thread pane was dragged to px wide
+;                                  (0: back to the default, a double click)
 ;
 ; The host answers with what the server says (`feed.put`, `thread.put`):
 ; nothing a request asks for is shown before the server has it, so every
@@ -57,6 +59,15 @@
 ; the composer (the draft there is kept aside and comes back): Enter asks
 ; `edit`, Escape gives up. An archived room keeps only the copying rows.
 ;
+; THE THREAD'S WIDTH: the line left of the thread pane is a handle
+; (`<tid>-split`, the col-resize cursor). The host passes the press, the
+; drag and the release (`splitPointerDown`, `splitDrag`, `splitUp`); a
+; UiSplitter keeps the width between `split.minSize` and `split.maxSize`
+; and leaves the messages at least `split.minRest`. `threadW` is the
+; default; what the reader chose comes back as `threadw` for the host to
+; keep and is given back with `setThreadW`. `threadShown` is the width
+; drawn by the last `build`.
+;
 ; NOT HERE: selecting part of a message's words (Copy takes the whole
 ; message), a full emoji picker for reactions (six quick ones on the
 ; hover bar; ":" in the composer finds any emoji).
@@ -70,6 +81,7 @@ Import "UiText.rgr"
 Import "UiChatText.rgr"
 Import "UiChatFeed.rgr"
 Import "UiPixelAvatar.rgr"
+Import "UiSplitter.rgr"
 Import "pkg:evg/EVGElement.rgr"
 Import "pkg:evg/EVGA11yTree.rgr"
 
@@ -133,7 +145,13 @@ class ChannelCtl extends UiCtl {
     ; --- the size, and the scroll as the layout clamped it -----------------------------
     def width:double 800.0
     def height:double 600.0
+    ; the thread pane's default width; `split` holds the reader's own, and
+    ; `threadShown` what the last build drew (the whole width when narrow)
     def threadW:double 360.0
+    def threadShown:double 360.0
+    def split:UiSplitter (new UiSplitter())
+    ; the pointer is over the thread's handle
+    def splitHot:boolean false
     def feedScroll:double 0.0
     def feedMax:double 0.0
     def tScroll:double 0.0
@@ -284,6 +302,60 @@ class ChannelCtl extends UiCtl {
         pinput.maxLength = 40
         menu.tid = (id + "-cm")
         menu.contextMode = true
+        split.minSize = 280.0
+        split.maxSize = 960.0
+        split.minRest = 360.0
+        split.dir = -1.0
+    }
+
+    ; --- the thread's width ------------------------------------------------------------------
+
+    ; a width the reader chose before (the host kept it from `threadw`)
+    fn setThreadW:void (w:double) {
+        split.choose(w)
+    }
+
+    ; is `target` the handle left of the thread (or its line)
+    fn isSplit:boolean (target:string) {
+        return ((indexOf target (tid + "-split")) == 0)
+    }
+
+    ; a press on the handle at page x `px`: → true when it was the handle's.
+    ; Two clicks put the default width back.
+    fn splitPointerDown:boolean (target:string px:double clicks:int) {
+        if (menu.open || ((this.isSplit(target)) == false)) {
+            return false
+        }
+        if ((strlen threadId) == 0) {
+            return false
+        }
+        if (clicks >= 2) {
+            if (split.reset()) {
+                this.ask("threadw\t0")
+            }
+            return true
+        }
+        split.begin(px width)
+        return true
+    }
+
+    ; the button is down on the handle and the pointer at page x `px`:
+    ; → true when the thread's width changed (build again)
+    fn splitDrag:boolean (px:double) {
+        return (split.dragTo(px))
+    }
+
+    fn splitDragging:boolean () {
+        return split.dragging
+    }
+
+    ; the button came up: asks `threadw` when the width changed
+    fn splitUp:boolean () {
+        if (split.end()) {
+            this.ask(("threadw\t" + (to_string (split.px()))))
+            return true
+        }
+        return false
     }
 
     ; --- the host's side ----------------------------------------------------------------------
@@ -1408,6 +1480,7 @@ class ChannelCtl extends UiCtl {
             this.menuHover(target)
             return ""
         }
+        splitHot = (this.isSplit(target))
         def w:string (this.msgWhere(target))
         if ((strlen w) == 0) {
             if (((indexOf target (tid + "-feed")) == 0) || ((indexOf target (tid + "-tfeed")) == 0)) {
@@ -1426,6 +1499,7 @@ class ChannelCtl extends UiCtl {
         if menu.open {
             return ""
         }
+        splitHot = false
         hoverSeq = 0
         hoverWhere = ""
         return ""
@@ -1664,6 +1738,9 @@ class ChannelCtl extends UiCtl {
     fn cursorFor:string (target:string) {
         if ((((input.owns(target)) || (tinput.owns(target))) || (dinput.owns(target))) || (pinput.owns(target))) {
             return "text"
+        }
+        if (((this.isSplit(target)) && ((strlen threadId) > 0)) && (menu.open == false)) {
+            return "col-resize"
         }
         return (? (this.pressable(target)) "pointer" "")
     }
@@ -1949,20 +2026,26 @@ class ChannelCtl extends UiCtl {
             UiTree.inline(main "display" "none")
         }
         root.addChild(main)
+        split.setHome(threadW)
+        threadShown = (split.fit(width))
+        if narrow {
+            threadShown = width
+        }
         if threadOpen {
             def pane:EVGElement (this.threadEl())
             ; the line between the messages and the thread (EVG strokes a
-            ; box's border on all four sides, so the edge is its own element)
+            ; box's border on all four sides, so the edge is its own element),
+            ; in a few pixels' handle that drags the thread wider
             if (narrow == false) {
-                def split:EVGElement (UiTree.div((tid + "-split") "ch-split"))
-                UiTree.inline(split "height" ((to_string height) + "px"))
-                root.addChild(split)
+                def edge:EVGElement (UiTree.div((tid + "-split") "ch-split"))
+                UiTree.inline(edge "height" ((to_string height) + "px"))
+                def lineCls:string (? (splitHot || split.dragging) "ch-split-l ch-split-on" "ch-split-l")
+                def line:EVGElement (UiTree.div((tid + "-split-l") lineCls))
+                UiTree.inline(line "height" ((to_string height) + "px"))
+                edge.addChild(line)
+                root.addChild(edge)
             }
-            if narrow {
-                UiTree.inline(pane "width" ((to_string width) + "px"))
-            } {
-                UiTree.inline(pane "width" ((to_string threadW) + "px"))
-            }
+            UiTree.inline(pane "width" ((to_string threadShown) + "px"))
             UiTree.inline(pane "height" ((to_string height) + "px"))
             root.addChild(pane)
         }
