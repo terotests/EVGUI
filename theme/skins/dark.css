@@ -14,3 +14,14 @@
    haze. */
 .theme-dark .ui-dialog-overlay,
 .theme-dark .ui-alertdialog-overlay { background-color: rgba(0, 0, 0, 0.6); }
+
+/* A window's frame: dark on a dark page it hardly shows, and its shadow is
+   black on near-black. So the edge is drawn light and the shadow becomes a
+   faint glow, which is what tells the window from what is behind it. */
+.theme-dark .ui-window-content,
+.theme-dark .ui-dialog-content,
+.theme-dark .ui-alertdialog-content,
+.theme-dark .ui-drawer-panel {
+  border-color: #71717a;
+  shadow-color: rgba(255, 255, 255, 0.16); shadow-radius: 24px; shadow-offset-y: 0px;
+}
