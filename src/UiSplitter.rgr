@@ -1,0 +1,132 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; UiSplitter — one panel's width, set by dragging the line beside it
+; =============================================================================
+; A panel with a handle on one side (ChannelCtl's thread pane, left of it):
+; the reader drags the handle and the panel follows, never under `minSize`,
+; never over `maxSize`, and always leaving `minRest` to what is beside it.
+;
+; `size` is the width the reader chose (the host's default until they do);
+; `fit` is what it comes to in a given whole, so a window made narrower
+; shows the panel narrower and a wider one gives the chosen width back.
+; A drag keeps `size` at what was shown at its end, so the next drag starts
+; under the pointer.
+;
+; Pixels, not percentages: a chat's thread is as wide as its lines, not a
+; share of the window (ResizeCtl is the percentage group).
+; =============================================================================
+
+class UiSplitter {
+    ; the width the reader chose, or the host's default (`home`)
+    def size:double 360.0
+    def home:double 360.0
+    def minSize:double 240.0
+    def maxSize:double 900.0
+    ; what the other side keeps at least
+    def minRest:double 320.0
+    ; 1.0: the panel is left of its handle (a drag to the right widens it);
+    ; -1.0: right of it (a drag to the left widens it)
+    def dir:double -1.0
+    ; the reader set the width (a drag or the host's kept one)
+    def chosen:boolean false
+
+    ; --- a drag ------------------------------------------------------------------
+    def dragging:boolean false
+    def startAt:double 0.0
+    def startSize:double 0.0
+    def whole:double 0.0
+
+    Constructor () {
+    }
+
+    ; the default width, until the reader chooses one
+    fn setHome:void (w:double) {
+        home = w
+        if ((chosen == false) && (dragging == false)) {
+            size = w
+        }
+    }
+
+    ; a width kept from before (the host's storage)
+    fn choose:void (w:double) {
+        if (w > 0.0) {
+            size = w
+            chosen = true
+        }
+    }
+
+    ; the widest the panel may be in `total`
+    fn most:double (total:double) {
+        def hi:double maxSize
+        if ((total - minRest) < hi) {
+            hi = (total - minRest)
+        }
+        if (hi < minSize) {
+            hi = minSize
+        }
+        return hi
+    }
+
+    fn clampIn:double (w:double total:double) {
+        def hi:double (this.most(total))
+        if (w > hi) {
+            return hi
+        }
+        if (w < minSize) {
+            return minSize
+        }
+        return w
+    }
+
+    ; the width shown in `total`
+    fn fit:double (total:double) {
+        return (this.clampIn(size total))
+    }
+
+    ; the button went down on the handle at `px`, in a whole `total` wide
+    fn begin:void (px:double total:double) {
+        dragging = true
+        startAt = px
+        whole = total
+        startSize = (this.fit(total))
+        size = startSize
+    }
+
+    ; the pointer moved to `px`: → true when the width changed
+    fn dragTo:boolean (px:double) {
+        if (dragging == false) {
+            return false
+        }
+        def before:double size
+        size = (this.clampIn((startSize + ((px - startAt) * dir)) whole))
+        return (size != before)
+    }
+
+    ; the button came up: → true when the width is not what it was
+    fn end:boolean () {
+        if (dragging == false) {
+            return false
+        }
+        dragging = false
+        if (size != startSize) {
+            chosen = true
+            return true
+        }
+        return false
+    }
+
+    ; back to the default (a double click on the handle): → true when it moved
+    fn reset:boolean () {
+        dragging = false
+        def was:boolean ((size != home) || chosen)
+        size = home
+        chosen = false
+        return was
+    }
+
+    ; the width as whole pixels, for the host to keep
+    fn px:int () {
+        return (to_int (size + 0.5))
+    }
+}
