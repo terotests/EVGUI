@@ -10,6 +10,7 @@
 Import "../src/UiHost.rgr"
 Import "../src/ChannelCtl.rgr"
 Import "../src/UiText.rgr"
+Import "pkg:evg/EVGDisplayList.rgr"
 
 class ChannelCheck {
     def fails:int 0
@@ -388,7 +389,9 @@ class ChannelCheck {
         def h3:UiHost (this.lay(c css))
         def desc:EVGElement (unwrap (h3.findEl((unwrap h3.root) "ch-desc")))
         def here:EVGElement (unwrap (h3.findEl((unwrap h3.root) "ch-here")))
-        this.ok(ChannelCtl.endsIn(desc.textContent "…") ("a long description is cut: " + desc.textContent))
+        def descDrawn:string (this.drawnIn(h3 desc))
+        this.ok(ChannelCtl.endsIn(descDrawn "…") ("a long description is drawn cut: " + descDrawn))
+        this.ok((desc.textContent == c.description) "and the element keeps it whole")
         this.ok(((desc.calculatedX + desc.calculatedWidth) <= here.calculatedX) ("and stays left of who is here: " + (to_string (desc.calculatedX + desc.calculatedWidth)) + " " + (to_string here.calculatedX) + " " + desc.textContent))
         c.activate("ch-tclose")
         this.ok(((c.splitPointerDown("ch-split" 0.0 1)) == false) "nor with no thread open")
@@ -463,6 +466,33 @@ class ChannelCheck {
         h.add(c)
         h.layout()
         return h
+    }
+
+    ; the text the painters draw inside an element's box (the display list,
+    ; so `text-overflow` is in it), lines joined with "|"
+    fn drawnIn:string (h:UiHost el:EVGElement) {
+        def out:string ""
+        if (null? h.lastPage) {
+            return out
+        }
+        def lay (new EVGLayout())
+        def dl (new EVGDisplayList())
+        dl.setTextEngine((lay.getTextEngine()))
+        dl.build((unwrap h.lastPage))
+        def i:int 0
+        while (i < (dl.count())) {
+            def cmd:EVGDrawCmd (dl.at(i))
+            def inX:boolean ((cmd.x >= (el.calculatedX - 0.5)) && (cmd.x < (el.calculatedX + el.calculatedWidth)))
+            def inY:boolean ((cmd.y >= (el.calculatedY - 0.5)) && (cmd.y < (el.calculatedY + el.calculatedHeight)))
+            if (((cmd.kind == 3) && inX) && inY) {
+                if ((strlen out) > 0) {
+                    out = (out + "|")
+                }
+                out = (out + cmd.text)
+            }
+            i = (i + 1)
+        }
+        return out
     }
 
     fn feedOf:EVGElement (h:UiHost) {
@@ -903,9 +933,10 @@ class ChannelCheck {
                 def nameR:double (ne.calculatedX + ne.calculatedWidth)
                 def openR:double (oe.calculatedX + oe.calculatedWidth)
                 def eng:EVGTextEngine ((new EVGLayout()).getTextEngine())
-                def drawn:double (UiText.widthOf(eng ne.textContent (ne.effectiveFontFamily()) ne.fontSize.pixels))
+                def shown:string (this.drawnIn(h ne))
+                def drawn:double (UiText.widthOf(eng shown (ne.effectiveFontFamily()) ne.fontSize.pixels))
                 this.ok((drawn <= (ne.calculatedWidth + 0.5)) ("the name is drawn no wider than its box: " + (to_string drawn) + " / " + (to_string ne.calculatedWidth)))
-                this.ok(((indexOf ne.textContent "…") > 0) ("and ends in …: " + ne.textContent))
+                this.ok(ChannelCtl.endsIn(shown "…") ("and ends in …: " + shown))
                 this.ok((nameR <= (oe.calculatedX + 0.5)) ("the long name ends before Open: " + (to_string nameR) + " / " + (to_string oe.calculatedX)))
                 this.ok((openR <= (cardR + 0.5)) ("Open stays in the card: " + (to_string openR) + " / " + (to_string cardR)))
                 this.ok(((ne.calculatedY + ne.calculatedHeight) <= ((ce.calculatedY + ce.calculatedHeight) + 0.5)) "the name stays above the card's bottom")
@@ -918,7 +949,7 @@ class ChannelCheck {
         def h2:UiHost (this.lay(c2 css))
         def n2@(optional):EVGElement (h2.findEl((unwrap h2.root) "ch-m3-b0-emb-n"))
         if (!null? n2) {
-            this.ok(((unwrap n2).textContent == "Retry plan") "a short name is left whole")
+            this.ok(((this.drawnIn(h2 (unwrap n2))) == "Retry plan") "a short name is drawn whole")
         }
     }
 
