@@ -1997,7 +1997,7 @@
 }
 .ch-head-l { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 14px; flex-grow: 1; flex-shrink: 1; width: 0px; min-width: 0px; }
 .ch-title { font-size: 18px; font-weight: bold; color: #18181b; white-space: nowrap; height: 26px; line-height: 26px; flex-shrink: 0; }
-.ch-desc { font-size: 13px; color: #616061; white-space: nowrap; height: 20px; line-height: 20px; cursor: pointer; flex-shrink: 1; min-width: 0px; overflow: hidden; }
+.ch-desc { font-size: 13px; color: #616061; white-space: nowrap; height: 20px; line-height: 20px; cursor: pointer; flex-grow: 1; flex-shrink: 1; width: 0px; min-width: 0px; overflow: hidden; }
 .ch-desc:hover { color: #18181b; }
 .ch-desc-empty { color: #a1a1aa; }
 .ch-desc-ro { cursor: default; }

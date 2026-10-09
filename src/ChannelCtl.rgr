@@ -304,7 +304,8 @@ class ChannelCtl extends UiCtl {
         menu.contextMode = true
         split.minSize = 280.0
         split.maxSize = 960.0
-        split.minRest = 360.0
+        ; the messages' head (title, who is here, oneself) fits in this
+        split.minRest = 480.0
         split.dir = -1.0
     }
 
@@ -2108,6 +2109,9 @@ class ChannelCtl extends UiCtl {
                 cls = (cls + " ch-desc-ro")
             }
             left.addChild((UiTree.label((tid + "-desc") cls d)))
+            ; ends in "…" where the messages are narrow (a wide thread)
+            push fitIds (tid + "-desc")
+            push fitTexts d
         }
         head.addChild(left)
         def right:EVGElement (UiTree.div((tid + "-head-r") "ch-head-r"))
