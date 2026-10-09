@@ -2001,7 +2001,7 @@
 }
 .ch-head-l { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 14px; flex-grow: 1; flex-shrink: 1; width: 0px; min-width: 0px; }
 .ch-title { font-size: 18px; font-weight: bold; color: #18181b; white-space: nowrap; height: 26px; line-height: 26px; flex-shrink: 0; }
-.ch-desc { font-size: 13px; color: #616061; white-space: nowrap; height: 20px; line-height: 20px; cursor: pointer; flex-grow: 1; flex-shrink: 1; width: 0px; min-width: 0px; overflow: hidden; }
+.ch-desc { font-size: 13px; color: #616061; white-space: nowrap; height: 20px; line-height: 20px; cursor: pointer; flex-grow: 1; flex-shrink: 1; width: 0px; min-width: 0px; overflow: hidden; text-overflow: ellipsis; }
 .ch-desc:hover { color: #18181b; }
 .ch-desc-empty { color: #a1a1aa; }
 .ch-desc-ro { cursor: default; }
@@ -2086,8 +2086,8 @@
 .ch-emb:hover { background-color: #f8fafc; }
 .ch-emb-i { width: 32px; height: 32px; line-height: 32px; text-align: center; font-size: 14px; color: #ffffff; background-color: #6366f1; border-radius: 6px; flex-shrink: 0; }
 .ch-emb-t { display: flex; flex-direction: column; flex-wrap: nowrap; flex-grow: 1; flex-shrink: 1; width: 0px; }
-.ch-emb-n { font-size: 13px; font-weight: bold; color: #18181b; white-space: nowrap; }
-.ch-emb-s { font-size: 11px; color: #71717a; white-space: nowrap; }
+.ch-emb-n { font-size: 13px; font-weight: bold; color: #18181b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ch-emb-s { font-size: 11px; color: #71717a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ch-emb-big { flex-direction: column; align-items: stretch; width: 340px; padding: 10px; }
 .ch-emb-pic { border-radius: 4px; background-color: #0f172a; flex-shrink: 0; }
 .ch-emb-row { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 10px; }
