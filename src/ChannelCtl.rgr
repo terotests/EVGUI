@@ -2046,7 +2046,9 @@ class ChannelCtl extends UiCtl {
 
     fn headEl:EVGElement () {
         def head:EVGElement (UiTree.div((tid + "-head") "ch-head"))
-        def left:EVGElement (UiTree.div((tid + "-head-l") "ch-head-l"))
+        ; the name and the description take what they need and give way
+        ; first to a narrow head; the description being written takes the rest
+        def left:EVGElement (UiTree.div((tid + "-head-l") (? descOpen "ch-head-l ch-head-l-edit" "ch-head-l")))
         left.addChild((UiTree.label((tid + "-title") "ch-title" ("# " + title))))
         if descOpen {
             def row:EVGElement (UiTree.div((tid + "-desc-row") "ch-desc-row"))
