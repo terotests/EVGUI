@@ -508,6 +508,16 @@ let questionnaire = new QuestionnaireDemo();
 questionnaire.setReducedMotion(questionnaireStill);
 questionnaire.init(cssFor("questionnaire", QUESTIONNAIRE_CSS));
 let lastQuestionnaireHover = "";
+// Card C's answers stand in for a deck's store: kept in this browser between
+// visits, as the lines CfStore saves.
+const QN_STORE_KEY = "evgui.questionnaire.answers";
+function qnLoad() {
+  try { const t = localStorage.getItem(QN_STORE_KEY); if (t) questionnaire.loadCurious(t); } catch (e) { /* storage blocked */ }
+}
+function qnSave() {
+  try { localStorage.setItem(QN_STORE_KEY, questionnaire.curiousSaved()); } catch (e) { /* storage blocked */ }
+}
+qnLoad();
 // Select: ReUI's patterns, every select a SelectCtl in its Base UI mode (keys,
 // typeahead, hover highlight, multiple); the list flips above its trigger
 // when there is no room below.
@@ -1827,14 +1837,14 @@ DEMOS.questionnaire = {
   hit: (x, y) => questionnaire.hitId(x, y),
   a11y: (gen, focus) => questionnaire.a11yJson(gen, focus),
   cursorAt: (x, y) => questionnaire.cursorAt(x, y),
-  press: (id) => questionnaire.press(id),
+  press: (id) => { const r = questionnaire.press(id); qnSave(); return r; },
   hover: (id) => {
     if (id === lastQuestionnaireHover) return false;
     lastQuestionnaireHover = id;
     return questionnaire.setHover(id);
   },
-  keyWith: (k, shift, ctrl) => questionnaire.keyWith(k, shift, ctrl),
-  key: (k) => questionnaire.key(k),
+  keyWith: (k, shift, ctrl) => { const r = questionnaire.keyWith(k, shift, ctrl); qnSave(); return r; },
+  key: (k) => { const r = questionnaire.key(k); qnSave(); return r; },
   ownsKey: (k) => questionnaire.ownsKey(k),
   animated: true,
   host: () => ({
@@ -3819,7 +3829,7 @@ function recreateDemo(name, css) {
   else if (name === "drawer") { drawer = new DrawerDemo(); drawer.init(css ?? cssFor("drawer", DRAWER_CSS)); lastDrawerHover = ""; }
   else if (name === "combobox") { combobox = new ComboboxDemo(); combobox.init(css ?? cssFor("combobox", COMBOBOX_CSS)); lastComboboxHover = ""; }
   else if (name === "colorpicker") { cpStop(); colorpicker = new ColorPickerDemo(); colorpicker.init(css ?? cssFor("colorpicker", COLORPICKER_CSS)); colorpicker.setScreenPicker(typeof window.EyeDropper === "function"); lastColorpickerHover = ""; }
-  else if (name === "questionnaire") { questionnaire = new QuestionnaireDemo(); questionnaire.setReducedMotion(questionnaireStill); questionnaire.init(css ?? cssFor("questionnaire", QUESTIONNAIRE_CSS)); lastQuestionnaireHover = ""; }
+  else if (name === "questionnaire") { questionnaire = new QuestionnaireDemo(); questionnaire.setReducedMotion(questionnaireStill); questionnaire.init(css ?? cssFor("questionnaire", QUESTIONNAIRE_CSS)); lastQuestionnaireHover = ""; qnLoad(); }
   else if (name === "select") { select = new SelectDemo(); select.init(css ?? cssFor("select", SELECT_CSS)); lastSelectHover = ""; }
   else if (name === "window") { windemo = new WindowDemo(); windemo.init(css ?? cssFor("window", WINDOW_CSS)); lastWindowHover = ""; }
   else if (name === "dialog") { dialog = new DialogDemo(); dialog.init(css ?? cssFor("dialog", DIALOG_CSS)); lastDialogHover = ""; }
