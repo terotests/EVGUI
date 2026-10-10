@@ -106,11 +106,53 @@ class MenuFitCheck {
         this.ok((w < 400.0) ("…and no wider than its rows: " + (to_string w)))
     }
 
+    ; A label heads the rows after it: on the card and as wide as a row, but
+    ; never focused, skipped by the arrows and not chosen.
+    fn labelRow:void () {
+        def h (new UiHost())
+        h.setPageSize(1400.0 800.0)
+        h.addStyleSheet(((this.sheet()) + " .ui-contextmenu-label { font-size: 12px; height: 24px; width: 100%; padding: 0 10px; }"))
+        def m:MenuCtl (h.addContextMenu("ctx" "Add new"))
+        m.addLabel("head" "Add new…")
+        m.addItem("deck" "Presentation" false)
+        m.addItem("folder" "Folder" false)
+        m.openMenu()
+        m.build()
+        h.layout()
+        def card:EVGElement (this.el(h "ctx-content"))
+        def head:EVGElement (this.el(h "ctx-item-head"))
+        def deck:EVGElement (this.el(h "ctx-item-deck"))
+        this.ok((head.className == "ui-contextmenu-label") ("the label has its own class: " + head.className))
+        this.ok((head.calculatedY < deck.calculatedY) "the label is above the rows")
+        this.ok(((head.calculatedWidth + 12.0) > card.calculatedWidth) "the label fills the card")
+        m.keyDown("ctx-content" "ArrowDown")
+        this.ok((m.activeTid == "ctx-item-deck") ("ArrowDown skips the label: " + m.activeTid))
+        m.keyDown("ctx-item-deck" "ArrowUp")
+        this.ok((m.activeTid == "ctx-item-deck") ("ArrowUp does not land on the label: " + m.activeTid))
+        m.activate("ctx-item-head")
+        this.ok(m.open "pressing the label chooses nothing")
+        this.ok(((m.isFocusable("ctx-item-head")) == false) "the label is not focusable")
+        def rs:[UiRow] (m.rows())
+        def found:boolean false
+        def i:int 0
+        while (i < (array_length rs)) {
+            def r:UiRow (itemAt rs i)
+            if (r.tid == "ctx-item-head") {
+                found = true
+                this.ok((r.role == (EVGA11yRole.none())) "the label has no role, as Radix's div")
+                this.ok((r.focusable == false) "the label's row is not focusable")
+            }
+            i = (i + 1)
+        }
+        this.ok(found "the label has a row")
+    }
+
     sfn main:void () {
         def c (new MenuFitCheck())
         c.contextCard()
         c.longRow()
         c.dropdownCard()
+        c.labelRow()
         print ((to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
         if (c.fails > 0) {
             print "RESULT FAIL"

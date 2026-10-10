@@ -1505,6 +1505,20 @@
 .ui-dropdownmenu-separator,
 .ui-contextmenu-separator { height: 1px; background-color: #e4e4e7; margin: 4px 0; }
 
+/* --- menu labels ---------------------------------------------------------------
+ * MenuCtl.addLabel: a heading over the rows after it, smaller and muted, never
+ * hovered or chosen. */
+.ui-dropdownmenu-label,
+.ui-contextmenu-label {
+  padding: 6px 12px 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #71717a;
+  width: 100%;
+  white-space: nowrap;
+}
+.theme-dark .ui-dropdownmenu-label, .theme-dark .ui-contextmenu-label { color: #94a3b8; }
+
 /* --- menu shortcuts ------------------------------------------------------------
  * A row with UiItem.shortcut: its name at the start and its keys at the far
  * edge, one cap per key, as reui's Kbd (muted, rounded, 20px tall). */

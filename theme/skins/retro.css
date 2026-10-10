@@ -182,6 +182,8 @@
 .theme-retro .ui-dropdownmenu-item-destructive { color: var(--retro-danger); }
 .theme-retro .ui-dropdownmenu-item-destructive:hover,
 .theme-retro .ui-dropdownmenu-item-destructive:focus { background-color: #3a1206; }
+.theme-retro .ui-dropdownmenu-label,
+.theme-retro .ui-contextmenu-label { color: var(--retro-ink-dim); }
 .theme-retro .ui-dropdownmenu-separator,
 .theme-retro .ui-contextmenu-separator,
 .theme-retro .ui-separator { background-color: var(--retro-screen-3); }

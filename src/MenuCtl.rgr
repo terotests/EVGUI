@@ -108,7 +108,7 @@ class MenuCtl extends UiCtl {
     def rowDisabled:[boolean]
     def rowIsSub:[boolean]
     def rowItem:[UiItem]
-    ; "" / "checkbox" / "radio" / "separator", as UiItem.kind.
+    ; "" / "checkbox" / "radio" / "separator" / "label", as UiItem.kind.
     def rowKind:[string]
 
     Constructor () {
@@ -234,7 +234,10 @@ class MenuCtl extends UiCtl {
     ; radio checks itself (and unchecks its group) when chosen, and choosing
     ; either CLOSES the menu, as every Radix item does unless the app prevents
     ; it. A separator is a row with no value to choose: never focused, skipped
-    ; by the arrows, published as role separator.
+    ; by the arrows, published as role separator. A label (Radix's Label) is
+    ; the same kind of row carrying words: a heading over the rows after it,
+    ; never focused, skipped by the arrows and not chosen, published with no
+    ; role of its own as Radix's plain div is.
 
     fn addCheckbox:UiItem (itemValue:string itemName:string isChecked:boolean) {
         def it (new UiItem())
@@ -262,6 +265,14 @@ class MenuCtl extends UiCtl {
         it.value = ("sep-" + (array_length parent.kids))
         it.kind = "separator"
         push parent.kids it
+    }
+
+    fn addLabel:void (itemValue:string itemName:string) {
+        def it (new UiItem())
+        it.value = itemValue
+        it.name = itemName
+        it.kind = "label"
+        push items it
     }
 
     fn addSeparator:void () {
@@ -481,6 +492,10 @@ class MenuCtl extends UiCtl {
             if isSep {
                 el.className = (base + "-separator")
             }
+            def isLabel:boolean (it.kind == "label")
+            if isLabel {
+                el.className = (base + "-label")
+            }
             if ((it.kind == "checkbox") || (it.kind == "radio")) {
                 def cw:string "unchecked"
                 if it.checked {
@@ -517,8 +532,9 @@ class MenuCtl extends UiCtl {
             push rowTid myTid
             push rowOwner ownerTid
             push rowName it.name
-            ; A separator counts as disabled for every scan: nothing lands on it.
-            push rowDisabled (it.disabled || isSep)
+            ; A separator or a label counts as disabled for every scan:
+            ; nothing lands on it.
+            push rowDisabled ((it.disabled || isSep) || isLabel)
             push rowKind it.kind
             push rowIsSub isSub
             push rowItem it
@@ -1117,6 +1133,9 @@ class MenuCtl extends UiCtl {
             if (kindOf == "separator") {
                 role = (EVGA11yRole.separator())
             }
+            if (kindOf == "label") {
+                role = (EVGA11yRole.none())
+            }
             def row:UiRow (UiRow.of(rtid role rowNm))
             row.parentTid = (itemAt rowOwner i)
             def keyed:UiItem (itemAt rowItem i)
@@ -1125,6 +1144,9 @@ class MenuCtl extends UiCtl {
             if (kindOf == "separator") {
                 row.disabled = false
                 row.orientation = "horizontal"
+            }
+            if (kindOf == "label") {
+                row.disabled = false
             }
             if ((kindOf == "checkbox") || (kindOf == "radio")) {
                 def src:UiItem (itemAt rowItem i)
