@@ -1001,6 +1001,14 @@
               <strong>Enter</strong> is Next, and after it the focus is on the new
               question. With reduced motion on, the steps change without the slide.
             </p>
+            <p class="hint">
+              The third card is drawn from the file at its left. Answer it and
+              press <strong>Finish</strong>: the answer is checked and saved
+              (&ldquo;Saved to the deck&rdquo;), and the bars at the right
+              count it. <strong>Next respondent</strong> starts a new answer;
+              <strong>Add 20 answers</strong> fills the bars,
+              <strong>Clear</strong> empties them.
+            </p>
           </section>
           <section data-for="colorpicker">
             <h2>what to try</h2>
@@ -1825,7 +1833,7 @@
   "title": "Questionnaire",
   "src": "QuestionnaireDemo",
   "caption": "QuestionnaireCtl · ReUI / shadcn's look, on RadioGroupCtl and CheckboxCtl",
-  "desc": "A step-by-step questionnaire in two cards, after the reference: a single-choice card (the question, a muted description and \"Question 1 of 3\" at the top right, three bordered option rows with a radio, a bold label, a muted second line and a key badge, and a grey footer band with Next) and a multiple-choice card (\"Question 1 of 3\" and a \"0 of 6 selected\" badge, six checkbox rows A–F, Next at the bottom right). Each walks through three questions of its own — single, multiple or single again, and an optional 1–5 scale — and ends on a summary with Back and Start over. QuestionnaireCtl owns the steps, the answers (a RadioGroupCtl per single-choice step, a CheckboxCtl per option of a multiple-choice one), the required gate with its inline error, Next / Back / Start over, the keys (letters, arrows, Space, Enter) and what a status region announces. Each step is a radiogroup or a group labelled by its question and described by its description; a new step slides in over 160ms unless reduced motion is asked for. Specified from the picture and the WAI-ARIA radio and checkbox patterns, not measured against a library."
+  "desc": "A step-by-step questionnaire in two cards, after the reference: a single-choice card (the question, a muted description and \"Question 1 of 3\" at the top right, three bordered option rows with a radio, a bold label, a muted second line and a key badge, and a grey footer band with Next) and a multiple-choice card (\"Question 1 of 3\" and a \"0 of 6 selected\" badge, six checkbox rows A–F, Next at the bottom right). Each walks through three questions of its own — single, multiple or single again, and an optional 1–5 scale — and ends on a summary with Back and Start over. QuestionnaireCtl owns the steps, the answers (a RadioGroupCtl per single-choice step, a CheckboxCtl per option of a multiple-choice one), the required gate with its inline error, Next / Back / Start over, the keys (letters, arrows, Space, Enter) and what a status region announces. Each step is a radiogroup or a group labelled by its question and described by its description; a new step slides in over 160ms unless reduced motion is asked for. Specified from the picture and the WAI-ARIA radio and checkbox patterns, not measured against a library. Under them, a third card is a Sliqtly Curious proof of concept: it is made from a questionnaire file (forms/feedback.form.md, shown at its left, parsed by CuriousForm), Finish hands the answer to a store that checks it against the file and counts it, and the results at the right are drawn from those counters, as a chart on a slide would be. The answers are kept in this browser between visits."
  },
  "colorpicker": {
   "title": "Color Picker",

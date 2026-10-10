@@ -156,7 +156,7 @@ console.log("--- as it loads ---");
   ok("no Back on the first question", !byId(d, "qa-back") && !byId(d, "qb-back"));
   const nA = rect(d, "qa-next"); const qa = rect(d, "qa");
   ok("card A's Next sits in the footer band, right-aligned", nA.x + nA.w > qa.x + qa.w - 30 && nA.y > rect(d, "qa-s0").y + rect(d, "qa-s0").h, [nA, qa]);
-  const band = d.root.children[0].children[0].children.find((k) => /qn-band/.test(k.className));
+  const band = d.root.children[0].children[0].children[0].children.find((k) => /qn-band/.test(k.className));
   ok("the band is light grey", band && JSON.stringify(band.backgroundColor ? [band.backgroundColor.r, band.backgroundColor.g, band.backgroundColor.b].map((v) => Math.round(v <= 1 ? v * 255 : v)) : null) === "[250,250,250]",
     band && band.backgroundColor);
   const nB = rect(d, "qb-next");
@@ -516,7 +516,7 @@ if (!fs.existsSync(path.join(HERE, "bundle.js"))) {
     await press(page, "Tab");
     ok("Tab back into the group lands on the option last focused", (await state(page)).focused === "qb-s0-access");
     const kbStops = await page.evaluate(() => window.__kbStops());
-    ok("the page's tab stops: one per group, plus the buttons", kbStops.join() === "qa-s1-solo,qa-back,qa-next,qb-s0-access,qb-next", kbStops);
+    ok("the page's tab stops: one per group, plus the buttons", kbStops.join() === "qa-s1-solo,qa-back,qa-next,qb-s0-access,qb-next,qc-s0-1,qc-next,qc-sim,qc-clear", kbStops);
     await press(page, "Enter");
     await press(page, "c");
     await press(page, "Enter");
@@ -547,6 +547,47 @@ if (!fs.existsSync(path.join(HERE, "bundle.js"))) {
     await click(page, "qb-next");
     ok("390: and Next moves on", (await state(page)).qb.step === 1);
     ok("390: no errors", problems.length === 0, problems);
+    await ctx.close();
+  }
+
+  {
+    // Card C: made from forms/feedback.form.md; Finish hands the answer to the
+    // store, the results panel counts it, the page keeps it between visits.
+    const { ctx, page, problems } = await open({ width: 1440, height: 900 });
+    await page.evaluate(() => { try { localStorage.removeItem("evgui.questionnaire.answers"); } catch (e) {} });
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForFunction("window.__qnState");
+    let s = await state(page);
+    ok("card C: the file's three questions, none answered yet", s.qc.step === 0 && s.qc.kind === "scale" && s.total === 0, s);
+    await click(page, "qc-s0-4");
+    await click(page, "qc-next");
+    await click(page, "qc-next");
+    s = await state(page);
+    ok("card C: the file's `required` gates Next", s.qc.step === 1 && s.qc.error !== "", s.qc);
+    await click(page, "qc-s1-workflows");
+    await click(page, "qc-next");
+    ok("card C: the multi question is optional", (await state(page)).qc.kind === "multiple");
+    await click(page, "qc-s2-a-colleague");
+    await click(page, "qc-next");
+    s = await state(page);
+    ok("card C: Finish saves the answer once, with a receipt", s.qc.done && s.total === 1 && s.receipt === "r1", s);
+    ok("card C: the summary reads back the answer", s.qc.answers === "4 of 5|Workflows|A colleague", s.qc);
+    let m = await mirror(page, "qc-res-topic-1");
+    ok("card C: the results count it (Workflows: 1)", m && m.text === "Workflows: 1", m);
+    await press(page, "Enter");
+    ok("card C: a key on the summary does not count it twice", (await state(page)).total === 1);
+    await click(page, "qc-restart");
+    s = await state(page);
+    ok("card C: Next respondent starts an empty answer", !s.qc.done && s.qc.step === 0 && s.receipt === "", s);
+    await click(page, "qc-sim");
+    ok("card C: Add 20 answers", (await state(page)).total === 21);
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForFunction("window.__qnState");
+    ok("card C: the answers are still there after a reload", (await state(page)).total === 21);
+    await click(page, "qc-clear");
+    m = await mirror(page, "qc-res-topic-1");
+    ok("card C: Clear empties the counts", (await state(page)).total === 0 && m && m.text === "Workflows: 0", m);
+    ok("card C: no errors", problems.length === 0, problems);
     await ctx.close();
   }
 

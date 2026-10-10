@@ -1,0 +1,595 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; CuriousForm — a questionnaire FILE, its answers and their tallies (PoC)
+; =============================================================================
+; The model behind Sliqtly Curious, proven here before it moves to
+; RangerMarkdown / Sliqtly: no UI in this file. QuestionnaireDemo's third
+; card is drawn from what it says.
+;
+;   CfForm.parse(src)   a `.form.md` file → questions. The format:
+;
+;       ---
+;       form: Event feedback
+;       anonymous: true
+;       ---
+;
+;       ## How useful was the talk? {#useful type=scale min=1 max=5 required}
+;       labels: Not at all | Very
+;       A paragraph under the heading is the question's description.
+;
+;       ## Which topic interested you most? {#topic type=choice required}
+;       - Live data — charts from a sheet
+;       - Workflows
+;
+;     A heading is a question; `{#id}` names it (answers and tallies are kept
+;     by that name, never by position, so questions can be reordered and
+;     reworded). type = choice | multi | scale. `- ` lines are the options,
+;     "label — description". Anything the parser does not understand is a
+;     warning, never a silent drop.
+;
+;   CfStore             the deck's own small store ("DB in DB"): validates an
+;                       answer against the form, keeps the response and
+;                       updates the per-option counters a chart on a slide
+;                       reads. It saves and loads as plain text lines, so a
+;                       host can keep it anywhere (SQLite row, Firestore doc,
+;                       localStorage on the demo page).
+;
+; An answer is a list of "id=value" pairs, values comma-separated for a
+; multi; option values are slugs of the labels, so they never carry the
+; separators.
+; =============================================================================
+
+class CfQuestion {
+    def id:string ""
+    ; "single", "multiple" or "scale" (QuestionnaireCtl's kinds).
+    def kind:string "single"
+    def title:string ""
+    def description:string ""
+    def required:boolean false
+    def values:[string]
+    def labels:[string]
+    def descs:[string]
+    def low:string ""
+    def high:string ""
+    def min:int 1
+    def max:int 5
+
+    Constructor () {
+        def v:[string]
+        values = v
+        def l:[string]
+        labels = l
+        def d:[string]
+        descs = d
+    }
+
+    fn count:int () {
+        return (array_length values)
+    }
+
+    fn indexOf:int (value:string) {
+        def i:int 0
+        while (i < (array_length values)) {
+            if ((itemAt values i) == value) {
+                return i
+            }
+            i = (i + 1)
+        }
+        return -1
+    }
+}
+
+class CfForm {
+    def title:string ""
+    def anonymous:boolean true
+    def questions:[CfQuestion]
+    def warnings:[string]
+    ; A hash of what the respondent is asked: answers remember it.
+    def version:string ""
+
+    Constructor () {
+        def q:[CfQuestion]
+        questions = q
+        def w:[string]
+        warnings = w
+    }
+
+    fn count:int () {
+        return (array_length questions)
+    }
+
+    fn indexOfQuestion:int (id:string) {
+        def i:int 0
+        while (i < (array_length questions)) {
+            def q:CfQuestion (itemAt questions i)
+            if (q.id == id) {
+                return i
+            }
+            i = (i + 1)
+        }
+        return -1
+    }
+
+    sfn num:int (s:string fallback:int) {
+        def v:int (?? (to_int (trim s)) fallback)
+        return v
+    }
+
+    ; "Live data!" → "live-data". Letters past ASCII (ä, ö) are kept.
+    sfn slug:string (label:string) {
+        def out:string ""
+        def dash:boolean false
+        def i:int 0
+        def low:string (to_lowercase label)
+        while (i < (strlen low)) {
+            def c:int (charAt low i)
+            def keep:boolean (((c >= 97) && (c <= 122)) || ((c >= 48) && (c <= 57)) || (c > 127))
+            if keep {
+                if (dash && ((strlen out) > 0)) {
+                    out = (out + "-")
+                }
+                dash = false
+                out = (out + (strfromcode c))
+            } {
+                dash = true
+            }
+            i = (i + 1)
+        }
+        return out
+    }
+
+    sfn hash:string (s:string) {
+        def h:int 7
+        def i:int 0
+        while (i < (strlen s)) {
+            h = (((h * 31) + (charAt s i)) % 1000000007)
+            i = (i + 1)
+        }
+        return (to_string h)
+    }
+
+    ; `{#id type=scale min=1 max=5 required}` at the end of a heading.
+    fn readAttrs:void (q:CfQuestion attrs:string line:int) {
+        def parts:[string] (strsplit attrs " ")
+        def i:int 0
+        while (i < (array_length parts)) {
+            def p:string (trim (itemAt parts i))
+            if ((strlen p) > 0) {
+                def eq:int (indexOf p "=")
+                if ((charAt p 0) == 35) {
+                    q.id = (substring p 1 (strlen p))
+                } {
+                    if (p == "required") {
+                        q.required = true
+                    } {
+                        if (eq > 0) {
+                            def k:string (substring p 0 eq)
+                            def v:string (substring p (eq + 1) (strlen p))
+                            if (k == "type") {
+                                if (v == "choice") {
+                                    q.kind = "single"
+                                } {
+                                    if (v == "multi") {
+                                        q.kind = "multiple"
+                                    } {
+                                        if (v == "scale") {
+                                            q.kind = "scale"
+                                        } {
+                                            push warnings ("line " + (to_string line) + ": type " + v + " is not supported yet")
+                                        }
+                                    }
+                                }
+                            } {
+                                if (k == "min") {
+                                    q.min = (CfForm.num(v 1))
+                                } {
+                                    if (k == "max") {
+                                        q.max = (CfForm.num(v 5))
+                                    } {
+                                        push warnings ("line " + (to_string line) + ": unknown setting " + k)
+                                    }
+                                }
+                            }
+                        } {
+                            push warnings ("line " + (to_string line) + ": unknown setting " + p)
+                        }
+                    }
+                }
+            }
+            i = (i + 1)
+        }
+    }
+
+    fn startQuestion:CfQuestion (text:string line:int) {
+        def q (new CfQuestion())
+        def title:string (trim text)
+        def open:int (indexOf title "{")
+        if ((open >= 0) && ((charAt title ((strlen title) - 1)) == 125)) {
+            def attrs:string (substring title (open + 1) ((strlen title) - 1))
+            title = (trim (substring title 0 open))
+            this.readAttrs(q attrs line)
+        }
+        q.title = title
+        if ((strlen q.id) == 0) {
+            q.id = (CfForm.slug(title))
+            push warnings ("line " + (to_string line) + ": no {#id}, using " + q.id)
+        }
+        push questions q
+        return q
+    }
+
+    fn addOption:void (q:CfQuestion text:string line:int) {
+        if (q.kind == "scale") {
+            push warnings ("line " + (to_string line) + ": a scale has no options")
+            return
+        }
+        def label:string (trim text)
+        def desc:string ""
+        def cut:int (indexOf label " — ")
+        if (cut > 0) {
+            desc = (trim (substring label (cut + 3) (strlen label)))
+            label = (trim (substring label 0 cut))
+        }
+        def v:string (CfForm.slug(label))
+        if ((q.indexOf(v)) >= 0) {
+            push warnings ("line " + (to_string line) + ": option " + label + " twice")
+            return
+        }
+        push q.values v
+        push q.labels label
+        push q.descs desc
+    }
+
+    ; A scale's points become its options: "1".."5", the ends described.
+    fn finish:void (q:CfQuestion) {
+        if (q.kind != "scale") {
+            if ((q.count()) < 2) {
+                push warnings ("question " + q.id + " has fewer than two options")
+            }
+            return
+        }
+        if (q.max <= q.min) {
+            push warnings ("question " + q.id + ": max must be above min")
+            q.max = (q.min + 1)
+        }
+        def n:int q.min
+        while (n <= q.max) {
+            def d:string ""
+            if (n == q.min) {
+                d = q.low
+            }
+            if (n == q.max) {
+                d = q.high
+            }
+            push q.values (to_string n)
+            push q.labels (to_string n)
+            push q.descs d
+            n = (n + 1)
+        }
+    }
+
+    sfn parse:CfForm (src:string) {
+        def f (new CfForm())
+        def lines:[string] (strsplit src "\n")
+        def inFront:boolean false
+        def cur@(optional):CfQuestion
+        def i:int 0
+        while (i < (array_length lines)) {
+            def raw:string (itemAt lines i)
+            def line:string (trim raw)
+            def no:int (i + 1)
+            if ((i == 0) && (line == "---")) {
+                inFront = true
+            } {
+                if inFront {
+                    if (line == "---") {
+                        inFront = false
+                    } {
+                        def c:int (indexOf line ":")
+                        if (c > 0) {
+                            def k:string (trim (substring line 0 c))
+                            def v:string (trim (substring line (c + 1) (strlen line)))
+                            if (k == "form") {
+                                f.title = v
+                            } {
+                                if (k == "anonymous") {
+                                    f.anonymous = (v != "false")
+                                }
+                            }
+                        }
+                    }
+                } {
+                    if ((indexOf line "## ") == 0) {
+                        if (!null? cur) {
+                            def done:CfQuestion (unwrap cur)
+                            f.finish(done)
+                        }
+                        cur = (f.startQuestion((substring line 3 (strlen line)) no))
+                    } {
+                        if (null? cur) {
+                            if (((strlen line) > 0) && ((indexOf line "# ") == 0)) {
+                                if ((strlen f.title) == 0) {
+                                    f.title = (trim (substring line 2 (strlen line)))
+                                }
+                            }
+                        } {
+                            def q:CfQuestion (unwrap cur)
+                            if ((indexOf line "- ") == 0) {
+                                f.addOption(q (substring line 2 (strlen line)) no)
+                            } {
+                                if ((indexOf line "labels:") == 0) {
+                                    def ends:[string] (strsplit (substring line 7 (strlen line)) "|")
+                                    if ((array_length ends) == 2) {
+                                        q.low = (trim (itemAt ends 0))
+                                        q.high = (trim (itemAt ends 1))
+                                    }
+                                } {
+                                    if ((strlen line) > 0) {
+                                        if ((strlen q.description) > 0) {
+                                            q.description = (q.description + " ")
+                                        }
+                                        q.description = (q.description + line)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            i = (i + 1)
+        }
+        if (!null? cur) {
+            def last:CfQuestion (unwrap cur)
+            f.finish(last)
+        }
+        ; The version hashes what is asked, not how the file is spaced.
+        def sig:string ""
+        def k:int 0
+        while (k < (array_length f.questions)) {
+            def q:CfQuestion (itemAt f.questions k)
+            sig = (sig + q.id + ":" + q.kind + ":" + q.title + ":" + (join q.values ",") + ";")
+            k = (k + 1)
+        }
+        f.version = (CfForm.hash(sig))
+        return f
+    }
+}
+
+class CfResponse {
+    def id:string ""
+    def version:string ""
+    ; "id=value[,value]" per answered question.
+    def pairs:[string]
+
+    Constructor () {
+        def p:[string]
+        pairs = p
+    }
+
+    fn valueOf:string (qid:string) {
+        def i:int 0
+        while (i < (array_length pairs)) {
+            def p:string (itemAt pairs i)
+            def eq:int (indexOf p "=")
+            if ((eq > 0) && ((substring p 0 eq) == qid)) {
+                return (substring p (eq + 1) (strlen p))
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+}
+
+class CfStore {
+    def form:CfForm (new CfForm())
+    def responses:[CfResponse]
+    ; Per question, per option: how many chose it. Kept as answers arrive,
+    ; so a slide reads counters and never the raw rows.
+    def tallies:[[int]]
+    def limit:int 500
+    def seq:int 0
+    def lastError:string ""
+
+    Constructor () {
+        def r:[CfResponse]
+        responses = r
+        def t:[[int]]
+        tallies = t
+    }
+
+    fn setForm:void (f:CfForm) {
+        form = f
+        this.retally()
+    }
+
+    fn total:int () {
+        return (array_length responses)
+    }
+
+    fn retally:void () {
+        def t:[[int]]
+        def i:int 0
+        while (i < (form.count())) {
+            def q:CfQuestion (itemAt form.questions i)
+            def row:[int]
+            def k:int 0
+            while (k < (q.count())) {
+                push row 0
+                k = (k + 1)
+            }
+            push t row
+            i = (i + 1)
+        }
+        tallies = t
+        def r:int 0
+        while (r < (array_length responses)) {
+            this.count((itemAt responses r))
+            r = (r + 1)
+        }
+    }
+
+    fn count:void (resp:CfResponse) {
+        def i:int 0
+        while (i < (form.count())) {
+            def q:CfQuestion (itemAt form.questions i)
+            def v:string (resp.valueOf(q.id))
+            if ((strlen v) > 0) {
+                def row:[int] (itemAt tallies i)
+                def vals:[string] (strsplit v ",")
+                def k:int 0
+                while (k < (array_length vals)) {
+                    def at:int (q.indexOf((itemAt vals k)))
+                    if (at >= 0) {
+                        set_at row at ((itemAt row at) + 1)
+                    }
+                    k = (k + 1)
+                }
+            }
+            i = (i + 1)
+        }
+    }
+
+    fn tallyOf:[int] (qid:string) {
+        def i:int 0
+        while (i < (form.count())) {
+            def q:CfQuestion (itemAt form.questions i)
+            if (q.id == qid) {
+                return (itemAt tallies i)
+            }
+            i = (i + 1)
+        }
+        def none:[int]
+        return none
+    }
+
+    ; How many answered the question at all (a multi counts a person once).
+    fn answeredOf:int (qid:string) {
+        def n:int 0
+        def r:int 0
+        while (r < (array_length responses)) {
+            def resp:CfResponse (itemAt responses r)
+            if ((strlen (resp.valueOf(qid))) > 0) {
+                n = (n + 1)
+            }
+            r = (r + 1)
+        }
+        return n
+    }
+
+    ; The check the server makes: "" when the answer is taken, else why not.
+    fn check:string (pairs:[string]) {
+        if ((this.total()) >= limit) {
+            return "This questionnaire has all the answers it takes."
+        }
+        def i:int 0
+        while (i < (array_length pairs)) {
+            def p:string (itemAt pairs i)
+            def eq:int (indexOf p "=")
+            if (eq <= 0) {
+                return ("Not an answer: " + p)
+            }
+            def qid:string (substring p 0 eq)
+            def at:int (form.indexOfQuestion(qid))
+            if (at < 0) {
+                return ("No question " + qid)
+            }
+            def q:CfQuestion (itemAt form.questions at)
+            def vals:[string] (strsplit (substring p (eq + 1) (strlen p)) ",")
+            if (((array_length vals) > 1) && (q.kind != "multiple")) {
+                return ("One answer only: " + q.title)
+            }
+            def k:int 0
+            while (k < (array_length vals)) {
+                if ((q.indexOf((itemAt vals k))) < 0) {
+                    return ("Not an option of " + q.title + ": " + (itemAt vals k))
+                }
+                k = (k + 1)
+            }
+            i = (i + 1)
+        }
+        def r (new CfResponse())
+        r.pairs = pairs
+        def j:int 0
+        while (j < (form.count())) {
+            def q:CfQuestion (itemAt form.questions j)
+            if (q.required && ((strlen (r.valueOf(q.id))) == 0)) {
+                return ("Required: " + q.title)
+            }
+            j = (j + 1)
+        }
+        return ""
+    }
+
+    ; Takes an answer: the receipt id, or "" (and lastError says why).
+    fn submit:string (pairs:[string]) {
+        def why:string (this.check(pairs))
+        lastError = why
+        if ((strlen why) > 0) {
+            return ""
+        }
+        seq = (seq + 1)
+        def r (new CfResponse())
+        r.id = ("r" + (to_string seq))
+        r.version = form.version
+        r.pairs = pairs
+        push responses r
+        this.count(r)
+        return r.id
+    }
+
+    fn clearAll:void () {
+        def r:[CfResponse]
+        responses = r
+        seq = 0
+        this.retally()
+    }
+
+    ; One line per response: id, version, then the pairs, tab-separated.
+    fn saveText:string () {
+        def out:string ""
+        def i:int 0
+        while (i < (array_length responses)) {
+            def r:CfResponse (itemAt responses i)
+            def line:string (r.id + "\t" + r.version)
+            def k:int 0
+            while (k < (array_length r.pairs)) {
+                line = (line + "\t" + (itemAt r.pairs k))
+                k = (k + 1)
+            }
+            out = (out + line + "\n")
+            i = (i + 1)
+        }
+        return out
+    }
+
+    ; Lines that no longer fit the form (a removed option) are skipped by the
+    ; tallies, not dropped from the store.
+    fn loadText:void (text:string) {
+        def rs:[CfResponse]
+        responses = rs
+        seq = 0
+        def lines:[string] (strsplit text "\n")
+        def i:int 0
+        while (i < (array_length lines)) {
+            def parts:[string] (strsplit (itemAt lines i) "\t")
+            if ((array_length parts) >= 2) {
+                def r (new CfResponse())
+                r.id = (itemAt parts 0)
+                r.version = (itemAt parts 1)
+                def k:int 2
+                while (k < (array_length parts)) {
+                    push r.pairs (itemAt parts k)
+                    k = (k + 1)
+                }
+                push responses r
+                def n:int (CfForm.num((substring r.id 1 (strlen r.id)) 0))
+                if (n > seq) {
+                    seq = n
+                }
+            }
+            i = (i + 1)
+        }
+        this.retally()
+    }
+}

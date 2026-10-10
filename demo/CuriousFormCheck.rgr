@@ -1,0 +1,96 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; The questionnaire file, its answers and tallies (CuriousForm), on Node:
+; `ui:curious:check`.
+Import "CuriousForm.rgr"
+
+class CuriousFormCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    sfn src:string () {
+        return ("---\nform: Event feedback\nanonymous: true\n---\n\n## How useful was the talk? {#useful type=scale min=1 max=5 required}\nlabels: Not at all | Very\nPick a number.\n\n## Which topic interested you most? {#topic type=choice required}\n- Live data — charts from a sheet\n- Workflows\n- Something else\n\n## Where did you hear about it? {#heard type=multi}\n- A colleague\n- Social media\n- The newsletter\n")
+    }
+
+    fn parse:void () {
+        def f:CfForm (CfForm.parse((CuriousFormCheck.src())))
+        this.ok((f.title == "Event feedback") ("the front matter names it: " + f.title))
+        this.ok(f.anonymous "anonymous: true")
+        this.ok(((f.count()) == 3) ("three questions: " + (to_string (f.count()))))
+        this.ok(((array_length f.warnings) == 0) ("no warnings: " + (join f.warnings "; ")))
+        def q0:CfQuestion (itemAt f.questions 0)
+        this.ok(((q0.id == "useful") && (q0.kind == "scale") && q0.required) "a required scale named useful")
+        this.ok(((q0.count()) == 5) "1..5 are its options")
+        this.ok(((q0.low == "Not at all") && ((itemAt q0.descs 0) == "Not at all") && ((itemAt q0.descs 4) == "Very")) "the end labels describe the ends")
+        this.ok((q0.description == "Pick a number.") ("the paragraph is the description: " + q0.description))
+        def q1:CfQuestion (itemAt f.questions 1)
+        this.ok(((join q1.values ",") == "live-data,workflows,something-else") ("option values are slugs: " + (join q1.values ",")))
+        this.ok(((itemAt q1.descs 0) == "charts from a sheet") "label — description")
+        def q2:CfQuestion (itemAt f.questions 2)
+        this.ok(((q2.kind == "multiple") && (q2.required == false)) "an optional multi")
+        def g:CfForm (CfForm.parse("## Untagged\n- a\n- b\n## X {#x type=essay}\n- c\n- d\n"))
+        this.ok(((array_length g.warnings) == 2) ("an id is made and an unknown type warned: " + (join g.warnings "; ")))
+        this.ok(((itemAt g.questions 0).id == "untagged") "the id falls back to the slug")
+        def spaced:CfForm (CfForm.parse((CuriousFormCheck.src() + "\n\n")))
+        this.ok((spaced.version == f.version) "blank lines do not change the version")
+        def reworded:CfForm (CfForm.parse("## Z {#useful type=scale}\n"))
+        this.ok((reworded.version != f.version) "a different question is a different version")
+    }
+
+    fn store:void () {
+        def s (new CfStore())
+        s.setForm((CfForm.parse((CuriousFormCheck.src()))))
+        def a1:string (s.submit(([] _:string ("useful=4" "topic=workflows" "heard=a-colleague,the-newsletter"))))
+        this.ok((a1 == "r1") ("taken, receipt r1: " + a1 + s.lastError))
+        def a2:string (s.submit(([] _:string ("useful=5" "topic=workflows"))))
+        this.ok((a2 == "r2") "an optional question may be skipped")
+        this.ok(((s.submit(([] _:string ("topic=workflows")))) == "") "a required one may not")
+        this.ok(((indexOf s.lastError "Required") == 0) ("why: " + s.lastError))
+        this.ok(((s.submit(([] _:string ("useful=4" "topic=workflows,live-data")))) == "") "one answer only for a choice")
+        this.ok(((s.submit(([] _:string ("useful=9" "topic=workflows")))) == "") "9 is not on a 1..5 scale")
+        this.ok(((s.submit(([] _:string ("useful=3" "topic=workflows" "nope=1")))) == "") "no such question")
+        this.ok(((s.total()) == 2) "refused answers are not kept")
+        def t:[int] (s.tallyOf("topic"))
+        this.ok(((itemAt t 1) == 2) "workflows counted twice")
+        def u:[int] (s.tallyOf("useful"))
+        this.ok((((itemAt u 3) == 1) && ((itemAt u 4) == 1)) "a 4 and a 5")
+        this.ok(((s.answeredOf("heard")) == 1) "one person answered the multi")
+        def h:[int] (s.tallyOf("heard"))
+        this.ok((((itemAt h 0) == 1) && ((itemAt h 2) == 1)) "both of their picks counted")
+        ; saved and loaded, the tallies come back the same
+        def text:string (s.saveText())
+        def s2 (new CfStore())
+        s2.setForm((CfForm.parse((CuriousFormCheck.src()))))
+        s2.loadText(text)
+        this.ok(((s2.total()) == 2) "two responses loaded")
+        this.ok(((itemAt (s2.tallyOf("topic")) 1) == 2) "tallies rebuilt from the rows")
+        this.ok(((s2.submit(([] _:string ("useful=1" "topic=live-data")))) == "r3") "the receipt sequence continues")
+        ; the limit
+        s2.limit = 3
+        this.ok(((s2.submit(([] _:string ("useful=1" "topic=live-data")))) == "") "a full questionnaire takes no more")
+        s2.clearAll()
+        this.ok((((s2.total()) == 0) && ((itemAt (s2.tallyOf("topic")) 0) == 0)) "clearing empties rows and tallies")
+    }
+
+    fn run:void () {
+        this.parse()
+        this.store()
+    }
+
+    sfn main:void () {
+        def c (new CuriousFormCheck())
+        c.run()
+        print ((to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
+        if (c.fails > 0) {
+            print "RESULT FAIL"
+        }
+    }
+}
