@@ -76,6 +76,8 @@ SUITES=(
   ui:muted:check
   # Hatch stripes and tab outlines as paths (src/UiShapes.rgr).
   ui:shapes:check
+  # The find and replace bar (src/FindBarCtl.rgr).
+  ui:findbar:check
   ui:menufit:check
   # A questionnaire file, its answers and tallies (demo/CuriousForm.rgr).
   ui:curious:check

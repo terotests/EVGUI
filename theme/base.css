@@ -2254,3 +2254,80 @@
 .ch-btn:hover { background-color: #f4f4f5; }
 .ch-btn-primary { color: #ffffff; background-color: #15803d; border-color: #15803d; }
 .ch-btn-primary:hover { background-color: #166534; }
+
+/* FindBarCtl: a code editor's find and replace bar, after VS Code's. The
+ * field's own box (.findbar-input) loses the input's border: the frame around
+ * the field and its three switches is .findbar-field. */
+.findbar {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 4px 6px 4px 2px;
+  background-color: #ffffff;
+  border: 1px solid #e4e4e7;
+  border-radius: 6px;
+  shadow-color: rgba(15, 23, 42, 0.16); shadow-radius: 8px; shadow-offset-y: 2px;
+}
+.findbar-rows { display: flex; flex-direction: column; gap: 4px; }
+.findbar-row { display: flex; flex-direction: row; align-items: center; gap: 2px; height: 26px; }
+.findbar-field {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  width: 250px;
+  height: 26px;
+  padding: 0 2px 0 0;
+  border: 1px solid #d4d4d8;
+  border-radius: 4px;
+  background-color: #ffffff;
+}
+.findbar-field-focused { border-color: #2563eb; }
+.findbar-input {
+  flex-grow: 1;
+  width: 150px;
+  height: 24px;
+  padding: 0 6px;
+  border-width: 0;
+  background-color: rgba(0, 0, 0, 0);
+}
+.findbar-text { color: #18181b; font-size: 13px; }
+.findbar-placeholder { color: #71717a; font-size: 13px; }
+.findbar-option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 20px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0);
+}
+.findbar-option-text { color: #52525b; font-size: 12px; font-weight: 600; }
+.findbar-option-word { border-bottom: 1px solid #52525b; height: 14px; }
+.findbar-option.findbar-hot { background-color: #f4f4f5; }
+.findbar-option.findbar-on { background-color: #dbeafe; border-color: #2563eb; }
+.findbar-option.findbar-on .findbar-option-text { color: #1d4ed8; }
+.findbar-count { color: #3f3f46; font-size: 12px; width: 76px; padding: 0 6px; white-space: nowrap; }
+.findbar-miss { color: #dc2626; }
+.findbar-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+}
+.findbar-button.findbar-hot { background-color: #f4f4f5; }
+.findbar-button.findbar-on { background-color: #dbeafe; }
+.findbar-disabled { opacity: 0.4; }
+.findbar-icon { width: 16px; height: 16px; fill: none; stroke: #3f3f46; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.theme-dark .findbar { background-color: #1e293b; border-color: #334155; }
+.theme-dark .findbar-field { background-color: #0f172a; border-color: #334155; }
+.theme-dark .findbar-field-focused { border-color: #60a5fa; }
+.theme-dark .findbar-text { color: #e2e8f0; }
+.theme-dark .findbar-option-text { color: #cbd5e1; }
+.theme-dark .findbar-option-word { border-color: #cbd5e1; }
+.theme-dark .findbar-count { color: #cbd5e1; }
+.theme-dark .findbar-icon { stroke: #e2e8f0; }
+.theme-dark .findbar-option.findbar-hot, .theme-dark .findbar-button.findbar-hot { background-color: #334155; }
+.theme-dark .findbar-option.findbar-on, .theme-dark .findbar-button.findbar-on { background-color: #1e3a8a; border-color: #60a5fa; }

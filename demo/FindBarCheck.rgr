@@ -1,0 +1,135 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; The find and replace bar (FindBarCtl), on Node: `ui:findbar:check`.
+Import "../src/FindBarCtl.rgr"
+
+class FindBarCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    fn bar:FindBarCtl () {
+        def b (new FindBarCtl())
+        b.setup("fb" "Find")
+        b.build()
+        return b
+    }
+
+    sfn joined:string (xs:[string]) {
+        def s:string ""
+        for xs x:string i {
+            if (i > 0) {
+                s = (s + ",")
+            }
+            s = (s + x)
+        }
+        return s
+    }
+
+    fn typing:void () {
+        def b:FindBarCtl (this.bar())
+        b.open("total" false)
+        this.ok((b.query() == "total") "opened with the selection's text")
+        this.ok(((b.findField.selEnd()) == 5) "its text selected")
+        b.typeChar("" "s")
+        this.ok((b.query() == "s") "typing replaces it")
+        b.typeChar("" "u")
+        this.ok((FindBarCheck.joined((b.takeAsked())) == "query") ("a query change, once: " + (FindBarCheck.joined(b.asked))))
+        this.ok(((array_length b.asked) == 0) "and it is forgotten")
+        b.keyDownWith("" "Backspace" false false)
+        this.ok((b.query() == "s") "Backspace is the field's")
+        this.ok((FindBarCheck.joined((b.takeAsked())) == "query") "and asks again")
+        b.keyDownWith("" "ArrowLeft" false false)
+        this.ok(((array_length (b.takeAsked())) == 0) "an arrow changes no query")
+        b.keyDownWith("" "Enter" false false)
+        b.keyDownWith("" "Enter" true false)
+        this.ok((FindBarCheck.joined((b.takeAsked())) == "next,prev") "Enter next, Shift+Enter previous")
+        b.keyDownWith("" "Escape" false false)
+        this.ok((FindBarCheck.joined((b.takeAsked())) == "close") "Escape closes")
+    }
+
+    fn replacing:void () {
+        def b:FindBarCtl (this.bar())
+        b.open("a" false)
+        b.keyDownWith("" "Tab" false false)
+        this.ok((b.focusOn == "find") "Tab stays without the replace row")
+        b.activate("fb-toggle")
+        this.ok(b.replaceOpen "the chevron opens the replace row")
+        this.ok((b.focusOn == "replace") "and its field has the keys")
+        b.typeChar("" "b")
+        this.ok(((b.replacement()) == "b") "typing goes to it")
+        this.ok((b.query() == "a") "not to the query")
+        this.ok(((array_length (b.takeAsked())) == 0) "a replacement typed asks nothing")
+        b.keyDownWith("" "Enter" false false)
+        b.keyDownWith("" "Enter" false true)
+        this.ok((FindBarCheck.joined((b.takeAsked())) == "replace,replaceAll") "Enter replace, Ctrl+Enter replace all")
+        b.keyDownWith("" "Tab" false false)
+        this.ok((b.focusOn == "find") "Tab back to the find field")
+        b.activate("fb-replace1")
+        b.activate("fb-replaceall")
+        this.ok((FindBarCheck.joined((b.takeAsked())) == "replace,replaceAll") "the two buttons")
+        b.build()
+        def root:EVGElement (unwrap b.rootEl)
+        def rowsEl:EVGElement (root.getChild(1))
+        this.ok(((rowsEl.getChildCount()) == 2) "two rows while replacing")
+    }
+
+    fn switches:void () {
+        def b:FindBarCtl (this.bar())
+        b.activate("fb-case")
+        b.activate("fb-word")
+        b.activate("fb-regex")
+        this.ok(((b.matchCase && b.wholeWord) && b.regex) "the three switches")
+        this.ok((FindBarCheck.joined((b.takeAsked())) == "options") "ask for the options once")
+        b.activate("fb-scope")
+        this.ok(b.inSelection "find in selection")
+        this.ok((FindBarCheck.joined((b.takeAsked())) == "scope") "asks for the scope")
+        b.toggle("case")
+        this.ok((b.matchCase == false) "a chord flips it back")
+        b.status = "No results"
+        b.noMatch = true
+        b.build()
+        def root:EVGElement (unwrap b.rootEl)
+        def rowsEl:EVGElement (root.getChild(0))
+        this.ok((root.id == "fb") "the root is the control")
+        def found@(optional):EVGElement (UiTree.findById(root "fb-count"))
+        this.ok((!null? found) "the count is drawn")
+        if (!null? found) {
+            def cnt:EVGElement (unwrap found)
+            this.ok(((indexOf cnt.className "findbar-miss") >= 0) "a miss looks like one")
+        }
+        def caseEl@(optional):EVGElement (UiTree.findById(root "fb-case"))
+        this.ok((!null? caseEl) "the case switch is drawn")
+        def rs:[UiRow] (b.rows())
+        def pressed:int 0
+        for rs r:UiRow ri {
+            if (r.pressed == 2) {
+                pressed = (pressed + 1)
+            }
+        }
+        this.ok((pressed == 3) ("word, regex and scope read as pressed: " + (to_string pressed)))
+        def ts:[string] (b.tids())
+        def hasNext:boolean false
+        for ts t:string ti {
+            if (t == "fb-next") {
+                hasNext = true
+            }
+        }
+        this.ok(hasNext "the buttons are hit targets")
+    }
+
+    sfn main:void () {
+        def c (new FindBarCheck())
+        c.typing()
+        c.replacing()
+        c.switches()
+        print ("FindBarCheck: " + (to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
+    }
+}

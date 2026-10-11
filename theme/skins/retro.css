@@ -512,3 +512,13 @@
 .theme-retro .ch-pic:hover { border-color: var(--retro-ink-dim); }
 .theme-retro .ch-pf-c:hover { border-color: var(--retro-ink-dim); }
 .theme-retro .ch-pf-c-on:hover { border-color: var(--retro-ink); }
+
+/* the find bar */
+.theme-retro .findbar { background-color: var(--retro-screen-2); border-color: var(--retro-edge); }
+.theme-retro .findbar-field { background-color: var(--retro-screen); border-color: var(--retro-edge); }
+.theme-retro .findbar-field-focused { border-color: var(--retro-rim); }
+.theme-retro .findbar-text, .theme-retro .findbar-count, .theme-retro .findbar-option-text { color: var(--retro-ink); }
+.theme-retro .findbar-option-word { border-color: var(--retro-ink); }
+.theme-retro .findbar-icon { stroke: var(--retro-ink); }
+.theme-retro .findbar-option.findbar-hot, .theme-retro .findbar-button.findbar-hot { background-color: var(--retro-screen-3); }
+.theme-retro .findbar-option.findbar-on, .theme-retro .findbar-button.findbar-on { background: linear-gradient(180deg, var(--retro-fill-a), var(--retro-fill-b)); }
