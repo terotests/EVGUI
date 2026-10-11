@@ -1,0 +1,546 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; FindBarCtl — a code editor's find and replace bar, after VS Code's
+; =============================================================================
+; One row, and a second one for replacing:
+;
+;   [›] [ Find            Aa ab .* ]  3 of 17   ↑  ↓  ≡  ×
+;       [ Replace                  ]  ⇄  ⇉
+;
+;   ›          shows / hides the replace row (⌄ while it shows)
+;   Aa ab .*   match case, whole word, regular expression (on / off)
+;   3 of 17    what the host found (`status`; `noMatch` paints it as a miss)
+;   ↑ ↓        the previous / next match
+;   ≡          find in selection (on / off)
+;   ×          close
+;   ⇄ ⇉        replace this one / replace all
+;
+; The bar finds nothing itself: what the query matches is the host's (an
+; editor's EditorFind). The bar holds the text of its two fields and the
+; switches, and says what was asked (`takeAsked`): "query" (the find text
+; changed), "options" (a switch), "scope" (find in selection), "next",
+; "prev", "replace", "replaceAll", "close". The host answers with `status`.
+;
+; KEYS (the host sends them while the bar has the keyboard): typing goes into
+; the field with the focus; Enter is next (Shift+Enter previous) in the find
+; field, replace in the replace field (Ctrl/Cmd+Enter replace all); Tab and
+; Shift+Tab move between the two fields; Escape closes; the arrows, Home, End,
+; Backspace, Delete and Ctrl+A are the field's. `toggle(name)` is for the
+; host's own chords (Alt+C, Alt+W, Alt+R, Alt+L in VS Code).
+;
+; POINTER: the fields take presses and drags (`textPointerDown/Drag/Up`), the
+; rest are `activate(tid)`: `<tid>-toggle`, `-case`, `-word`, `-regex`,
+; `-prev`, `-next`, `-scope`, `-close`, `-replace1`, `-replaceall`.
+;
+; TO A READER: a search group with two text fields, the switches as toggle
+; buttons (pressed when on) and the rest as buttons; the count is its status.
+; =============================================================================
+
+Import "UiCtl.rgr"
+Import "InputCtl.rgr"
+Import "UiTree.rgr"
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGA11yTree.rgr"
+
+class FindBarCtl extends UiCtl {
+    def findField:InputCtl (new InputCtl())
+    def replaceField:InputCtl (new InputCtl())
+    def replaceOpen:boolean false
+    def matchCase:boolean false
+    def wholeWord:boolean false
+    def regex:boolean false
+    def inSelection:boolean false
+    ; "find" or "replace": the field the keys go to
+    def focusOn:string "find"
+    ; false while the keys are the host's (the editor under the bar): no
+    ; field shows a caret or a focus ring
+    def hasKeys:boolean true
+    ; the host's answer: "3 of 17", "No results", why a pattern is wrong
+    def status:string ""
+    def noMatch:boolean false
+    ; what was asked since the host last looked
+    def asked:[string]
+    ; the hovered part, for its own look
+    def hot:string ""
+    ; the words (the host translates them)
+    def findLabel:string "Find"
+    def replaceLabel:string "Replace"
+    def caseLabel:string "Match Case"
+    def wordLabel:string "Match Whole Word"
+    def regexLabel:string "Use Regular Expression"
+    def prevLabel:string "Previous Match"
+    def nextLabel:string "Next Match"
+    def scopeLabel:string "Find in Selection"
+    def closeLabel:string "Close"
+    def toggleLabel:string "Toggle Replace"
+    def replaceOneLabel:string "Replace"
+    def replaceAllLabel:string "Replace All"
+
+    Constructor () {
+        rootEl = (EVGElement.createDiv())
+    }
+
+    fn setup:void (id:string label:string) {
+        tid = id
+        name = label
+        findField.tid = (tid + "-find")
+        replaceField.tid = (tid + "-replace")
+    }
+
+    ; Opened (Ctrl+F) with the text to look for; "" keeps what it had. The
+    ; find field takes the keys with its text selected, so typing replaces it.
+    fn open:void (query:string withReplace:boolean) {
+        if ((strlen query) > 0) {
+            findField.setValue(query)
+        }
+        if withReplace {
+            replaceOpen = true
+        }
+        focusOn = "find"
+        if (withReplace && ((strlen findField.value) > 0)) {
+            focusOn = "replace"
+        }
+        this.fieldWithKeys().selectAll()
+    }
+
+    fn query:string () {
+        return findField.value
+    }
+
+    fn replacement:string () {
+        return replaceField.value
+    }
+
+    fn ask:void (what:string) {
+        def i:int 0
+        while (i < (array_length asked)) {
+            if ((itemAt asked i) == what) {
+                return
+            }
+            i = (i + 1)
+        }
+        push asked what
+    }
+
+    ; What was asked, in order, and it is forgotten.
+    fn takeAsked:[string] () {
+        def out:[string] asked
+        def none:[string]
+        asked = none
+        return out
+    }
+
+    fn fieldWithKeys:InputCtl () {
+        if (replaceOpen && (focusOn == "replace")) {
+            return replaceField
+        }
+        return findField
+    }
+
+    ; A switch flipped: "case", "word", "regex", "scope", "replace" (the row).
+    fn toggle:void (what:string) {
+        if (what == "case") {
+            matchCase = (matchCase == false)
+            this.ask("options")
+        }
+        if (what == "word") {
+            wholeWord = (wholeWord == false)
+            this.ask("options")
+        }
+        if (what == "regex") {
+            regex = (regex == false)
+            this.ask("options")
+        }
+        if (what == "scope") {
+            inSelection = (inSelection == false)
+            this.ask("scope")
+        }
+        if (what == "replace") {
+            replaceOpen = (replaceOpen == false)
+            if replaceOpen {
+                focusOn = "replace"
+            } {
+                focusOn = "find"
+            }
+        }
+    }
+
+    fn focusField:void (which:string) {
+        focusOn = which
+        if (which == "replace") {
+            replaceOpen = true
+        }
+    }
+
+    ; --- the keyboard ------------------------------------------------------------
+    fn typeChar:boolean (target:string ch:string) {
+        def f:InputCtl (this.fieldWithKeys())
+        f.insertText(ch)
+        if (f.tid == findField.tid) {
+            this.ask("query")
+        }
+        return true
+    }
+
+    fn keyDownWith:string (target:string key:string shift:boolean ctrl:boolean) {
+        if (key == "Escape") {
+            this.ask("close")
+            return ""
+        }
+        def f:InputCtl (this.fieldWithKeys())
+        def inFind:boolean (f.tid == findField.tid)
+        if (key == "Enter") {
+            if inFind {
+                this.ask((? shift "prev" "next"))
+            } {
+                this.ask((? ctrl "replaceAll" "replace"))
+            }
+            return ""
+        }
+        if (key == "Tab") {
+            if replaceOpen {
+                focusOn = (? inFind "replace" "find")
+                this.fieldWithKeys().selectAll()
+            }
+            return ""
+        }
+        if (ctrl && ((key == "a") || (key == "A"))) {
+            f.selectAll()
+            return ""
+        }
+        def before:string f.value
+        f.keyDownWith(f.tid key shift ctrl)
+        if (inFind && (f.value != before)) {
+            this.ask("query")
+        }
+        return ""
+    }
+
+    ; --- the pointer ----------------------------------------------------------------
+    fn placeText:void (eng:EVGTextEngine) {
+        findField.placeText(eng)
+        if replaceOpen {
+            replaceField.placeText(eng)
+        }
+    }
+
+    fn textPointerDown:boolean (target:string px:double clicks:int shift:boolean) {
+        if (findField.textPointerDown(target px clicks shift)) {
+            focusOn = "find"
+            return true
+        }
+        if (replaceOpen && (replaceField.textPointerDown(target px clicks shift))) {
+            focusOn = "replace"
+            return true
+        }
+        return false
+    }
+
+    fn textPointerDrag:boolean (px:double) {
+        return (this.fieldWithKeys().textPointerDrag(px))
+    }
+
+    fn textPointerUp:void () {
+        findField.pointerUp()
+        replaceField.pointerUp()
+    }
+
+    fn partOf:string (target:string) {
+        def pre:string (tid + "-")
+        if ((indexOf target pre) != 0) {
+            return ""
+        }
+        return (substring target (strlen pre) (strlen target))
+    }
+
+    fn activate:string (target:string) {
+        def p:string (this.partOf(target))
+        if (p == "toggle") {
+            this.toggle("replace")
+        }
+        if (p == "case") {
+            this.toggle("case")
+        }
+        if (p == "word") {
+            this.toggle("word")
+        }
+        if (p == "regex") {
+            this.toggle("regex")
+        }
+        if (p == "scope") {
+            this.toggle("scope")
+        }
+        if (p == "prev") {
+            this.ask("prev")
+        }
+        if (p == "next") {
+            this.ask("next")
+        }
+        if (p == "close") {
+            this.ask("close")
+        }
+        if (p == "replace1") {
+            this.ask("replace")
+        }
+        if (p == "replaceall") {
+            this.ask("replaceAll")
+        }
+        if ((strlen p) == 0) {
+            return ""
+        }
+        return target
+    }
+
+    fn hover:string (target:string) {
+        hot = (this.partOf(target))
+        return ""
+    }
+
+    fn unhover:string () {
+        hot = ""
+        return ""
+    }
+
+    ; --- drawing ----------------------------------------------------------------------
+    ; Icons on a 24×24 grid, stroked by the sheet (`.findbar-icon`).
+    sfn iconPath:string (what:string) {
+        if (what == "right") {
+            return "M9 6l6 6-6 6"
+        }
+        if (what == "down") {
+            return "M6 9l6 6 6-6"
+        }
+        if (what == "prev") {
+            return "M12 19V5M6 11l6-6 6 6"
+        }
+        if (what == "next") {
+            return "M12 5v14M6 13l6 6 6-6"
+        }
+        if (what == "scope") {
+            return "M4 6h16M4 12h16M4 18h10"
+        }
+        if (what == "close") {
+            return "M6 6l12 12M18 6L6 18"
+        }
+        if (what == "replace1") {
+            return "M4 8h12l-3-3M16 8l-3 3M20 16H8l3 3M8 16l3-3"
+        }
+        if (what == "replaceall") {
+            return "M4 6h12l-3-3M16 6l-3 3M20 13H8l3 3M8 13l3-3M4 20h16"
+        }
+        return ""
+    }
+
+    fn iconButton:EVGElement (part:string icon:string on:boolean disabledNow:boolean) {
+        def cls:string "findbar-button"
+        if on {
+            cls = (cls + " findbar-on")
+        }
+        if disabledNow {
+            cls = (cls + " findbar-disabled")
+        }
+        if (hot == part) {
+            cls = (cls + " findbar-hot")
+        }
+        def b:EVGElement (UiTree.div((tid + "-" + part) cls))
+        def ic (EVGElement.createDiv())
+        ic.className = "findbar-icon"
+        ic.tagName = "path"
+        ic.elementType = 3
+        ic.viewBox = "0 0 24 24"
+        ic.svgPath = (FindBarCtl.iconPath(icon))
+        ic.a11yHidden = true
+        b.addChild(ic)
+        return b
+    }
+
+    fn option:EVGElement (part:string text:string on:boolean) {
+        def cls:string "findbar-option"
+        if on {
+            cls = (cls + " findbar-on")
+        }
+        if (hot == part) {
+            cls = (cls + " findbar-hot")
+        }
+        def b:EVGElement (UiTree.div((tid + "-" + part) cls))
+        def t:EVGElement (UiTree.label("" ("findbar-option-text findbar-option-" + part) text))
+        t.a11yHidden = true
+        b.addChild(t)
+        return b
+    }
+
+    fn field:EVGElement (f:InputCtl label:string withOptions:boolean) {
+        f.name = label
+        f.placeholder = label
+        f.textClass = "findbar-text"
+        f.placeholderClass = "findbar-placeholder"
+        f.placeholderHidesOnFocus = false
+        f.boxClass = "findbar-input"
+        f.focused = (hasKeys && ((this.fieldWithKeys()).tid == f.tid))
+        f.build()
+        def cls:string "findbar-field"
+        if f.focused {
+            cls = "findbar-field findbar-field-focused"
+        }
+        def box:EVGElement (UiTree.div("" cls))
+        box.addChild((unwrap f.rootEl))
+        if withOptions {
+            box.addChild((this.option("case" "Aa" matchCase)))
+            box.addChild((this.option("word" "ab" wholeWord)))
+            box.addChild((this.option("regex" ".*" regex)))
+        }
+        return box
+    }
+
+    fn build:void () {
+        findField.tid = (tid + "-find")
+        replaceField.tid = (tid + "-replace")
+        def root:EVGElement (UiTree.div(tid "findbar"))
+        if replaceOpen {
+            UiTree.addClass(root "findbar-replacing")
+        }
+        root.addChild((this.iconButton("toggle" (? replaceOpen "down" "right") false false)))
+        def rowsEl:EVGElement (UiTree.div("" "findbar-rows"))
+        def top:EVGElement (UiTree.div("" "findbar-row"))
+        top.addChild((this.field(findField findLabel true)))
+        def countCls:string "findbar-count"
+        if noMatch {
+            countCls = "findbar-count findbar-miss"
+        }
+        top.addChild((UiTree.label((tid + "-count") countCls status)))
+        def none:boolean (noMatch || ((strlen findField.value) == 0))
+        top.addChild((this.iconButton("prev" "prev" false none)))
+        top.addChild((this.iconButton("next" "next" false none)))
+        top.addChild((this.iconButton("scope" "scope" inSelection false)))
+        top.addChild((this.iconButton("close" "close" false false)))
+        rowsEl.addChild(top)
+        if replaceOpen {
+            def low:EVGElement (UiTree.div("" "findbar-row"))
+            low.addChild((this.field(replaceField replaceLabel false)))
+            low.addChild((this.iconButton("replace1" "replace1" false none)))
+            low.addChild((this.iconButton("replaceall" "replaceall" false none)))
+            rowsEl.addChild(low)
+        }
+        root.addChild(rowsEl)
+        rootEl = root
+    }
+
+    ; --- what it is, to a reader ----------------------------------------------------------
+    fn parts:[string] () {
+        def out:[string]
+        push out "toggle"
+        push out "case"
+        push out "word"
+        push out "regex"
+        push out "prev"
+        push out "next"
+        push out "scope"
+        push out "close"
+        if replaceOpen {
+            push out "replace1"
+            push out "replaceall"
+        }
+        return out
+    }
+
+    fn tids:[string] () {
+        def a:[string]
+        push a tid
+        def inner:[string] (findField.tids())
+        for inner t:string ti {
+            push a t
+        }
+        if replaceOpen {
+            def inner2:[string] (replaceField.tids())
+            for inner2 t2:string tj {
+                push a t2
+            }
+        }
+        push a (tid + "-count")
+        def ps:[string] (this.parts())
+        for ps p:string pi {
+            push a (tid + "-" + p)
+        }
+        return a
+    }
+
+    fn isFocusable:boolean (target:string) {
+        if (target == findField.tid) {
+            return true
+        }
+        return (replaceOpen && (target == replaceField.tid))
+    }
+
+    fn labelOf:string (p:string) {
+        if (p == "toggle") {
+            return toggleLabel
+        }
+        if (p == "case") {
+            return caseLabel
+        }
+        if (p == "word") {
+            return wordLabel
+        }
+        if (p == "regex") {
+            return regexLabel
+        }
+        if (p == "prev") {
+            return prevLabel
+        }
+        if (p == "next") {
+            return nextLabel
+        }
+        if (p == "scope") {
+            return scopeLabel
+        }
+        if (p == "close") {
+            return closeLabel
+        }
+        if (p == "replace1") {
+            return replaceOneLabel
+        }
+        return replaceAllLabel
+    }
+
+    fn fieldRow:UiRow (f:InputCtl label:string) {
+        def s:UiRow (UiRow.of(f.tid (EVGA11yRole.textField()) label))
+        s.parentTid = tid
+        s.hasText = true
+        s.text = f.value
+        s.hasSelection = true
+        s.selStart = (f.selStart())
+        s.selEnd = (f.selEnd())
+        s.placeholder = label
+        s.focusable = true
+        s.tabStop = true
+        return s
+    }
+
+    fn rows:[UiRow] () {
+        def out:[UiRow]
+        push out (UiRow.of(tid (EVGA11yRole.group()) name))
+        push out (this.fieldRow(findField findLabel))
+        if replaceOpen {
+            push out (this.fieldRow(replaceField replaceLabel))
+        }
+        def st:UiRow (UiRow.of((tid + "-count") (EVGA11yRole.status()) status))
+        st.parentTid = tid
+        push out st
+        def ps:[string] (this.parts())
+        for ps p:string pi {
+            def r:UiRow (UiRow.of((tid + "-" + p) (EVGA11yRole.button()) (this.labelOf(p))))
+            r.parentTid = tid
+            r.focusable = true
+            if ((((p == "case") || (p == "word")) || (p == "regex")) || (p == "scope")) {
+                def on:boolean ((((p == "case") && matchCase) || ((p == "word") && wholeWord)) || (((p == "regex") && regex) || ((p == "scope") && inSelection)))
+                r.pressed = (? on 2 1)
+            }
+            if (p == "toggle") {
+                r.expanded = (? replaceOpen 2 1)
+            }
+            push out r
+        }
+        return out
+    }
+}

@@ -89,5 +89,6 @@
   "ui:splitter:check": "node dist/rgrc.js -es6 gallery/evgui/demo/SplitterCheck.rgr -d=gallery/evgui/bin -o=SplitterCheck.js -nodecli && node gallery/evgui/bin/SplitterCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
   "ui:channel:check": "node dist/rgrc.js -es6 gallery/evgui/demo/ChannelCheck.rgr -d=gallery/evgui/bin -o=ChannelCheck.js -nodecli && node gallery/evgui/bin/ChannelCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
   "ui:colorpicker:words": "node dist/rgrc.js -es6 gallery/evgui/demo/ColorPickerWordsCheck.rgr -d=gallery/evgui/bin -o=ColorPickerWordsCheck.js -nodecli && node gallery/evgui/bin/ColorPickerWordsCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
-  "ui:participants:check": "node dist/rgrc.js -es6 gallery/evgui/demo/ParticipantsCheck.rgr -d=gallery/evgui/bin -o=ParticipantsCheck.js -nodecli && node gallery/evgui/bin/ParticipantsCheck.js | tee /dev/stderr | grep -q ' 0 failed'"
+  "ui:participants:check": "node dist/rgrc.js -es6 gallery/evgui/demo/ParticipantsCheck.rgr -d=gallery/evgui/bin -o=ParticipantsCheck.js -nodecli && node gallery/evgui/bin/ParticipantsCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
+  "ui:findbar:check": "node dist/rgrc.js -es6 gallery/evgui/demo/FindBarCheck.rgr -d=gallery/evgui/bin -o=FindBarCheck.js -nodecli && node gallery/evgui/bin/FindBarCheck.js | tee /dev/stderr | grep -q ' 0 failed'"
 }
