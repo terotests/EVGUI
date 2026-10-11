@@ -1,0 +1,64 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; ProgressCtl on Node: `ui:progress:check`.
+Import "../src/ProgressCtl.rgr"
+
+class ProgressCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    fn run:void () {
+        def p:ProgressCtl (ProgressCtl.create("p" "Making the video"))
+        def el:EVGElement (unwrap p.rootEl)
+        this.ok((el.role == "progressbar") "role progressbar")
+        this.ok((el.a11yLabel == "Making the video") "its label")
+        this.ok((el.a11yFocusable == false) "not focusable")
+        ; no value yet: indeterminate, a reader hears no number
+        this.ok((el.a11yHasValue == false) "indeterminate: no valuenow")
+        this.ok(((indexOf el.className "ui-progress-indeterminate") >= 0) ("indeterminate class: " + el.className))
+        this.ok(((el.getChildCount()) == 1) "one indicator")
+        def ind:EVGElement (el.getChild(0))
+        this.ok((ind.id == "p-indicator") ("indicator id: " + ind.id))
+        this.ok(((ind.width.value == 100.0) && (ind.hasInline("width"))) ("indeterminate width: " + (to_string ind.width.value)))
+        this.ok(((indexOf ind.className "ui-progress-indicator-busy") >= 0) ("busy class: " + ind.className))
+        ; a value: the number, its percentage, the width
+        p.setValue(40 "")
+        def el2:EVGElement (unwrap p.rootEl)
+        def ind2:EVGElement (el2.getChild(0))
+        this.ok(((el2.getChildCount()) == 1) "still one indicator")
+        this.ok((el2.a11yHasValue && (el2.a11yValueNow == 40)) "valuenow 40")
+        this.ok((el2.a11yHasRange && ((el2.a11yValueMin == 0) && (el2.a11yValueMax == 100))) "range 0..100")
+        this.ok((el2.a11yValue == "40 %") ("valuetext: " + el2.a11yValue))
+        this.ok(((indexOf el2.className "ui-progress-indeterminate") < 0) "no longer indeterminate")
+        this.ok(((ind2.width.value == 40.0) && (ind2.hasInline("width"))) ("width: " + (to_string ind2.width.value)))
+        ; another scale and the caller's own words
+        p.max = 300
+        p.setValue(75 "75 of 300 frames")
+        this.ok((p.percent() == 25) ("75 of 300 is 25 %, got " + (to_string (p.percent()))))
+        this.ok((el2.a11yValueMax == 300) "max 300")
+        this.ok((el2.a11yValue == "75 of 300 frames") ("own valuetext: " + el2.a11yValue))
+        ; past the end: held at the end
+        p.setValue(999 "")
+        this.ok(((p.percent()) == 100) "past max: 100 %")
+        this.ok((el2.a11yValueNow == 300) "past max: valuenow max")
+    }
+}
+
+class ProgressCheckMain {
+    sfn m@(main):void () {
+        def c (new ProgressCheck())
+        c.run()
+        print ((to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
+        if (c.fails > 0) {
+            print "RESULT FAIL"
+        }
+    }
+}

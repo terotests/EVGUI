@@ -32,6 +32,7 @@ while [ $# -gt 0 ]; do
 done
 
 SUITES=(
+  ui:progress:check
   ui:sortable:motion
   ui:tree:checkbox
   ui:timeline:check

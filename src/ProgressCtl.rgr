@@ -1,0 +1,125 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; ProgressCtl — how far a long job has got, after Radix Progress
+; =============================================================================
+; Parity contract (@radix-ui/react-progress, which shadcn's Progress wraps):
+;
+;   role          progressbar
+;   value         0..max        `aria-valuenow`, with `aria-valuemin` 0 and
+;                               `aria-valuemax` max
+;   indeterminate value < 0     no `aria-valuenow`: a reader says "busy"
+;                               rather than a number (Radix: value null)
+;   label         the job       `aria-label`
+;   valueText     "40 %"        `aria-valuetext`; Radix's default is the
+;                               percentage, a caller can say "40 of 100
+;                               frames" instead
+;
+; A progress bar is NOT FOCUSABLE: it only tells.
+;
+; The controller owns two elements:
+;
+;   ui-progress                 the track, as wide as its box
+;   ui-progress-indicator       the part done; its `width` is the percentage,
+;                               the one thing the stylesheet cannot know
+;   ui-progress-indeterminate   on the track while there is no value
+;   ui-progress-indicator-busy  on the indicator then: full width, faint
+; =============================================================================
+
+Import "UiCtl.rgr"
+Import "UiTree.rgr"
+Import "pkg:evg/EVGElement.rgr"
+
+class ProgressCtl extends UiCtl {
+    def label:string ""
+    ; how far, of `max`; below 0 while it cannot be said (indeterminate)
+    def value:int -1
+    def max:int 100
+    ; what a reader is told instead of the number; "" for the percentage
+    def valueText:string ""
+    def indicatorEl@(optional):EVGElement
+
+    Constructor () {
+        rootEl = (EVGElement.createDiv())
+        indicatorEl = (EVGElement.createDiv())
+    }
+
+    sfn create:ProgressCtl (id:string label:string) {
+        def c (new ProgressCtl())
+        c.tid = id
+        c.label = label
+        c.build()
+        return c
+    }
+
+    fn indicatorTid:string () {
+        return (tid + "-indicator")
+    }
+
+    fn indeterminate:boolean () {
+        return ((value < 0) || (max <= 0))
+    }
+
+    ; The part done, 0..100 (0 while indeterminate).
+    fn percent:int () {
+        if (this.indeterminate()) {
+            return 0
+        }
+        def v:int value
+        if (v > max) {
+            v = max
+        }
+        return (idiv (v * 100) max)
+    }
+
+    fn build:void () {
+        def root:EVGElement (unwrap rootEl)
+        root.id = tid
+        root.className = "ui-progress"
+        UiTree.clearChildren(root)
+        root.role = "progressbar"
+        root.a11yLabel = label
+        root.a11yFocusable = false
+        root.a11yHasRange = true
+        root.a11yValueMin = 0
+        root.a11yValueMax = max
+        def ind:EVGElement (unwrap indicatorEl)
+        ind.id = (this.indicatorTid())
+        ind.className = "ui-progress-indicator"
+        UiTree.clearChildren(ind)
+        if (this.indeterminate()) {
+            UiTree.addClass(root "ui-progress-indeterminate")
+            root.a11yHasValue = false
+            root.a11yValueNow = 0
+            root.a11yValue = ""
+            ; the whole track, faint: no stylesheet animation in EVG yet, so a
+            ; full pale bar says "working" where an empty one would say "0 %"
+            UiTree.addClass(ind "ui-progress-indicator-busy")
+            UiTree.inline(ind "width" "100%")
+        } {
+            def v:int value
+            if (v > max) {
+                v = max
+            }
+            root.a11yHasValue = true
+            root.a11yValueNow = v
+            root.a11yValue = valueText
+            if ((strlen valueText) == 0) {
+                root.a11yValue = ((to_string (this.percent())) + " %")
+            }
+            UiTree.inline(ind "width" ((to_string (this.percent())) + "%"))
+        }
+        root.addChild(ind)
+    }
+
+    ; How far, of `max` (below 0: indeterminate), and what a reader is told.
+    fn setValue:void (v:int text:string) {
+        value = v
+        valueText = text
+        this.build()
+    }
+
+    fn isFocusable:boolean (target:string) {
+        return false
+    }
+}
