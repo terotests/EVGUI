@@ -329,6 +329,39 @@ class InputFieldCheck {
         this.ok((InputFieldCheck.near(fld4.calculatedHeight one)) ("sent: the box is one line again: " + (to_string fld4.calculatedHeight)))
     }
 
+    ; The caret of an empty field is where the first typed letter puts it:
+    ; same top, same height. The bug (Sliqtly's comment box): the empty
+    ; caret was a line box centred in the view, the typed one the run's line,
+    ; and the sheet's `height` on the run (EVGUI's base 18px under 16px
+    ; text) moved the run but not the empty caret, so the caret jumped.
+    fn emptyCaret:void () {
+        def sheets:[string]
+        push sheets ".ui-input-text { font-size: 16px; height: 18px; }"
+        push sheets ".ui-input-text { font-size: 16px; }"
+        push sheets ".ui-input-text { font-size: 16px; height: 30px; padding-top: 4px; }"
+        def si:int 0
+        while (si < (array_length sheets)) {
+            def h (new UiHost())
+            h.setPageSize(320.0 440.0)
+            h.addStyleSheet((".chat-panel { display: flex; flex-direction: column; width: 300px; } .chat-composer { display: flex; flex-direction: row; align-items: center; padding: 10px 12px; } .chat-field { display: flex; align-items: center; flex-grow: 1; width: 0px; min-width: 0px; height: 34px; padding: 0 8px; } .ui-input-caret { width: 2px; } " + (itemAt sheets si)))
+            def ch (new ChatCtl())
+            ch.setup("ce" "Chat")
+            ch.build()
+            h.add(ch)
+            h.focus("ce-field")
+            h.layout()
+            def car:EVGElement (this.el(h "ce-field-caret"))
+            def y0:double car.calculatedY
+            def h0:double car.calculatedHeight
+            ch.typeChar("" "d")
+            ch.build()
+            h.layout()
+            def car2:EVGElement (this.el(h "ce-field-caret"))
+            this.ok(((InputFieldCheck.near(y0 car2.calculatedY)) && (InputFieldCheck.near(h0 car2.calculatedHeight))) ("sheet " + (to_string si) + ": the empty caret is where typing puts it: " + (to_string y0) + "+" + (to_string h0) + " vs " + (to_string car2.calculatedY) + "+" + (to_string car2.calculatedHeight)))
+            si = (si + 1)
+        }
+    }
+
     ; Text put in before the field was ever placed: it is built one line
     ; high, and says so once placed, so the host builds it again.
     fn pastedFirst:void () {
@@ -406,6 +439,7 @@ class InputFieldCheck {
         c.chatField()
         c.placeholder()
         c.multiline()
+        c.emptyCaret()
         c.pastedFirst()
         c.chatMarkup()
         print ((to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
