@@ -249,12 +249,42 @@ class UiRichSel {
     ; end; over several, from the start to the right edge, the whole lines
     ; between, and from the left edge to the end. Empty: no selection.
     fn rects:[UiTextRect] (left:double right:double) {
-        def out:[UiTextRect]
-        if ((sel.hasSelection()) == false) {
+        return (this.rectsIn((sel.selStart()) (sel.selEnd()) left right))
+    }
+
+    ; The selection's part in pieces [k0, k1) (a code block inside the
+    ; message, say): its first and last index there; -1 -1 none.
+    fn partIn:[int] (k0:int k1:int) {
+        def out:[int]
+        def p0:UiRichPiece (itemAt pieces k0)
+        def p1:UiRichPiece (itemAt pieces (k1 - 1))
+        def a:int (sel.selStart())
+        def b:int (sel.selEnd())
+        if (a < p0.start) {
+            a = p0.start
+        }
+        def e1:int (p1.start + (strlen p1.text))
+        if (b > e1) {
+            b = e1
+        }
+        if (b <= a) {
+            push out -1
+            push out -1
             return out
         }
-        def a@(optional):UiTextRect (this.pointOf((sel.selStart())))
-        def b@(optional):UiTextRect (this.pointOf((sel.selEnd())))
+        push out a
+        push out b
+        return out
+    }
+
+    ; the band over [a0, b0), as `rects` paints it
+    fn rectsIn:[UiTextRect] (a0:int b0:int left:double right:double) {
+        def out:[UiTextRect]
+        if (b0 <= a0) {
+            return out
+        }
+        def a@(optional):UiTextRect (this.pointOf(a0))
+        def b@(optional):UiTextRect (this.pointOf(b0))
         if ((null? a) || (null? b)) {
             return out
         }

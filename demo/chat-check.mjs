@@ -189,6 +189,9 @@ ok("a drag down the message copies its lines, the code as written", whole === "S
 d.rebuild();
 const bands = d.chat.builtRich.length === 1 ? d.chat.builtRich[0].children.slice(0, 3) : [];
 ok("the band is drawn under it", bands.length === 3 && bands[0].calculatedWidth > 0 && bands[1].calculatedHeight > 0, bands.map((b) => [b.calculatedX, b.calculatedY, b.calculatedWidth, b.calculatedHeight]));
+const codeEl = d.chat.builtRich[0].children.find((k) => (k.className || "").includes("ch-code"));
+const codeBand = codeEl ? codeEl.children[0] : null;
+ok("…and over the code block's background, inside it", codeBand && codeBand.className === "ui-text-selection" && codeBand.calculatedWidth > 0 && codeBand.calculatedX >= codeEl.calculatedX, codeBand && [codeBand.calculatedX, codeBand.calculatedWidth, codeEl.calculatedX]);
 ok("a long code line wraps inside the block", code[0] + code[2] <= rb[0] + rb[2] + 0.5 && code[3] > 3 * 18, [code, rb]);
 c.dropSelection();
 ok("dropped: nothing to copy", d.copyText() === "");

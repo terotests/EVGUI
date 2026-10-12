@@ -157,6 +157,10 @@ class ChatCtl extends UiCtl {
     def richSel:string ""
     def rich:UiRichSel (new UiRichSel())
     def richEls:[EVGElement]
+    ; its code blocks (they hold their own band) and their pieces [from, to)
+    def richCodes:[EVGElement]
+    def richCodeFrom:[int]
+    def richCodeTo:[int]
     ; the formatted messages' boxes as last built, and their message ids
     def builtRich:[EVGElement]
     def builtRichIds:[string]
@@ -734,10 +738,22 @@ class ChatCtl extends UiCtl {
         def box:EVGElement (unwrap mb)
         def none:[EVGElement]
         richEls = none
+        def noCodes:[EVGElement]
+        richCodes = noCodes
+        def noFrom:[int]
+        richCodeFrom = noFrom
+        def noTo:[int]
+        richCodeTo = noTo
         rich.begin()
         for box.children b:EVGElement bi {
             if ((indexOf b.className "ui-text-selection") < 0) {
+                def from:int (rich.count())
                 this.piecesOf(b)
+                if (((indexOf b.className "ch-code") >= 0) && ((rich.count()) > from)) {
+                    push richCodes b
+                    push richCodeFrom from
+                    push richCodeTo (rich.count())
+                }
                 rich.endWith("\n")
             }
         }
@@ -789,7 +805,18 @@ class ChatCtl extends UiCtl {
             return
         }
         def box:EVGElement (unwrap (this.richBox()))
-        def rs:[UiTextRect] (rich.rects(box.calculatedX (box.calculatedX + box.calculatedWidth)))
+        this.putBands(box (rich.rects(box.calculatedX (box.calculatedX + box.calculatedWidth))))
+        ; a code block's part over its background, inside its padding
+        for richCodes code:EVGElement ci {
+            def part:[int] (rich.partIn((itemAt richCodeFrom ci) (itemAt richCodeTo ci)))
+            def left:double ((code.calculatedX + code.box.borderWidthPx) + code.box.paddingLeftPx)
+            def right:double ((code.calculatedX + code.calculatedWidth) - (code.box.borderWidthPx + code.box.paddingRightPx))
+            this.putBands(code (rich.rectsIn((itemAt part 0) (itemAt part 1) left right)))
+        }
+    }
+
+    ; the bands among `box`'s children over `rs`, the rest hidden
+    fn putBands:void (box:EVGElement rs:[UiTextRect]) {
         def k:int 0
         for box.children b:EVGElement bi {
             if ((indexOf b.className "ui-text-selection") >= 0) {
@@ -1046,13 +1073,8 @@ class ChatCtl extends UiCtl {
                 UiTree.inline(rbox "position" "relative")
                 ; the selection's band (first line, the lines between, the
                 ; last), under the words; placed by placeRich
-                def bk:int 0
-                while (bk < 3) {
-                    def band:EVGElement (UiTree.div("" "ui-text-selection"))
-                    UiTree.inline(band "position" "absolute")
-                    rbox.addChild(band)
-                    bk = (bk + 1)
-                }
+                UiChatView.addBands(rbox)
+                view.bands = true
                 def bs:[UiChatBlock] (this.blocksOf(m))
                 def bi:int 0
                 while (bi < (array_length bs)) {

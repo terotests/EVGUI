@@ -27,8 +27,23 @@ Import "pkg:evg/EVGElement.rgr"
 class UiChatView {
     ; the reader's own handle: an @mention of it is marked (ch-mention-me)
     def me:string ""
+    ; a code block holds a selection's band under its lines (three bands,
+    ; first children, placed by the host after layout: ChatCtl): its own
+    ; background would hide a band drawn behind it
+    def bands:boolean false
 
     Constructor () {
+    }
+
+    ; three empty bands (ui-text-selection), out of the flow
+    sfn addBands:void (box:EVGElement) {
+        def k:int 0
+        while (k < 3) {
+            def band:EVGElement (UiTree.div("" "ui-text-selection"))
+            UiTree.inline(band "position" "absolute")
+            box.addChild(band)
+            k = (k + 1)
+        }
     }
 
     ; The spans a line is drawn from: an embed's are its link.
@@ -51,6 +66,10 @@ class UiChatView {
         }
         if (b.kind == "code") {
             def pre:EVGElement (UiTree.div((id + "-code") "ch-code"))
+            if bands {
+                UiTree.inline(pre "position" "relative")
+                UiChatView.addBands(pre)
+            }
             def lines:[string] (strsplit b.text "\n")
             for lines l:string i {
                 def t:string l
