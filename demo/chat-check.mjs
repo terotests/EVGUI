@@ -212,6 +212,47 @@ ok("…the first message under the last button", first[1] >= lowest, [first, low
 ok("…and the composer still at the foot", Math.abs(comp4[1] + comp4[3] - (p4[1] + p4[3])) < 2, [comp4, p4]);
 c.clearActions();
 
+// --- a message taller than the box ---------------------------------------------------
+console.log("scroll");
+d = fresh();
+c = d.chat;
+c.setOpen(true);
+c.height = 300;
+const longWords = Array.from({ length: 60 }, (_, i) => "word" + i).join(" ");
+c.add("1", "me", "Tero", "#2563eb", "A question", "09:00", true);
+c.add("2", "ai", "AI", "#7c3aed", longWords, "09:01", false);
+d.rebuild();
+let lg = rect("ch-log");
+let last = rect(c.msgTid(1));
+ok("following: the end of a long last message in view", Math.abs(last[1] + last[3] - (lg[1] + lg[3])) < 12 && c.logTop > 0, [last, lg, c.logTop]);
+const endTop = c.logTop;
+const lastAtEnd = last[1];
+ok("the wheel up scrolls by the pixel", c.wheel(-40) && Math.abs(c.logTop - (endTop - 40)) < 0.5 && !c.follow, c.logTop);
+d.rebuild();
+last = rect(c.msgTid(1));
+ok("…and the message moves down with it", Math.abs(last[1] - lastAtEnd - 40) < 1, [last, lastAtEnd]);
+c.wheel(-10000);
+d.rebuild();
+ok("the top of the first message", c.logTop === 0 && Math.abs(rect(c.msgTid(0))[1] - lg[1]) < 12, [rect(c.msgTid(0)), lg]);
+ok("at the top with nothing before: the wheel does nothing", c.wheel(-40) === false);
+c.wheel(10000);
+d.rebuild();
+ok("down to the end: following again", c.follow && Math.abs(c.logTop - endTop) < 0.5, c.logTop);
+// more messages than the window: past the window's edge it takes the next
+d = fresh();
+c = d.chat;
+c.setOpen(true);
+c.height = 300;
+for (let i = 0; i < 10; i++) c.add("w" + i, "a", "A", "#000000", "line " + i + " " + longWords.slice(0, 60), "", false);
+d.rebuild();
+const topAtEnd = c.top;
+for (let i = 0; i < 400 && c.top === topAtEnd; i++) { c.wheel(-30); d.rebuild(); }
+ok("past the window's top: the message before", c.top === topAtEnd - 1, c.top);
+const firstNow = rect(c.msgTid(c.top + 1));
+ok("…and the words stay where they were", firstNow[1] > rect("ch-log")[1], firstNow);
+for (let i = 0; i < 400 && !c.follow; i++) { c.wheel(30); d.rebuild(); }
+ok("down again to the end", c.follow && c.top === c.maxTop());
+
 // --- bare ----------------------------------------------------------------------
 console.log("bare");
 d = fresh();

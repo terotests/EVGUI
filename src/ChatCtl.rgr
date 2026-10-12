@@ -31,7 +31,10 @@
 ;
 ; WINDOW: `shown` messages from `top`; the newest stay in view while the
 ; reader is at the end (`follow`), and a reader who scrolled up is left where
-; they are with a "N new" button that jumps to the end.
+; they are with a "N new" button that jumps to the end. Inside the window the
+; messages' box scrolls by the pixel (`wheel`, `logTop`), so a message taller
+; than the box is read to its end; at the window's edge the wheel moves the
+; window on by a message and keeps the words where they were.
 ;
 ; A THREAD (one conversation of several, such as a comment pinned to a
 ; slide): `subtitle` is a line under the title ("Slide 3 · resolved"),
@@ -106,6 +109,13 @@ class ChatCtl extends UiCtl {
     def top:int 0
     def shown:int 6
     def follow:boolean true
+    ; how far the messages' box is scrolled inside the window, in px (the
+    ; layout clamps it; `settle` reads back what it drew). `upBy`: the window
+    ; went back a message, `settle` puts the old first message where it was
+    ; less this.
+    def logTop:double 0.0
+    def upBy:double 0.0
+    def wentUp:boolean false
     ; the panel's height in px when the host gives it one (0: the sheet's);
     ; the messages get what the title bar and the composer leave (84 px)
     def height:double 0.0
@@ -275,7 +285,10 @@ class ChatCtl extends UiCtl {
         unseenBelow = 0
     }
 
+    ; a window of whole messages: from the top of the first
     fn scrollBy:void (n:int) {
+        logTop = 0.0
+        wentUp = false
         top = (top + n)
         if (top < 0) {
             top = 0
@@ -285,6 +298,62 @@ class ChatCtl extends UiCtl {
         } {
             follow = false
         }
+    }
+
+    ; The wheel (down positive, px) over the messages: the box scrolls; past
+    ; its top the window takes the message before, past its end the one after.
+    ; True when anything moved. Needs a layout (`logEl` laid out).
+    fn wheel:boolean (dy:double) {
+        if (logEl.calculatedHeight <= 0.0) {
+            return false
+        }
+        def most:double (logEl.maxScrollTop())
+        ; from where it is drawn (the layout clamped it), settled or not
+        logTop = logEl.scrollTop
+        def t:double (logTop + dy)
+        if (t < 0.0) {
+            if (top > 0) {
+                top = (top - 1)
+                wentUp = true
+                upBy = (0.0 - t)
+                logTop = 0.0
+                follow = false
+                return true
+            }
+            t = 0.0
+        }
+        if ((t > most) && (top < (this.maxTop()))) {
+            ; the first message goes: everything under it moves up by its row
+            def step:double (this.firstRow())
+            top = (top + 1)
+            t = (t - step)
+            if (t < 0.0) {
+                t = 0.0
+            }
+            logTop = t
+            follow = false
+            return true
+        }
+        if (t > most) {
+            t = most
+        }
+        def moved:boolean (t != logTop)
+        logTop = t
+        follow = ((top >= (this.maxTop())) && (t >= (most - 0.5)))
+        if follow {
+            unseenBelow = 0
+        }
+        return moved
+    }
+
+    ; from the top of the first message drawn to the top of the second
+    fn firstRow:double () {
+        if (logEl.getChildCount() < 2) {
+            return 0.0
+        }
+        def a:EVGElement (logEl.getChild(0))
+        def b:EVGElement (logEl.getChild(1))
+        return (b.calculatedY - a.calculatedY)
     }
 
     ; --- the buttons under the title ---------------------------------------------------
@@ -348,6 +417,26 @@ class ChatCtl extends UiCtl {
     ; box). True when that differs from what the box was given; the box gets
     ; the rest and the host lays the page out again.
     fn settle:boolean () {
+        def again:boolean (this.settleLog())
+        if (logEl.calculatedHeight > 0.0) {
+            if wentUp {
+                ; the old first message is the second now: back where it was
+                wentUp = false
+                def t:double ((this.firstRow()) - upBy)
+                if (t < 0.0) {
+                    t = 0.0
+                }
+                logTop = t
+                logEl.scrollTop = t
+                return true
+            }
+            ; what the layout drew, clamped (following: the end)
+            logTop = logEl.scrollTop
+        }
+        return again
+    }
+
+    fn settleLog:boolean () {
         if (height <= 0.0) {
             return false
         }
@@ -784,6 +873,11 @@ class ChatCtl extends UiCtl {
             UiTree.inline(list "height" ((to_string (this.logH())) + "px"))
         }
         logEl = list
+        ; following: the end of the last message (the layout clamps it)
+        list.scrollTop = logTop
+        if follow {
+            list.scrollTop = 1000000000.0
+        }
         if ((array_length messages) == 0) {
             list.addChild((UiTree.label((tid + "-empty") "chat-empty" emptyText)))
         }
