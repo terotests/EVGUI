@@ -164,6 +164,38 @@ ok("a press on another message takes the selection there", d.selectAt(w1[0] + 2,
 c.dropSelection();
 ok("dropped: nothing to copy", d.copyText() === "");
 
+// a formatted message (an AI's answer): painted over and copied like a page
+console.log("copy formatted");
+d = fresh();
+c = d.chat;
+c.setOpen(true);
+c.height = 500;
+const longCode = "## Q3 Performance {bg=#1e222a bg-dim=0.85 color=#ffffff} and a much longer tail of words here";
+c.add("r1", "ai", "AI", "#7c3aed", "Sure. **Here** it is:\n\n```\n" + longCode + "\nBoard meeting\n```\n- one\n- two", "09:00", false);
+d.rebuild();
+const rb = rect(c.richTid(0));
+const here = rect(c.blockTid(0, 0) + "-s1");
+const hy = here[1] + here[3] / 2;
+ok("a triple click takes a line without markers", d.selectAt(here[0] + 2, hy, here[0] + 2, 3) === "Sure. Here it is:", d.copyText());
+const code = rect(c.blockTid(0, 2) + "-code");
+const allOf = d.selectAt(rb[0] + 1, rect(c.blockTid(0, 0))[1] + 2, rb[0] + rb[2] - 1, 1);
+ok("a press and a drag on one line select across its words", allOf === "Sure. Here it is:", allOf);
+const t0 = d.host.hitTest(rb[0] + 1, hy);
+d.host.textPressAt(t0, rb[0] + 1, hy, 1, false);
+d.host.textDragToAt(rb[0] + rb[2] - 1, rb[1] + rb[3] - 2);
+d.host.textRelease();
+const whole = d.copyText();
+ok("a drag down the message copies its lines, the code as written", whole === "Sure. Here it is:\n\n" + longCode + "\nBoard meeting\n• one\n• two", whole);
+d.rebuild();
+const bands = d.chat.builtRich.length === 1 ? d.chat.builtRich[0].children.slice(0, 3) : [];
+ok("the band is drawn under it", bands.length === 3 && bands[0].calculatedWidth > 0 && bands[1].calculatedHeight > 0, bands.map((b) => [b.calculatedX, b.calculatedY, b.calculatedWidth, b.calculatedHeight]));
+const codeEl = d.chat.builtRich[0].children.find((k) => (k.className || "").includes("ch-code"));
+const codeBand = codeEl ? codeEl.children[0] : null;
+ok("…and over the code block's background, inside it", codeBand && codeBand.className === "ui-text-selection" && codeBand.calculatedWidth > 0 && codeBand.calculatedX >= codeEl.calculatedX, codeBand && [codeBand.calculatedX, codeBand.calculatedWidth, codeEl.calculatedX]);
+ok("a long code line wraps inside the block", code[0] + code[2] <= rb[0] + rb[2] + 0.5 && code[3] > 3 * 18, [code, rb]);
+c.dropSelection();
+ok("dropped: nothing to copy", d.copyText() === "");
+
 // --- a thread ------------------------------------------------------------------
 console.log("thread");
 d = fresh();
