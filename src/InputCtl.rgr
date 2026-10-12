@@ -1126,11 +1126,26 @@ class InputCtl extends UiCtl {
         if (shown < 1) {
             shown = 1
         }
+        ; The lines sit in the middle of the view, a line box each, and the
+        ; empty field's caret where the first line would be. The run itself
+        ; does not say where: the view is stretched to the box after the run
+        ; was laid out in it, so the run stayed at the view's top while an
+        ; empty field's caret was centred, and the caret jumped up at the
+        ; first letter. Placed here for every count, so both agree.
+        def rows:int n
+        if (rows < 1) {
+            rows = 1
+        }
+        if (rows > shown) {
+            rows = shown
+        }
+        def room:double ((to_double rows) * lb)
+        def top:double (view.calculatedY + ((view.calculatedHeight - room) / 2.0))
+        ; where the run's first line starts inside it (UiTextLines.of)
+        def inset:double ((txt.box.borderWidthPx + txt.box.paddingTopPx) + txt.textShiftY)
         if (n > shown) {
-            ; more lines than the box: the run from the top of the shown
-            ; lines, scrolled so the caret's line is in them
-            def room:double ((to_double shown) * lb)
-            def top:double (view.calculatedY + ((view.calculatedHeight - room) / 2.0))
+            ; more lines than the box: scrolled so the caret's line is in
+            ; the shown ones
             def ct:double ((to_double (p.lineOf(caret))) * lb)
             if ((ct - scrollY) < 0.0) {
                 scrollY = ct
@@ -1145,16 +1160,12 @@ class InputCtl extends UiCtl {
             if (scrollY < 0.0) {
                 scrollY = 0.0
             }
-            txt.calculatedY = (top - scrollY)
-            p = (UiTextLines.of(e txt))
         } {
             scrollY = 0.0
-            ; the lines in the middle of the view, as one line is (the run
-            ; lays out one line high, centred)
-            if (n > 1) {
-                txt.calculatedY = (view.calculatedY + ((view.calculatedHeight - ((to_double n) * lb)) / 2.0))
-                p = (UiTextLines.of(e txt))
-            }
+        }
+        txt.calculatedY = ((top - inset) - scrollY)
+        if (n > 0) {
+            p = (UiTextLines.of(e txt))
         }
         placed = p
         if ((focused == false) || disabled) {
@@ -1184,10 +1195,10 @@ class InputCtl extends UiCtl {
             return
         }
         if ((n == 0) || ((strlen value) == 0)) {
-            ; empty: a line's height centred in the view (an empty run lays
-            ; out with no height of its own)
+            ; empty: where the first line would be (an empty run lays out
+            ; with no height of its own)
             car.calculatedX = textX
-            car.calculatedY = (view.calculatedY + ((view.calculatedHeight - lb) / 2.0))
+            car.calculatedY = top
             car.calculatedHeight = lb
         } {
             def ln:UiTextLine (itemAt p.lines (p.lineOf(caret)))

@@ -2306,7 +2306,7 @@
 .findbar-option-word { border-bottom: 1px solid #52525b; height: 14px; }
 .findbar-option.findbar-hot { background-color: #f4f4f5; }
 .findbar-option.findbar-on { background-color: #dbeafe; border-color: #2563eb; }
-.findbar-option.findbar-on .findbar-option-text { color: #1d4ed8; }
+.findbar-option-text-on { color: #1d4ed8; }
 .findbar-count { color: #3f3f46; font-size: 12px; width: 76px; padding: 0 6px; white-space: nowrap; }
 .findbar-miss { color: #dc2626; }
 .findbar-button {
