@@ -382,8 +382,8 @@ class InputFieldCheck {
 
     ; A comment's words as a chat writes them (ChatCtl markup): **bold**,
     ; `code` and a link are drawn as such, words alone stay a selectable run,
-    ; a press selects a formatted message whole and copies it without the
-    ; markers, a press on its link asks the host to open it.
+    ; a press and a drag select a formatted message's words and copy them
+    ; without the markers, a press on its link asks the host to open it.
     fn chatMarkup:void () {
         def h (new UiHost())
         h.setPageSize(400.0 400.0)
@@ -404,15 +404,24 @@ class InputFieldCheck {
         this.ok((ch.owns("ch-m-1-rich")) "the formatted message is the chat's to press")
         def lks:[string] (ch.linkTids(1))
         this.ok(((array_length lks) == 1) ("one link word: " + (to_string (array_length lks))))
-        ch.textPointerDownAt("ch-m-1-rich" 10.0 10.0 1 false)
-        this.ok(((ch.selectedText()) == "Fix the title, see https://sliqtly.com/help") ("a press selects it whole, copied without markers: " + (ch.selectedText())))
+        def fy:double (bold.calculatedY + (bold.calculatedHeight / 2.0))
+        ch.textPointerDownAt("ch-m-1-rich" (bold.calculatedX + 1.0) fy 3 false)
+        ch.textPointerUp()
+        this.ok(((ch.selectedText()) == "Fix the title, see https://sliqtly.com/help") ("a triple click takes the line, copied without markers: " + (ch.selectedText())))
+        ch.textPointerDownAt("ch-m-1-rich" (bold.calculatedX + 0.5) fy 1 false)
+        ch.textPointerDragAt(((code.calculatedX + code.calculatedWidth) - 0.5) fy)
+        ch.textPointerUp()
+        this.ok(((ch.selectedText()) == "Fix the title") ("a drag over its words selects them with their spaces: " + (ch.selectedText())))
         ch.build()
         def h2 (new UiHost())
         h2.setPageSize(400.0 400.0)
         h2.add(ch)
         h2.layout()
         def selBox:EVGElement (this.el(h2 "ch-m-1-rich"))
-        this.ok(((indexOf selBox.className "chat-rich-sel") >= 0) "the selected message shows it")
+        def band:EVGElement (itemAt selBox.children 0)
+        def bold2:EVGElement (this.el(h2 "ch-m-1-b0-s0"))
+        this.ok(((band.calculatedWidth > 20.0) && ((fabs (band.calculatedX - bold2.calculatedX)) < 1.5)) ("the band is under the selected words: " + (to_string band.calculatedX) + " " + (to_string band.calculatedWidth)))
+        this.ok(((ch.selectedText()) == "Fix the title") "the selection outlives a rebuild")
         ch.dropSelection()
         this.ok(((ch.selectedText()) == "") "a press elsewhere lets it go")
         ch.textPointerDownAt((itemAt lks 0) 10.0 10.0 1 false)
