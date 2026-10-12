@@ -364,7 +364,13 @@ class FindBarCtl extends UiCtl {
             cls = (cls + " findbar-hot")
         }
         def b:EVGElement (UiTree.div((tid + "-" + part) cls))
-        def t:EVGElement (UiTree.label("" ("findbar-option-text findbar-option-" + part) text))
+        ; its own class when on: EVG's sheets take a descendant rule only
+        ; under a theme, so `.findbar-on .findbar-option-text` was an error
+        def tcls:string ("findbar-option-text findbar-option-" + part)
+        if on {
+            tcls = (tcls + " findbar-option-text-on")
+        }
+        def t:EVGElement (UiTree.label("" tcls text))
         t.a11yHidden = true
         b.addChild(t)
         return b
