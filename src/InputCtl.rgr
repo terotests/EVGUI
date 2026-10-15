@@ -1455,9 +1455,15 @@ class InputCtl extends UiCtl {
             ; is its minimum)
             UiTree.inline(view "width" "0px")
             UiTree.inline(view "align-self" "stretch")
+            ; set every build, one line too: the view is the same element
+            ; from build to build, so a minimum left from a taller text
+            ; (sent, or deleted) kept it that tall, and the one line
+            ; centred in it fell to the box's bottom edge, cut away
+            def viewMin:double 0.0
             if (sizedLines > 1) {
-                UiTree.inline(view "min-height" ((to_string ((to_double sizedLines) * lineBox)) + "px"))
+                viewMin = ((to_double sizedLines) * lineBox)
             }
+            UiTree.inline(view "min-height" ((to_string viewMin) + "px"))
         }
         root.addChild(view)
 

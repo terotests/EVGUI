@@ -327,6 +327,18 @@ class InputFieldCheck {
         def fld4:EVGElement (this.el(h "ch-field"))
         this.ok(((strlen ch.sent) > 0) "Enter sends")
         this.ok((InputFieldCheck.near(fld4.calculatedHeight one)) ("sent: the box is one line again: " + (to_string fld4.calculatedHeight)))
+        ; and so is its view, and the next words sit in the box. The bug
+        ; (Sliqtly's comment box): the view kept the five lines' height, the
+        ; one line was centred in that and drawn at the box's bottom edge,
+        ; half cut away with the caret
+        def vw4:EVGElement (this.el(h "ch-field-view"))
+        this.ok(((vw4.calculatedY + vw4.calculatedHeight) <= ((fld4.calculatedY + fld4.calculatedHeight) + 0.5)) ("sent: the view is one line again: " + (to_string vw4.calculatedHeight) + " in " + (to_string fld4.calculatedHeight)))
+        ch.typeChar("" "next")
+        ch.build()
+        h.layout()
+        def fld5:EVGElement (this.el(h "ch-field"))
+        def car5:EVGElement (this.el(h "ch-field-caret"))
+        this.ok(((car5.calculatedY >= fld5.calculatedY) && ((car5.calculatedY + car5.calculatedHeight) <= ((fld5.calculatedY + fld5.calculatedHeight) + 0.5))) ("the next words' caret is in the box: " + (to_string car5.calculatedY) + "+" + (to_string car5.calculatedHeight) + " in " + (to_string fld5.calculatedY) + "+" + (to_string fld5.calculatedHeight)))
     }
 
     ; The caret of an empty field is where the first typed letter puts it:
