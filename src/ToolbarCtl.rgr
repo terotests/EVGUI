@@ -10,6 +10,18 @@
 ;
 ; A toolbar has no selection: the arrows move focus and nothing else, which is
 ; the whole difference between it and a tab strip.
+;
+; Beside plain buttons, a word processor's bar (Radix Toolbar.ToggleItem,
+; Toolbar.Separator, a button that opens a menu):
+;   toggle    a button with an icon that is on or off: aria-pressed, the
+;             class `ui-toolbar-button-state-on|off`. Pressing it changes
+;             nothing here; the app says what is on (`setPressed`).
+;   icon      a button drawn as an icon (a path on a 24×24 grid); its name
+;             is what a reader says and what a tooltip shows.
+;   menu      a button with words and a ▾ that opens a menu the app hangs
+;             under it: aria-haspopup, aria-expanded (`setExpanded`).
+;   separator a line between groups: role separator, never focused, skipped
+;             by the arrows.
 ; =============================================================================
 
 Import "UiCtl.rgr"
@@ -33,6 +45,87 @@ class ToolbarCtl extends UiCtl {
         it.name = itemName
         it.disabled = itemDisabled
         push items it
+    }
+
+    ; An icon button: `iconPath` on a 24×24 grid, `itemName` its name.
+    fn addIcon:void (itemValue:string itemName:string iconPath:string itemDisabled:boolean) {
+        this.addItem(itemValue itemName itemDisabled)
+        def it:UiItem (itemAt items ((array_length items) - 1))
+        it.kind = "icon"
+        it.body = iconPath
+    }
+
+    ; A toggle: an icon button that is on or off.
+    fn addToggle:void (itemValue:string itemName:string iconPath:string pressed:boolean) {
+        this.addIcon(itemValue itemName iconPath false)
+        def it:UiItem (itemAt items ((array_length items) - 1))
+        it.kind = "toggle"
+        it.checked = pressed
+    }
+
+    ; A button that opens a menu: `label` its words (the value it shows),
+    ; `itemName` what it is ("Paragraph style").
+    fn addMenuButton:void (itemValue:string itemName:string label:string) {
+        this.addItem(itemValue itemName false)
+        def it:UiItem (itemAt items ((array_length items) - 1))
+        it.kind = "menu"
+        it.body = label
+    }
+
+    fn addSeparator:void () {
+        def it (new UiItem())
+        it.value = ("sep-" + (to_string (array_length items)))
+        it.kind = "separator"
+        it.disabled = true
+        push items it
+    }
+
+    fn itemOf@(optional):UiItem (itemValue:string) {
+        def found@(optional):UiItem
+        def i:int 0
+        while (i < (array_length items)) {
+            def it:UiItem (itemAt items i)
+            if (it.value == itemValue) {
+                found = it
+            }
+            i = (i + 1)
+        }
+        return found
+    }
+
+    fn setPressed:void (itemValue:string on:boolean) {
+        def it@(optional):UiItem (this.itemOf(itemValue))
+        if (!null? it) {
+            it.checked = on
+        }
+    }
+
+    fn setDisabled:void (itemValue:string off:boolean) {
+        def it@(optional):UiItem (this.itemOf(itemValue))
+        if (!null? it) {
+            if (it.kind != "separator") {
+                it.disabled = off
+            }
+        }
+    }
+
+    ; a menu button's menu is open (the app's)
+    def expandedValue:string ""
+
+    fn setExpanded:void (itemValue:string) {
+        expandedValue = itemValue
+    }
+
+    sfn iconEl:EVGElement (id:string path:string) {
+        def m (EVGElement.createDiv())
+        m.id = id
+        m.className = "ui-toolbar-icon"
+        m.tagName = "path"
+        m.elementType = 3
+        m.viewBox = "0 0 24 24"
+        m.svgPath = path
+        m.a11yHidden = true
+        return m
     }
 
     fn itemTid:string (itemValue:string) {
@@ -60,11 +153,39 @@ class ToolbarCtl extends UiCtl {
             def it:UiItem (itemAt items i)
             def el:EVGElement (unwrap it.el)
             el.id = (this.itemTid(it.value))
+            UiTree.clearChildren(el)
+            if (it.kind == "separator") {
+                el.className = "ui-toolbar-separator"
+                root.addChild(el)
+                i = (i + 1)
+                continue
+            }
             el.className = "ui-toolbar-button"
             if it.disabled {
                 UiTree.addClass(el "ui-toolbar-button-disabled")
             }
-            UiTree.leafText(el it.name)
+            if ((it.kind == "icon") || (it.kind == "toggle")) {
+                UiTree.addClass(el "ui-toolbar-button-icon")
+                if (it.kind == "toggle") {
+                    UiTree.setState(el "ui-toolbar-button" (? it.checked "on" "off"))
+                }
+                el.addChild((ToolbarCtl.iconEl((el.id + "-icon") it.body)))
+            } {
+                if (it.kind == "menu") {
+                    UiTree.addClass(el "ui-toolbar-button-menu")
+                    if (expandedValue == it.value) {
+                        UiTree.setState(el "ui-toolbar-button" "open")
+                    }
+                    def words (EVGElement.createDiv())
+                    words.id = (el.id + "-label")
+                    words.className = "ui-toolbar-menu-label"
+                    UiTree.leafText(words it.body)
+                    el.addChild(words)
+                    el.addChild((ToolbarCtl.iconEl((el.id + "-chevron") "M7 10l5 5 5-5")))
+                } {
+                    UiTree.leafText(el it.name)
+                }
+            }
             root.addChild(el)
             i = (i + 1)
         }
@@ -175,9 +296,24 @@ class ToolbarCtl extends UiCtl {
         def i:int 0
         while (i < (array_length items)) {
             def it:UiItem (itemAt items i)
+            if (it.kind == "separator") {
+                def sr:UiRow (UiRow.of((this.itemTid(it.value)) (EVGA11yRole.separator()) ""))
+                sr.parentTid = tid
+                sr.orientation = "vertical"
+                push out sr
+                i = (i + 1)
+                continue
+            }
             def row:UiRow (UiRow.of((this.itemTid(it.value)) (EVGA11yRole.button()) it.name))
             row.parentTid = tid
             row.disabled = it.disabled
+            if (it.kind == "toggle") {
+                row.pressed = (? it.checked (EVGA11yTri.yes()) (EVGA11yTri.no()))
+            }
+            if (it.kind == "menu") {
+                row.hasPopup = "menu"
+                row.expanded = (? (expandedValue == it.value) (EVGA11yTri.yes()) (EVGA11yTri.no()))
+            }
             if (it.value == rovingValue) {
                 row.tabStop = true
             }
