@@ -612,7 +612,7 @@ export function createStylesPanel(host) {
   });
   $("seddownload").addEventListener("click", () => {
     const blob = new Blob([text.value], { type: "text/css" });
-    const a = h("a", { href: URL.createObjectURL(blob), download: host.fileName(editing) });
+    const a = h("a", { href: URL.createObjectURL(blob), download: host.fileName(editing).split("/").pop() });
     document.body.append(a);
     a.click();
     a.remove();
