@@ -562,6 +562,31 @@ console.log("Pattern A: New event and Reset");
     JSON.stringify([b.weekends, b.weekNumbers, b.model.canMove, b.lang, b.tz, ev(b, "e1").startMin]));
 }
 
+console.log("Finnish dates and times");
+{
+  const I = M.EcI18n;
+  eq("fi: a day's title", I.dayTitle("fi", MON), "maanantai 28. syyskuuta 2026");
+  eq("fi: a week's range", I.rangeTitle("fi", MON - 1, MON + 5), "27.9. – 3.10.2026");
+  eq("fi: an agenda heading", I.shortDate("fi", MON), "ma 28.9.");
+  eq("fi: a clock time", I.time("fi", 545), "9.05");
+  eq("fi: an hour in the gutter", I.hour("fi", 14), "14.00");
+}
+
+console.log("a board with no sample events");
+{
+  const b = new M.EcBoard();
+  b.begin("sp", false, MON, 600);
+  b.model.addEvent("own", "Own event", MON, 600, 660, "", "blue");
+  b.lang = "fi";
+  b.weekStart = 1;
+  b.settle();
+  ok("begin … settle keeps only the host's events", b.model.events.length === 1 && b.model.events[0].id === "own");
+  eq("and its settings", b.selLang.value + "/" + b.selWeek.value, "fi/1");
+  const e = new M.EcBoard();
+  e.setupEmpty("se", MON, 600);
+  ok("setupEmpty: no events, the month view", e.model.events.length === 0 && e.view === "month");
+}
+
 console.log("Pattern A: languages");
 {
   const expect = {
@@ -570,6 +595,7 @@ console.log("Pattern A: languages");
     es: ["Hoy", "Mes", "septiembre de 2026", "lun", "más", "Sin eventos", "Todo el día"],
     ja: ["今日", "月", "2026年9月", "月", "他", "予定なし", "終日"],
     ar: ["اليوم", "شهر", "سبتمبر 2026", "الاثنين", "المزيد", "لا توجد أحداث", "طوال اليوم"],
+    fi: ["Tänään", "Kuukausi", "syyskuu 2026", "ma", "lisää", "Ei tapahtumia", "Koko päivä"],
   };
   for (const [lang, [today, month, title, mon, more, none, allDay]] of Object.entries(expect)) {
     const d = fresh();

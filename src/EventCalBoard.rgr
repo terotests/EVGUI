@@ -25,16 +25,19 @@
 ; from their parent's CONTENT box, so every parent that holds them has no
 ; padding; and a row that stops matching a stylesheet rule keeps its last
 ; value, so every state class sets each property its siblings set.
+;
+; The demo seeds sample events (`setup`); an app with its own events starts
+; from `begin` … `settle` or `setupEmpty` instead.
 ; =============================================================================
 
-Import "../src/EventCalCtl.rgr"
-Import "../src/PopoverCtl.rgr"
-Import "../src/TabsCtl.rgr"
-Import "../src/SelectCtl.rgr"
-Import "../src/UiCtl.rgr"
-Import "../src/UiTree.rgr"
-Import "../src/UiDate.rgr"
-Import "../src/UiText.rgr"
+Import "EventCalCtl.rgr"
+Import "PopoverCtl.rgr"
+Import "TabsCtl.rgr"
+Import "SelectCtl.rgr"
+Import "UiCtl.rgr"
+Import "UiTree.rgr"
+Import "UiDate.rgr"
+Import "UiText.rgr"
 Import "EventCalI18n.rgr"
 Import "pkg:evg/EVGElement.rgr"
 Import "pkg:evg/EVGLayout.rgr"
@@ -133,7 +136,27 @@ class EcBoard {
     ; set-up
     ; =========================================================================
 
+    ; The two patterns, with their sample events.
     fn setup:void (prefix:string isHotel:boolean day:int minute:int) {
+        this.begin(prefix isHotel day minute)
+        if hotel {
+            this.seedHotel()
+        } {
+            this.seedFull()
+        }
+        this.settle()
+    }
+
+    ; A full calendar with no events: for an app that brings its own. Between
+    ; `begin` and `settle` a host adds to `model` and may set `lang`,
+    ; `weekStart`, `view`, `startH` and `endH`; `setupEmpty` is the two with
+    ; nothing in between.
+    fn setupEmpty:void (prefix:string day:int minute:int) {
+        this.begin(prefix false day minute)
+        this.settle()
+    }
+
+    fn begin:void (prefix:string isHotel:boolean day:int minute:int) {
         p = prefix
         hotel = isHotel
         today = day
@@ -145,10 +168,10 @@ class EcBoard {
             startH = 8
             endH = 20
             interval = 60
-            this.seedHotel()
-        } {
-            this.seedFull()
         }
+    }
+
+    fn settle:void () {
         this.setupControls()
         this.applySettings()
         this.resetScroll()

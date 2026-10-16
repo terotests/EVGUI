@@ -1,7 +1,7 @@
 ; SPDX-License-Identifier: AGPL-3.0-or-later
 
 ; =============================================================================
-; EcI18n — the event calendar's six languages
+; EcI18n — the event calendar's seven languages
 ; =============================================================================
 ; ReUI's calendar takes a date-fns locale; here the same words are tables. The
 ; calendar's own labels (Today, All day, No events, "+N more" and the view
@@ -16,18 +16,19 @@
 class EcI18n {
 
     sfn codes:[string] () {
-        return ([] _:string ( "en" "de" "fr" "es" "ja" "ar" ))
+        return ([] _:string ( "en" "de" "fr" "es" "ja" "ar" "fi" ))
     }
 
     sfn names:[string] () {
-        return ([] _:string ( "English" "Deutsch" "Français" "Español" "日本語" "العربية" ))
+        return ([] _:string ( "English" "Deutsch" "Français" "Español" "日本語" "العربية" "Suomi" ))
     }
 
     sfn isRtl:boolean (lang:string) {
         return (lang == "ar")
     }
 
-    sfn pick:string (lang:string en:string de:string fr:string es:string ja:string ar:string) {
+    sfn pick:string (lang:string en:string de:string fr:string es:string ja:string ar:string fi:string) {
+        if (lang == "fi") { return fi }
         if (lang == "de") { return de }
         if (lang == "fr") { return fr }
         if (lang == "es") { return es }
@@ -37,37 +38,38 @@ class EcI18n {
     }
 
     sfn today:string (lang:string) {
-        return (EcI18n.pick(lang "Today" "Heute" "Aujourd'hui" "Hoy" "今日" "اليوم"))
+        return (EcI18n.pick(lang "Today" "Heute" "Aujourd'hui" "Hoy" "今日" "اليوم" "Tänään"))
     }
 
     sfn allDay:string (lang:string) {
-        return (EcI18n.pick(lang "All day" "Ganztägig" "Journée entière" "Todo el día" "終日" "طوال اليوم"))
+        return (EcI18n.pick(lang "All day" "Ganztägig" "Journée entière" "Todo el día" "終日" "طوال اليوم" "Koko päivä"))
     }
 
     sfn noEvents:string (lang:string) {
-        return (EcI18n.pick(lang "No events" "Keine Termine" "Aucun événement" "Sin eventos" "予定なし" "لا توجد أحداث"))
+        return (EcI18n.pick(lang "No events" "Keine Termine" "Aucun événement" "Sin eventos" "予定なし" "لا توجد أحداث" "Ei tapahtumia"))
     }
 
     sfn more:string (lang:string n:int) {
         def ns:string (to_string n)
-        return (EcI18n.pick(lang ("+" + ns + " more") ("+" + ns + " weitere") ("+" + ns + " autres") ("+" + ns + " más") ("他" + ns + "件") ("+" + ns + " المزيد")))
+        return (EcI18n.pick(lang ("+" + ns + " more") ("+" + ns + " weitere") ("+" + ns + " autres") ("+" + ns + " más") ("他" + ns + "件") ("+" + ns + " المزيد") ("+" + ns + " lisää")))
     }
 
     ; The view switcher's names. `ndays` carries its count.
     sfn viewName:string (lang:string v:string n:int) {
         def ns:string (to_string n)
-        if (v == "month") { return (EcI18n.pick(lang "Month" "Monat" "Mois" "Mes" "月" "شهر")) }
-        if (v == "week") { return (EcI18n.pick(lang "Week" "Woche" "Semaine" "Semana" "週" "أسبوع")) }
-        if (v == "day") { return (EcI18n.pick(lang "Day" "Tag" "Jour" "Día" "日" "يوم")) }
-        if (v == "ndays") { return (EcI18n.pick(lang (ns + " days") (ns + " Tage") (ns + " jours") (ns + " días") (ns + "日間") (ns + " أيام"))) }
-        if (v == "agenda") { return (EcI18n.pick(lang "Agenda" "Agenda" "Agenda" "Agenda" "予定" "جدول الأعمال")) }
-        return (EcI18n.pick(lang "Resource" "Zeitraster" "Grille horaire" "Cuadrícula" "タイムグリッド" "شبكة زمنية"))
+        if (v == "month") { return (EcI18n.pick(lang "Month" "Monat" "Mois" "Mes" "月" "شهر" "Kuukausi")) }
+        if (v == "week") { return (EcI18n.pick(lang "Week" "Woche" "Semaine" "Semana" "週" "أسبوع" "Viikko")) }
+        if (v == "day") { return (EcI18n.pick(lang "Day" "Tag" "Jour" "Día" "日" "يوم" "Päivä")) }
+        if (v == "ndays") { return (EcI18n.pick(lang (ns + " days") (ns + " Tage") (ns + " jours") (ns + " días") (ns + "日間") (ns + " أيام") (ns + " päivää"))) }
+        if (v == "agenda") { return (EcI18n.pick(lang "Agenda" "Agenda" "Agenda" "Agenda" "予定" "جدول الأعمال" "Agenda")) }
+        return (EcI18n.pick(lang "Resource" "Zeitraster" "Grille horaire" "Cuadrícula" "タイムグリッド" "شبكة زمنية" "Aikataulu"))
     }
 
     ; --- names -----------------------------------------------------------------
 
     sfn monthName:string (lang:string m:int) {
         def i:int (m - 1)
+        if (lang == "fi") { return (itemAt ([] _:string ( "tammikuu" "helmikuu" "maaliskuu" "huhtikuu" "toukokuu" "kesäkuu" "heinäkuu" "elokuu" "syyskuu" "lokakuu" "marraskuu" "joulukuu" )) i) }
         if (lang == "de") { return (itemAt ([] _:string ( "Januar" "Februar" "März" "April" "Mai" "Juni" "Juli" "August" "September" "Oktober" "November" "Dezember" )) i) }
         if (lang == "fr") { return (itemAt ([] _:string ( "janvier" "février" "mars" "avril" "mai" "juin" "juillet" "août" "septembre" "octobre" "novembre" "décembre" )) i) }
         if (lang == "es") { return (itemAt ([] _:string ( "enero" "febrero" "marzo" "abril" "mayo" "junio" "julio" "agosto" "septiembre" "octubre" "noviembre" "diciembre" )) i) }
@@ -78,6 +80,7 @@ class EcI18n {
 
     sfn monthShort:string (lang:string m:int) {
         def i:int (m - 1)
+        if (lang == "fi") { return (itemAt ([] _:string ( "tammi" "helmi" "maalis" "huhti" "touko" "kesä" "heinä" "elo" "syys" "loka" "marras" "joulu" )) i) }
         if (lang == "de") { return (itemAt ([] _:string ( "Jan." "Feb." "März" "Apr." "Mai" "Juni" "Juli" "Aug." "Sept." "Okt." "Nov." "Dez." )) i) }
         if (lang == "fr") { return (itemAt ([] _:string ( "janv." "févr." "mars" "avr." "mai" "juin" "juil." "août" "sept." "oct." "nov." "déc." )) i) }
         if (lang == "es") { return (itemAt ([] _:string ( "ene" "feb" "mar" "abr" "may" "jun" "jul" "ago" "sept" "oct" "nov" "dic" )) i) }
@@ -86,6 +89,7 @@ class EcI18n {
     }
 
     sfn dayName:string (lang:string dow:int) {
+        if (lang == "fi") { return (itemAt ([] _:string ( "sunnuntai" "maanantai" "tiistai" "keskiviikko" "torstai" "perjantai" "lauantai" )) dow) }
         if (lang == "de") { return (itemAt ([] _:string ( "Sonntag" "Montag" "Dienstag" "Mittwoch" "Donnerstag" "Freitag" "Samstag" )) dow) }
         if (lang == "fr") { return (itemAt ([] _:string ( "dimanche" "lundi" "mardi" "mercredi" "jeudi" "vendredi" "samedi" )) dow) }
         if (lang == "es") { return (itemAt ([] _:string ( "domingo" "lunes" "martes" "miércoles" "jueves" "viernes" "sábado" )) dow) }
@@ -95,6 +99,7 @@ class EcI18n {
     }
 
     sfn dayShort:string (lang:string dow:int) {
+        if (lang == "fi") { return (itemAt ([] _:string ( "su" "ma" "ti" "ke" "to" "pe" "la" )) dow) }
         if (lang == "de") { return (itemAt ([] _:string ( "So" "Mo" "Di" "Mi" "Do" "Fr" "Sa" )) dow) }
         if (lang == "fr") { return (itemAt ([] _:string ( "dim." "lun." "mar." "mer." "jeu." "ven." "sam." )) dow) }
         if (lang == "es") { return (itemAt ([] _:string ( "dom" "lun" "mar" "mié" "jue" "vie" "sáb" )) dow) }
@@ -129,6 +134,7 @@ class EcI18n {
         def mn:string (EcI18n.monthName(lang (itemAt p 1)))
         def wd:string (EcI18n.dayName(lang (UiDate.weekday(days))))
         if (lang == "de") { return (wd + ", " + d + ". " + mn + " " + y) }
+        if (lang == "fi") { return (wd + " " + d + ". " + mn + "ta " + y) }
         if (lang == "fr") { return (wd + " " + d + " " + mn + " " + y) }
         if (lang == "es") { return (wd + ", " + d + " de " + mn + " de " + y) }
         if (lang == "ja") { return (y + "年" + mn + d + "日 " + wd) }
@@ -148,6 +154,7 @@ class EcI18n {
         if (lang == "en") { return (ma + " " + da + " – " + mb + " " + db + ", " + y) }
         if (lang == "de") { return (da + ". " + ma + " – " + db + ". " + mb + " " + y) }
         if (lang == "ja") { return (y + "年" + ma + da + "日 – " + mb + db + "日") }
+        if (lang == "fi") { return (da + "." + (to_string (itemAt p 1)) + ". – " + db + "." + (to_string (itemAt q 1)) + "." + y) }
         return (da + " " + ma + " – " + db + " " + mb + " " + y)
     }
 
@@ -160,6 +167,7 @@ class EcI18n {
         if (lang == "en") { return (wd + ", " + mn + " " + d) }
         if (lang == "de") { return (wd + ", " + d + ". " + mn) }
         if (lang == "ja") { return (mn + d + "日 (" + wd + ")") }
+        if (lang == "fi") { return (wd + " " + d + "." + (to_string (itemAt p 1)) + ".") }
         return (wd + " " + d + " " + mn)
     }
 
@@ -197,6 +205,9 @@ class EcI18n {
         }
         if (lang == "ja") {
             return ((to_string h) + ":" + (EcI18n.pad2(mm)))
+        }
+        if (lang == "fi") {
+            return ((to_string h) + "." + (EcI18n.pad2(mm)))
         }
         return ((EcI18n.pad2(h)) + ":" + (EcI18n.pad2(mm)))
     }
