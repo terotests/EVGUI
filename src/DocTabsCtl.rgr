@@ -12,11 +12,16 @@
 ;
 ;   div.ui-doctabs                         the row
 ;     div.ui-doctab (+ -state-active)      a tab, `<tid>-tab-<key>`
+;       div.ui-doctab-shade                under it all: a box inside the tab's
+;                                          outline that carries its shadow
 ;       path.ui-doctab-wing                its slanted left edge
 ;       div.ui-doctab-body                 the name and the close mark
 ;         span.ui-doctab-name (+ -state-…)
 ;         span.ui-doctab-close             `<tid>-close-<key>` (with 2+ tabs)
 ;       path.ui-doctab-wing                its right edge
+;       div.ui-doctab-foot                 over it all: a strip along its foot
+;                                          (a tab behind the front one shaded
+;                                          where it goes under the page)
 ;     div.ui-doctab-add                    "+", `<tid>-add`
 ;
 ; The wings carry the tab's state class too (`ui-doctab-wing-state-active`),
@@ -220,7 +225,7 @@ class DocTabsCtl extends UiCtl {
                 UiTree.addClass(tab "ui-doctab-dragging")
             }
             if (many && (slot == false)) {
-                def body:EVGElement (tab.getChild(1))
+                def body:EVGElement (tab.getChild(2))
                 def x:EVGElement (UiTree.label((this.closeTid(k)) "ui-doctab-close" "×"))
                 body.addChild(x)
                 push ce x
@@ -257,11 +262,19 @@ class DocTabsCtl extends UiCtl {
     ; The edges are soft: a rounded top corner and a foot that curves out into
     ; the row, as a paper tab's are. Each edge reaches one unit under the body,
     ; so no hairline of the row shows where the two meet.
+    ;
+    ; A shadow is drawn only under a box, never under a path, and under
+    ; whatever was drawn before it: on the body it would fall on the left
+    ; wing. So the shadow is a box of its own drawn first (the shade), inside
+    ; the outline, which the wings and the body then cover; what shows of it
+    ; is the soft edge around the tab. The foot is drawn last, over the wings
+    ; and the body. Both are bare boxes until a sheet gives them a look.
     fn tabEl:EVGElement (k:string word:string id:string) {
         def tab (EVGElement.createDiv())
         tab.id = id
         tab.className = "ui-doctab"
         UiTree.setState(tab "ui-doctab" word)
+        tab.addChild((DocTabsCtl.layer("ui-doctab-shade" word 9 0 0)))
         tab.addChild((DocTabsCtl.wing("M0 32 Q3.6 32 4.4 28.4 L8.5 5 Q9.5 0 12 0 L13 0 L13 32 Z" word)))
         def body (EVGElement.createDiv())
         body.className = "ui-doctab-body"
@@ -271,7 +284,28 @@ class DocTabsCtl extends UiCtl {
         body.addChild(nameEl)
         tab.addChild(body)
         tab.addChild((DocTabsCtl.wing("M-1 0 L0 0 Q2.5 0 3.5 5 L7.6 28.4 Q8.4 32 12 32 L-1 32 Z" word)))
+        tab.addChild((DocTabsCtl.layer("ui-doctab-foot" word 0 0 6)))
         return tab
+    }
+
+    ; the shade or the foot: an absolute box over the tab's whole width less
+    ; `inset` each side, from `top` down to its foot, `h` high (0: to the
+    ; top); the sheet colours it
+    sfn layer:EVGElement (cls:string word:string inset:int top:int h:int) {
+        def el (EVGElement.createDiv())
+        el.className = cls
+        UiTree.setState(el cls word)
+        el.a11yHidden = true
+        el.setAttribute("position" "absolute")
+        el.setAttribute("left" ((to_string inset) + "px"))
+        el.setAttribute("right" ((to_string inset) + "px"))
+        el.setAttribute("bottom" "0px")
+        if (h > 0) {
+            el.setAttribute("height" ((to_string h) + "px"))
+        } {
+            el.setAttribute("top" ((to_string top) + "px"))
+        }
+        return el
     }
 
     fn ghostShown:boolean () {
