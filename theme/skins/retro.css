@@ -239,7 +239,8 @@
 .theme-retro .ui-doctab-wing { fill: var(--retro-screen-3); }
 .theme-retro .ui-doctab-wing-state-active { fill: var(--retro-shell-a); }
 .theme-retro .ui-doctab-body { background-color: var(--retro-screen-3); shadow-color: rgba(0, 0, 0, 0); }
-.theme-retro .ui-doctab-body-state-active { background-color: var(--retro-shell-a); shadow-color: var(--retro-glow); shadow-radius: 6px; shadow-offset-y: 0px; }
+.theme-retro .ui-doctab-body-state-active { background-color: var(--retro-shell-a); }
+.theme-retro .ui-doctab-shade-state-active { shadow-color: var(--retro-glow); shadow-radius: 6px; shadow-offset-y: 0px; }
 .theme-retro .ui-doctab-name { color: var(--retro-ink-dim); }
 .theme-retro .ui-doctab-name-state-active { color: var(--retro-btn-ink); font-weight: 700; }
 .theme-retro .ui-doctab-close { background-color: var(--retro-chin-a); color: var(--retro-ink); }
