@@ -1079,6 +1079,16 @@
 .ui-select-item { padding: 6px 14px; border-radius: 5px; color: #0f172a; }
 .ui-select-item-state-checked { background-color: #e0e7ff; }
 .ui-select-item-disabled { opacity: 0.45; }
+/* `multiple`: a check box before each label says the row is in (its state
+   class is ui-select-item-multi-state-*, so the row takes no tint) */
+.ui-select-item-multi { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+.ui-select-check {
+  display: flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border: 1px solid #94a3b8; border-radius: 4px;
+  background-color: #ffffff; color: #ffffff; font-size: 11px; line-height: 16px;
+}
+.ui-select-check-on { background-color: #0f172a; border-color: #0f172a; }
+.ui-select-label { white-space: nowrap; }
 
 /* The scroll area had NO rules at all, and the audit caught it: black text on
    a box with no background is black on black, which axe measures as 1:1. A

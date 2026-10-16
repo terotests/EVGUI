@@ -41,6 +41,9 @@
 ;             list stays open.
 ;   selected  `aria-selected` follows what is CHOSEN (not the highlight), and
 ;             the list is `aria-multiselectable` when `multiple`.
+;   drawn     `multiple` rows carry a check box (`ui-select-check`, ticked:
+;             `ui-select-check-on`) before their label, and the trigger says
+;             `summary` when it is set, else the chosen labels joined.
 ; =============================================================================
 
 Import "UiCtl.rgr"
@@ -64,6 +67,9 @@ class SelectCtl extends UiCtl {
     def multiple:boolean false
     ; The chosen values of a `multiple` select, in the items' order.
     def values:[string]
+    ; What a `multiple` trigger shows ("7 / 10 columns"); "" shows the
+    ; chosen labels, comma-separated.
+    def summary:string ""
     ; What has been typed for the typeahead, and how long ago.
     def typed:string ""
     def typedAge:double 0.0
@@ -578,7 +584,7 @@ class SelectCtl extends UiCtl {
         def val:EVGElement (unwrap valueEl)
         val.id = (this.valueTid())
         val.className = "ui-select-value"
-        UiTree.leafText(val (this.labelOf(value)))
+        UiTree.leafText(val (this.triggerText()))
         trig.addChild(val)
         root.addChild(trig)
 
@@ -604,12 +610,59 @@ class SelectCtl extends UiCtl {
             if (it.value == value) {
                 itemWord = "checked"
             }
-            UiTree.setState(el "ui-select-item" itemWord)
-            UiTree.leafText(el it.name)
+            if baseUi {
+                itemWord = (? (this.isChosen(it.value)) "checked" "unchecked")
+            }
+            ; a `multiple` row says it is in with its box, not the row's tint
+            UiTree.setState(el (? multiple "ui-select-item-multi" "ui-select-item") itemWord)
+            if multiple {
+                ; a check box, then the label: what is in and what is not,
+                ; seen at once in a list that stays open
+                UiTree.addClass(el "ui-select-item-multi")
+                UiTree.clearChildren(el)
+                el.textContent = ""
+                el.elementType = 0
+                def on:boolean (this.isChosen(it.value))
+                def box:EVGElement (EVGElement.createDiv())
+                box.className = (? on "ui-select-check ui-select-check-on" "ui-select-check")
+                box.a11yHidden = true
+                UiTree.leafText(box (? on "✓" ""))
+                el.addChild(box)
+                def label:EVGElement (EVGElement.createDiv())
+                label.className = "ui-select-label"
+                UiTree.leafText(label it.name)
+                el.addChild(label)
+            } {
+                UiTree.leafText(el it.name)
+            }
             content.addChild(el)
             i = (i + 1)
         }
         root.addChild(content)
+    }
+
+    ; The trigger's words: the chosen label, or for `multiple` the summary
+    ; (else the chosen labels joined).
+    fn triggerText:string () {
+        if (multiple == false) {
+            return (this.labelOf(value))
+        }
+        if ((strlen summary) > 0) {
+            return summary
+        }
+        def out:string ""
+        def i:int 0
+        while (i < (array_length items)) {
+            def it:UiItem (itemAt items i)
+            if (this.isChosen(it.value)) {
+                if ((strlen out) > 0) {
+                    out = (out + ", ")
+                }
+                out = (out + it.name)
+            }
+            i = (i + 1)
+        }
+        return out
     }
 
     fn tids:[string] () {

@@ -201,6 +201,18 @@ console.log("--- SelectCtl: Base UI mode ---");
   ok("multiple: the list row is multiselectable", list && list.multiSelectable === "true");
   ok("aria-selected follows the choice, not the highlight",
     rows.find((r) => r.tid === "t-item-c").selected === 2 && rows.find((r) => r.tid === "t-item-x").selected === 1);
+  // multiple, drawn: a check box per row, the trigger names what is chosen
+  c.build();
+  const itemB = c.items.find((it) => it.value === "b").el;
+  const itemX = c.items.find((it) => it.value === "x").el;
+  const boxOf = (el) => el.children[0];
+  ok("multiple: a chosen row's box is ticked", boxOf(itemB).className.includes("ui-select-check-on") && boxOf(itemB).textContent === "✓" && boxOf(itemB).a11yHidden === true, boxOf(itemB).className);
+  ok("multiple: a row not chosen has an empty box, then its label", !boxOf(itemX).className.includes("ui-select-check-on") && itemX.children[1].textContent === "Broken");
+  ok("multiple: the row itself takes no checked tint", !itemB.className.includes("ui-select-item-state-checked") && itemB.className.includes("ui-select-item-multi-state-checked"), itemB.className);
+  ok("multiple: the trigger joins the chosen labels", c.valueEl.textContent === "Apple, Banana, Blueberry, Date", c.valueEl.textContent);
+  c.summary = "4 / 5";
+  c.build();
+  ok("multiple: …or says its summary", c.valueEl.textContent === "4 / 5");
   // Disabled.
   c = mk();
   c.disabled = true;
