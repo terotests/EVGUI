@@ -94,6 +94,9 @@ class EcBoard {
     ; the first lane.
     def lanes:[EcCol]
     def newTitle:string "New event"
+    ; the Settings popover (its words are English); an app that sets the
+    ; calendar up itself can leave it out
+    def hasSettings:boolean true
 
     ; --- the page state ----------------------------------------------------------
     def focused:string ""
@@ -891,7 +894,7 @@ class EcBoard {
             row.addChild(ttl)
         }
         row.addChild((EcBoard.box("eb-grow")))
-        if ((hotel == false) && (narrow == false)) {
+        if ((hotel == false) && ((narrow == false) && hasSettings)) {
             row.addChild((this.settingsSlot()))
         }
         def newLabel:string newTitle
@@ -908,7 +911,7 @@ class EcBoard {
         row.addChild(nb)
         ; On a phone the popover's trigger is the last thing in the row, so
         ; the panel it hangs off its right edge stays on the page.
-        if ((hotel == false) && narrow) {
+        if ((hotel == false) && (narrow && hasSettings)) {
             row.addChild((this.settingsSlot()))
         }
         bar.addChild(row)
