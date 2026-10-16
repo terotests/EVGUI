@@ -126,7 +126,7 @@ fs.writeFileSync(
     `export const DASHBOARD_CSS = ${css("dashboard.css")};\n` +
     `export const CALENDAR_CSS = ${css("calendar.css")};\n` +
     `export const FILTERS_CSS = ${css("filters.css")};\n` +
-    `export const EVENTCAL_CSS = ${css("eventcal.css")};\n` +
+    `export const EVENTCAL_CSS = ${css("../theme/eventcal.css")};\n` +
     `export const MESSAGE_CSS = ${css("message.css")};\n` +
     `export const CONTROLS_CSS = ${css("controls.css")};\n` +
     `export const OTP_CSS = ${css("otp.css")};\n` +

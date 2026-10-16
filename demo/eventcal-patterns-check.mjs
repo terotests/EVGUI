@@ -22,7 +22,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..", "..");
 const require = createRequire(import.meta.url);
 const M = require(path.join(ROOT, "gallery/evgui/bin/EventCalDemo.cjs"));
-const CSS = fs.readFileSync(path.join(HERE, "eventcal.css"), "utf8");
+const CSS = fs.readFileSync(path.join(HERE, "../theme/eventcal.css"), "utf8");
 
 let passed = 0;
 let failed = 0;

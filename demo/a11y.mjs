@@ -92,21 +92,21 @@ const effects = atRest(EffectsDemo, "effects.css");
 const metadata = atRest(MetadataDemo, "metadata.css");
 const otp = atRest(OtpDemo, "otp.css");
 const filters = atRest(FilterDemo, "filters.css");
-const eventcal = atRest(EventCalDemo, "eventcal.css");
+const eventcal = atRest(EventCalDemo, "../theme/eventcal.css");
 // ReUI's patterns in their other states: the Settings popover open on its
 // Behavior tab; the week with an event focused, tooltips on and one showing;
 // the resource view with a select list open; and Arabic, right to left.
-const eventcalSettings = atRest(EventCalDemo, "eventcal.css");
+const eventcalSettings = atRest(EventCalDemo, "../theme/eventcal.css");
 for (const id of ["ea-set-trigger", "ea-set-tabs-tab-behavior"]) eventcalSettings.press(id);
 eventcalSettings.displayListJson();
-const eventcalWeek = atRest(EventCalDemo, "eventcal.css");
+const eventcalWeek = atRest(EventCalDemo, "../theme/eventcal.css");
 for (const id of ["ea-view-trigger", "ea-view-item-week", "ea-set-trigger", "ea-set-tabs-tab-behavior", "ea-set-sw-tips", "ea-title", "ea-ev-e2"]) eventcalWeek.press(id);
 eventcalWeek.setHover("ea-ev-e4");
 eventcalWeek.displayListJson();
-const eventcalResource = atRest(EventCalDemo, "eventcal.css");
+const eventcalResource = atRest(EventCalDemo, "../theme/eventcal.css");
 for (const id of ["ea-view-trigger", "ea-view-item-resource", "ea-set-trigger", "ea-set-tabs-tab-grid", "ea-set-sn-trigger"]) eventcalResource.press(id);
 eventcalResource.displayListJson();
-const eventcalAr = atRest(EventCalDemo, "eventcal.css");
+const eventcalAr = atRest(EventCalDemo, "../theme/eventcal.css");
 for (const id of ["ea-set-trigger", "ea-set-tabs-tab-region", "ea-set-lang-trigger", "ea-set-lang-item-ar", "ea-title"]) eventcalAr.press(id);
 eventcalAr.displayListJson();
 const message = atRest(MessageDemo, "message.css");

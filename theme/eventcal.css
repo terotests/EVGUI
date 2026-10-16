@@ -4,7 +4,8 @@
  *
  * The GEOMETRY of an event is not in here and must not be: EventCalCtl reports
  * top, height, left and width as fractions, measured against a rendered
- * @schedule-x/calendar, and EventCalDemo.rgr turns them into pixels inline.
+ * @schedule-x/calendar, and EventCalDemo.rgr and EcBoard (src/EventCalBoard.rgr)
+ * turn them into pixels inline.
  * A rule here that sized an event would be a second, unmeasured layout
  * quietly competing with the measured one.
  *

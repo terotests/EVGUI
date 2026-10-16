@@ -73,7 +73,7 @@ const DEMOS = [
   ["DashboardDemo", "dashboard.css"],
   ["DialogDemo", "dialog.css"],
   ["DropdownDemo", "dropdown.css"],
-  ["EventCalDemo", "eventcal.css"],
+  ["EventCalDemo", "../theme/eventcal.css"],
   ["FilterDemo", "filters.css"],
   ["FormDemo", "form.css"],
   ["MenubarDemo", "menubar.css"],
