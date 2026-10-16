@@ -78,6 +78,7 @@
   "ui:tabs:check": "npm run ui:demo:build --silent && node gallery/evgui/demo/tabs-check.mjs",
   "ui:timeline:check": "npm run ui:demo:build --silent && node gallery/evgui/demo/timeline-check.mjs",
   "ui:toolbar": "node dist/rgrc.js -es6 ./gallery/evgui/demo/ToolbarDemo.rgr -d=./gallery/evgui/bin -o=ToolbarDemo.js -nodecli && node ./gallery/evgui/bin/ToolbarDemo.js",
+  "ui:toolbar:kinds": "node dist/rgrc.js -es6 ./gallery/evgui/demo/ToolbarKindsCheck.rgr -d=./gallery/evgui/bin -o=ToolbarKindsCheck.js -nodecli && node ./gallery/evgui/bin/ToolbarKindsCheck.js",
   "ui:toolbar:png": "node dist/rgrc.js -es6 -nodemodule ./gallery/evgui/demo/MenubarDemo.rgr -d=./gallery/evgui/bin -o=MenubarDemo.cjs && node dist/rgrc.js -es6 -nodemodule ./gallery/evgui/demo/ToolbarDemo.rgr -d=./gallery/evgui/bin -o=ToolbarDemo.cjs && DEMO=toolbar node gallery/evgui/demo/render.mjs",
   "ui:tree:checkbox": "npm run ui:demo:build --silent && node gallery/evgui/demo/tree-checkbox-check.mjs",
   "ui:web": "npm run ui:web:build && npm run ui:demo:build && node gallery/evgui/demo/build.mjs && node gallery/evgui/web/serve.mjs",

@@ -1,0 +1,58 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; ToolbarCtl's word-processor items (icon, toggle, menu, separator): what the
+; tree carries and what a reader is told.
+;   node dist/rgrc.js -es6 ./gallery/evgui/demo/ToolbarKindsCheck.rgr -d=/tmp -o=tk.js -nodecli && node /tmp/tk.js
+
+Import "../src/ToolbarCtl.rgr"
+
+class ToolbarKindsCheck {
+    sfn ok:int (name:string pass:boolean) {
+        if pass {
+            print ("ok   " + name)
+            return 0
+        }
+        print ("FAIL " + name)
+        return 1
+    }
+
+    sfn main:void () {
+        def tb (new ToolbarCtl())
+        tb.tid = "f"
+        tb.name = "Formatting"
+        tb.addIcon("undo" "Undo" "M9 14L4 9" true)
+        tb.addSeparator()
+        tb.addToggle("bold" "Bold" "M6 4h8" true)
+        tb.addToggle("italic" "Italic" "M10 4h8" false)
+        tb.addMenuButton("style" "Paragraph style" "Heading 2")
+        tb.setExpanded("style")
+        tb.build()
+        def bad:int 0
+        def root:EVGElement (unwrap tb.rootEl)
+        bad = (bad + (ToolbarKindsCheck.ok("five children, the separator one of them" ((array_length root.children) == 5))))
+        def sep:EVGElement (itemAt root.children 1)
+        bad = (bad + (ToolbarKindsCheck.ok("the separator is drawn as one" (sep.className == "ui-toolbar-separator"))))
+        def b:EVGElement (itemAt root.children 2)
+        bad = (bad + (ToolbarKindsCheck.ok("a toggle that is on carries its state class" ((indexOf b.className "ui-toolbar-button-state-on") >= 0))))
+        def icon:EVGElement (itemAt b.children 0)
+        bad = (bad + (ToolbarKindsCheck.ok("its icon is a path" ((icon.tagName == "path") && (icon.svgPath == "M6 4h8")))))
+        def rows:[UiRow] (tb.rows())
+        def rb:UiRow (itemAt rows 3)
+        bad = (bad + (ToolbarKindsCheck.ok("a reader hears the toggle pressed" (rb.pressed == (EVGA11yTri.yes())))))
+        def rs:UiRow (itemAt rows 2)
+        bad = (bad + (ToolbarKindsCheck.ok("the separator's row is a separator, not focusable" ((rs.role == (EVGA11yRole.separator())) && (rs.focusable == false)))))
+        def rm:UiRow (itemAt rows 5)
+        bad = (bad + (ToolbarKindsCheck.ok("the menu button has a popup, open" ((rm.hasPopup == "menu") && (rm.expanded == (EVGA11yTri.yes()))))))
+        tb.setPressed("bold" false)
+        tb.build()
+        def b2:EVGElement (itemAt root.children 2)
+        bad = (bad + (ToolbarKindsCheck.ok("setPressed turns it off" ((indexOf b2.className "ui-toolbar-button-state-off") >= 0))))
+        ; the arrows skip the separator and the disabled undo
+        tb.rovingValue = "bold"
+        def next:string (tb.keyDown("f-bold" "ArrowLeft"))
+        bad = (bad + (ToolbarKindsCheck.ok("← from the first live button wraps past the separator and the disabled one" (next == "f-style"))))
+        if (bad > 0) {
+            print ((to_string bad) + " failed")
+        }
+    }
+}
