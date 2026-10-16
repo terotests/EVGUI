@@ -16,11 +16,21 @@
 ;
 ; SIZE AND PLACE: the box's size is known only after layout, so a host lays
 ; the page out, calls `fit(w, h)` with the frame's laid-out size, and lays it
-; out once more (the frame and the wedge are free surfaces placed by
+; out once more (the frame and its shape are free surfaces placed by
 ; `overlayX/Y`, so the second pass moves them and nothing else).
 ;
-; LOOK (base.css): `.callout` the frame, `.callout-head`/`-title`/`-close`,
-; `.callout-body`, `.callout-tail` the wedge (a path: `fill`). `look` is a
+; THE SHAPE: what is seen of the box is one path, the box and its wedge in
+; a single outline (UiCallout.shapePath). One fill and one stroke, so the
+; wedge joins the box like a speech bubble's tail; a wedge drawn on its own
+; beside a bordered box shows the border across its base. Painted in order:
+; the blur (a box under the frame, only a look's `backdrop-filter`: it
+; softens the page and nothing drawn after it), the shape, then the frame,
+; which is see-through and holds the content, keeping its size, its radius
+; and a transparent border of the outline's width.
+;
+; LOOK (base.css): `.callout` the frame, `.callout-shape` the box and wedge
+; (a path: `fill`, `stroke`), `.callout-blur` under them, `.callout-head`/`-title`/`-close`,
+; `.callout-body`. `look` is a
 ; word that each part also gets as `<part>-<look>` (a stylesheet has no
 ; descendant rules to style the parts of one look): "glass" is dark and
 ; see-through, the page behind it blurred. `frameClass` is the host's own.
@@ -48,7 +58,8 @@ class CalloutCtl extends UiCtl {
     def lastX:double 0.0
     def lastY:double 0.0
     def frameEl:EVGElement
-    def tailEl:EVGElement
+    def shapeEl:EVGElement
+    def blurEl:EVGElement
     def bodyEl:EVGElement
     ; the close × was pressed (the host takes it)
     def closed:boolean false
@@ -56,7 +67,8 @@ class CalloutCtl extends UiCtl {
     Constructor () {
         rootEl = (EVGElement.createDiv())
         frameEl = (EVGElement.createDiv())
-        tailEl = (EVGElement.createPath())
+        shapeEl = (EVGElement.createPath())
+        blurEl = (EVGElement.createDiv())
         bodyEl = (EVGElement.createDiv())
     }
 
@@ -82,8 +94,12 @@ class CalloutCtl extends UiCtl {
         return (tid + "-body")
     }
 
-    fn tailTid:string () {
-        return (tid + "-tail")
+    fn blurTid:string () {
+        return (tid + "-blur")
+    }
+
+    fn shapeTid:string () {
+        return (tid + "-shape")
     }
 
     fn setPoint:void (x:double y:double) {
@@ -112,13 +128,19 @@ class CalloutCtl extends UiCtl {
         root.id = tid
         root.className = "callout-root"
         UiTree.clearChildren(root)
-        def tl:EVGElement (unwrap tailEl)
-        tl.id = (this.tailTid())
-        tl.className = (this.cls("callout-tail"))
-        tl.a11yHidden = true
-        UiTree.surface(tl "free" "start")
+        def bl:EVGElement (unwrap blurEl)
+        bl.id = (this.blurTid())
+        bl.className = (this.cls("callout-blur"))
+        bl.a11yHidden = true
+        UiTree.surface(bl "free" "start")
+        root.addChild(bl)
+        def sh:EVGElement (unwrap shapeEl)
+        sh.id = (this.shapeTid())
+        sh.className = (this.cls("callout-shape"))
+        sh.a11yHidden = true
+        UiTree.surface(sh "free" "start")
+        root.addChild(sh)
         this.shapeTail()
-        root.addChild(tl)
         def fr:EVGElement (unwrap frameEl)
         fr.id = (this.frameTid())
         fr.className = (trim ((this.cls("callout")) + " " + frameClass))
@@ -153,20 +175,26 @@ class CalloutCtl extends UiCtl {
         return (base + " " + base + "-" + look)
     }
 
-    ; the wedge's element as `geo` has it now
+    ; the shape and the blur as `geo` has them now (none until the box's size
+    ; is known: the host fits and lays out again before anything is drawn)
     fn shapeTail:void () {
-        def tl:EVGElement (unwrap tailEl)
-        if geo.hasTail {
-            tl.svgPath = (geo.tailPath())
-            tl.viewBox = ("0 0 " + (to_string geo.tailBoxW) + " " + (to_string geo.tailBoxH))
-            tl.width = (EVGUnit.px(geo.tailBoxW))
-            tl.height = (EVGUnit.px(geo.tailBoxH))
-            tl.overlayX = geo.tailX
-            tl.overlayY = geo.tailY
+        def sh:EVGElement (unwrap shapeEl)
+        def bl:EVGElement (unwrap blurEl)
+        bl.overlayX = geo.x
+        bl.overlayY = geo.y
+        bl.width = (EVGUnit.px(geo.bw))
+        bl.height = (EVGUnit.px(geo.bh))
+        if ((geo.bw > 0.0) && (geo.bh > 0.0)) {
+            sh.svgPath = (geo.shapePath())
+            sh.viewBox = ("0 0 " + (to_string geo.shapeW) + " " + (to_string geo.shapeH))
+            sh.width = (EVGUnit.px(geo.shapeW))
+            sh.height = (EVGUnit.px(geo.shapeH))
+            sh.overlayX = geo.shapeX
+            sh.overlayY = geo.shapeY
         } {
-            tl.svgPath = ""
-            tl.width = (EVGUnit.px(0.0))
-            tl.height = (EVGUnit.px(0.0))
+            sh.svgPath = ""
+            sh.width = (EVGUnit.px(0.0))
+            sh.height = (EVGUnit.px(0.0))
         }
     }
 
@@ -230,7 +258,8 @@ class CalloutCtl extends UiCtl {
         def a:[string]
         push a tid
         push a (this.frameTid())
-        push a (this.tailTid())
+        push a (this.blurTid())
+        push a (this.shapeTid())
         if (((strlen title) > 0) || ((strlen closeLabel) > 0)) {
             push a (this.headTid())
             push a (tid + "-title")
