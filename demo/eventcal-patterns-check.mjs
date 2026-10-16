@@ -582,6 +582,20 @@ console.log("a board with no sample events");
   b.settle();
   ok("begin … settle keeps only the host's events", b.model.events.length === 1 && b.model.events[0].id === "own");
   eq("and its settings", b.selLang.value + "/" + b.selWeek.value, "fi/1");
+  const l = new M.EcBoard();
+  l.begin("sl", false, MON, 600);
+  for (const [res, label, color] of [["u12", "U12", "blue"], ["u14", "U14", "amber"]]) {
+    const c = new M.EcCol();
+    c.res = res; c.label = label; c.color = color;
+    l.lanes.push(c);
+  }
+  l.newTitle = "Uusi treeni";
+  l.view = "resource";
+  l.settle();
+  eq("lanes: the resource view's columns", l.resources().map((c) => c.label).join(","), "U12,U14");
+  l.addNew(MON);
+  const n = l.model.events[l.model.events.length - 1];
+  ok("lanes: a new event is the app's and belongs to the first lane", n.title === "Uusi treeni" && n.resource === "u12", JSON.stringify([n.title, n.resource]));
   const e = new M.EcBoard();
   e.setupEmpty("se", MON, 600);
   ok("setupEmpty: no events, the month view", e.model.events.length === 0 && e.view === "month");

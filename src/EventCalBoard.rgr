@@ -88,6 +88,13 @@ class EcBoard {
     def browserOff:int 0
     def shift:int 0
 
+    ; --- what an app brings (between `begin` and `settle`) -----------------------
+    ; The resource view's columns (res, label, colour; the day is ignored);
+    ; empty, the demo's three people. A new event is `newTitle` and belongs to
+    ; the first lane.
+    def lanes:[EcCol]
+    def newTitle:string "New event"
+
     ; --- the page state ----------------------------------------------------------
     def focused:string ""
     def hovered:string ""
@@ -150,7 +157,8 @@ class EcBoard {
     ; A full calendar with no events: for an app that brings its own. Between
     ; `begin` and `settle` a host adds to `model` and may set `lang`,
     ; `weekStart`, `view`, `startH` and `endH`; `setupEmpty` is the two with
-    ; nothing in between.
+    ; nothing in between. `lanes` and `newTitle` name the resource view's columns
+    ; and what a new event is called.
     fn setupEmpty:void (prefix:string day:int minute:int) {
         this.begin(prefix false day minute)
         this.settle()
@@ -388,6 +396,15 @@ class EcBoard {
 
     fn resources:[EcCol] () {
         def out:[EcCol]
+        if ((array_length lanes) > 0) {
+            def i:int 0
+            while (i < (array_length lanes)) {
+                def l:EcCol (itemAt lanes i)
+                push out (EcBoard.col(cursor l.res l.label l.color))
+                i = (i + 1)
+            }
+            return out
+        }
         if hotel {
             push out (EcBoard.col(cursor "r101" "101 · King" "blue"))
             push out (EcBoard.col(cursor "r102" "102 · Queen" "emerald"))
@@ -399,6 +416,15 @@ class EcBoard {
         push out (EcBoard.col(cursor "mia" "Mia" "violet"))
         push out (EcBoard.col(cursor "sam" "Sam" "emerald"))
         return out
+    }
+
+    ; who a new event belongs to: the first lane an app gave, else the demo's
+    fn newRes:string () {
+        if ((array_length lanes) > 0) {
+            def l:EcCol (itemAt lanes 0)
+            return l.res
+        }
+        return "alex"
     }
 
     sfn col:EcCol (day:int res:string label:string color:string) {
@@ -868,7 +894,7 @@ class EcBoard {
         if ((hotel == false) && (narrow == false)) {
             row.addChild((this.settingsSlot()))
         }
-        def newLabel:string "New event"
+        def newLabel:string newTitle
         if hotel {
             newLabel = "New booking"
         }
@@ -2231,7 +2257,7 @@ class EcBoard {
             def ev:CalEvent (model.addEvent(id "New booking" day 720 780 "r101" "blue"))
             ev.kind = "ci"
         } {
-            model.addEvent(id "New event" day 720 780 "alex" "blue")
+            model.addEvent(id newTitle day 720 780 (this.newRes()) "blue")
         }
         cursor = day
         this.scrollToMinute(720)
@@ -2665,12 +2691,12 @@ class EcBoard {
         def id:string ("n" + (to_string created))
         def res:string c.res
         if ((strlen res) == 0) {
-            res = "alex"
+            res = (this.newRes())
         }
         ; The create starts at the snapped minute the press was on, not the
         ; nearest one, so a press in the bottom half of 9:00-9:15 is 9:00.
         def m2:int (m - (idiv model.snapMinutes 2))
-        return (model.beginCreate(id "New event" c.day m2 res "blue"))
+        return (model.beginCreate(id newTitle c.day m2 res "blue"))
     }
 
     fn pointerUp:boolean () {
@@ -2799,11 +2825,11 @@ class EcBoard {
         created = (created + 1)
         def id:string ("n" + (to_string created))
         if (lo == hi) {
-            model.addEvent(id "New event" lo 540 600 "alex" "blue")
+            model.addEvent(id newTitle lo 540 600 (this.newRes()) "blue")
         } {
-            def e0:CalEvent (model.addAllDay(id "New event" lo hi))
+            def e0:CalEvent (model.addAllDay(id newTitle lo hi))
             e0.color = "blue"
-            e0.resource = "alex"
+            e0.resource = (this.newRes())
         }
         def e:CalEvent (model.event(id))
         focused = (p + "-chip-" + id)
