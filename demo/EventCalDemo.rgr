@@ -27,7 +27,7 @@
 ; =============================================================================
 
 Import "../src/EventCalCtl.rgr"
-Import "EventCalBoard.rgr"
+Import "../src/EventCalBoard.rgr"
 Import "../src/UiTree.rgr"
 Import "../src/UiDate.rgr"
 Import "../src/UiText.rgr"

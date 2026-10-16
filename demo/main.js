@@ -4738,8 +4738,8 @@ const DEFAULT_CSS = {
 DEFAULT_CSS.questionnaire = QUESTIONNAIRE_CSS;
 DEFAULT_CSS.select = SELECT_CSS;
 DEFAULT_CSS.window = WINDOW_CSS;
-// The file each one ships as, for the download's name.
-const CSS_FILE = { tree: "tree.css", resizable: "resize.css" };
+// The file each one ships as, relative to demo/; the download takes its base name.
+const CSS_FILE = { tree: "tree.css", resizable: "resize.css", eventcal: "../theme/eventcal.css" };
 // The text each demo is running now, so the panel can tell an edit that only
 // changes values from one that removes something.
 const runningCss = {};
