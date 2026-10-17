@@ -48,6 +48,7 @@
 Import "UiCtl.rgr"
 Import "UiTree.rgr"
 Import "UiDate.rgr"
+Import "EventCalI18n.rgr"
 Import "pkg:evg/EVGElement.rgr"
 Import "pkg:evg/EVGA11yTree.rgr"
 
@@ -76,6 +77,15 @@ class CalendarCtl extends UiCtl {
     def hasMin:boolean false
 
     def showOutsideDays:boolean true
+
+    ; The language the calendar speaks. "" is the reference's en-US, word for
+    ; word, which is what the oracle holds; an EcI18n code ("fi", "de"…) names
+    ; months, weekdays and days in that language instead.
+    def lang:string ""
+    ; The first column: 0 Sunday, as the reference draws it, 1 Monday, as most
+    ; of Europe reads a week. Home and End follow it, since they are the
+    ; displayed week's ends.
+    def weekStart:int 0
 
     ; --- reaching a year -----------------------------------------------------
     ;
@@ -133,17 +143,22 @@ class CalendarCtl extends UiCtl {
 
     ; --- the geometry of the grid --------------------------------------------
 
-    ; The first cell drawn: the Sunday on or before the 1st of the month.
+    ; How far into the displayed week a day falls, 0..6.
+    fn column:int (day:int) {
+        return ((((UiDate.weekday(day)) - weekStart) + 7) % 7)
+    }
+
+    ; The first cell drawn: the week's first day on or before the 1st.
     fn gridStart:int () {
         def first:int (UiDate.toDays(viewYear viewMonth 1))
-        return (first - (UiDate.weekday(first)))
+        return (first - (this.column(first)))
     }
 
     ; As many weeks as the month needs. Measured: six for May 2026, five for
     ; most months, four for a February that begins on a Sunday.
     fn weekCount:int () {
         def first:int (UiDate.toDays(viewYear viewMonth 1))
-        def lead:int (UiDate.weekday(first))
+        def lead:int (this.column(first))
         def len:int (UiDate.daysInMonth(viewYear viewMonth))
         def cells:int (lead + len)
         def weeks:int (idiv cells 7)
@@ -258,21 +273,43 @@ class CalendarCtl extends UiCtl {
         def p:[int] ([] _:int ( 0 0 0 ))
         UiDate.fromDays(day p)
         def base:string (UiDate.longLabel((itemAt p 0) (itemAt p 1) (itemAt p 2)))
+        if ((strlen lang) > 0) {
+            base = (EcI18n.dayTitle(lang day))
+        }
         if hasToday {
             if (day == todayDay) {
-                base = ("Today, " + base)
+                base = (((this.say("Today" "Tänään")) + ", ") + base)
             }
         }
         if hasSelection {
             if (day == selectedDay) {
-                base = (base + ", selected")
+                base = (base + (this.say(", selected" ", valittu")))
             }
         }
         return base
     }
 
+    fn monthName:string (m:int) {
+        if ((strlen lang) > 0) {
+            return (EcI18n.monthName(lang m))
+        }
+        return (UiDate.monthName(m))
+    }
+
     fn monthLabel:string () {
+        if ((strlen lang) > 0) {
+            return (((this.monthName(viewMonth)) + " ") + (to_string viewYear))
+        }
         return (UiDate.monthLabel(viewYear viewMonth))
+    }
+
+    ; The few words that are the calendar's own rather than a date's: English
+    ; unless the language is Finnish, the one translation a page has asked for.
+    fn say:string (en:string fi:string) {
+        if (lang == "fi") {
+            return fi
+        }
+        return en
     }
 
     ; --- the year list -------------------------------------------------------
@@ -399,10 +436,10 @@ class CalendarCtl extends UiCtl {
         ; forty-eight presses of the arrow beside it.
         def cap (UiTree.div((this.captionTid()) "ui-calendar-caption"))
         def mon (UiTree.div((tid + "-month") "ui-calendar-month"))
-        UiTree.leafText(mon (UiDate.monthName(viewMonth)))
+        UiTree.leafText(mon (this.monthName(viewMonth)))
         cap.addChild(mon)
         def yr (UiTree.div((this.yearTid()) "ui-calendar-year"))
-        yr.a11yLabel = ((("Year, " + (to_string viewYear)) + ", choose a year"))
+        yr.a11yLabel = (((this.say("Year, " "Vuosi ")) + (to_string viewYear)) + (this.say(", choose a year" ", valitse vuosi")))
         yr.role = "button"
         yr.a11yHasPopup = "listbox"
         yr.a11yExpanded = (EVGA11yTri.no())
@@ -427,7 +464,7 @@ class CalendarCtl extends UiCtl {
             panel.overlaySide = "bottom"
             panel.overlayAlign = "start"
             panel.role = "listbox"
-            panel.a11yLabel = "Year"
+            panel.a11yLabel = (this.say("Year" "Vuosi"))
             def yi:int 0
             while (yi < (this.yearCount())) {
                 def y:int (this.yearAt(yi))
@@ -452,7 +489,12 @@ class CalendarCtl extends UiCtl {
         def c:int 0
         while (c < 7) {
             def th (UiTree.div(((tid + "-weekday-") + (to_string c)) "ui-calendar-weekday"))
-            UiTree.leafText(th (UiDate.dayAbbr(c)))
+            def dow:int ((c + weekStart) % 7)
+            def abbr:string (UiDate.dayAbbr(dow))
+            if ((strlen lang) > 0) {
+                abbr = (EcI18n.dayShort(lang dow))
+            }
+            UiTree.leafText(th abbr)
             head.addChild(th)
             c = (c + 1)
         }
@@ -604,10 +646,10 @@ class CalendarCtl extends UiCtl {
         ; means "the 1st of the month" is a different component, and that is
         ; the guess this would otherwise have been written as.
         if (key == "Home") {
-            return (from - (UiDate.weekday(from)))
+            return (from - (this.column(from)))
         }
         if (key == "End") {
-            return (from + (6 - (UiDate.weekday(from))))
+            return (from + (6 - (this.column(from))))
         }
         if (key == "PageUp") {
             return (this.pageBy(from -1))
@@ -754,11 +796,11 @@ class CalendarCtl extends UiCtl {
         def rootRow:UiRow (UiRow.of(tid (EVGA11yRole.group()) name))
         push out rootRow
 
-        def navRow:UiRow (UiRow.of((tid + "-nav") (EVGA11yRole.navigation()) "Navigation bar"))
+        def navRow:UiRow (UiRow.of((tid + "-nav") (EVGA11yRole.navigation()) (this.say("Navigation bar" "Kuukauden valinta"))))
         navRow.parentTid = tid
         push out navRow
 
-        def prevRow:UiRow (UiRow.of((this.prevTid()) (EVGA11yRole.button()) "Go to the Previous Month"))
+        def prevRow:UiRow (UiRow.of((this.prevTid()) (EVGA11yRole.button()) (this.say("Go to the Previous Month" "Edellinen kuukausi"))))
         prevRow.parentTid = (tid + "-nav")
         prevRow.tabStop = true
         prevRow.focusable = true
@@ -771,7 +813,7 @@ class CalendarCtl extends UiCtl {
         capRow.parentTid = (tid + "-nav")
         push out capRow
 
-        def nextRow:UiRow (UiRow.of((this.nextTid()) (EVGA11yRole.button()) "Go to the Next Month"))
+        def nextRow:UiRow (UiRow.of((this.nextTid()) (EVGA11yRole.button()) (this.say("Go to the Next Month" "Seuraava kuukausi"))))
         nextRow.parentTid = (tid + "-nav")
         nextRow.tabStop = true
         nextRow.focusable = true
