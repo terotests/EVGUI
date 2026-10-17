@@ -360,6 +360,30 @@ console.log("typed segments stay in range");
   ok("a year the calendar cannot show is not committed", e.model.hasSelection === false);
 }
 
+console.log("a Finnish calendar, Monday first");
+{
+  const c = new M.CalendarCtl();
+  c.tid = "fi";
+  c.lang = "fi";
+  c.weekStart = 1;
+  c.setMonth(2026, 10);
+  c.setToday(2026, 10, 17);
+  M.UiTree.dress(c);
+  const all = [];
+  const walk = (el) => { all.push(el); for (const k of el.children) walk(k); };
+  walk(c.rootEl);
+  const text = (el) => { let t = el.textContent || ""; for (const k of el.children) t += text(k); return t; };
+  const heads = all.filter((e) => /(^|\s)ui-calendar-weekday(\s|$)/.test(e.className || "")).map(text);
+  ok("the week starts on Monday", heads.join(" ") === "ma ti ke to pe la su", heads.join(" "));
+  const week0 = all.find((e) => e.id === "fi-week-0");
+  ok("the first cell is Monday 28 September", week0 && week0.children[0].id === "fi-2026-09-28", week0 && week0.children[0].id);
+  ok("the month is named in Finnish", text(all.find((e) => e.id === "fi-month")) === "lokakuu");
+  const today = all.find((e) => e.id === "fi-2026-10-17");
+  ok("a day is labelled in Finnish", today && /^Tänään, lauantai 17\. lokakuuta 2026/.test(today.a11yLabel), today && today.a11yLabel);
+  ok("End goes to Sunday", c.keyDown("fi-2026-10-17", "End") === "fi-2026-10-18");
+  ok("Home goes to Monday", c.keyDown("fi-2026-10-18", "Home") === "fi-2026-10-12");
+}
+
 console.log("");
 console.log(failed ? `RESULT FAIL — passed=${passed} failed=${failed}` : `RESULT OK — passed=${passed} failed=0`);
 process.exitCode = failed ? 1 : 0;
