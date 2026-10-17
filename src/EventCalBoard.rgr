@@ -97,6 +97,9 @@ class EcBoard {
     ; the Settings popover (its words are English); an app that sets the
     ; calendar up itself can leave it out
     def hasSettings:boolean true
+    ; the bar's New button; an app with its own way to add can leave it out
+    ; (a drag on an empty slot still makes one)
+    def hasNew:boolean true
 
     ; --- the page state ----------------------------------------------------------
     def focused:string ""
@@ -901,14 +904,16 @@ class EcBoard {
         if hotel {
             newLabel = "New booking"
         }
-        def nb:EVGElement (EcBoard.btn((p + "-new") "eb-btn eb-btn-primary" newLabel))
-        nb.addChild((EcBoard.icon("plus" "eb-icon-md eb-icon-inv")))
-        if (narrow == false) {
-            nb.addChild((EcBoard.tx("eb-btntx eb-btntx-inv" newLabel)))
-        } {
-            UiTree.addClass(nb "eb-btn-sq")
+        if hasNew {
+            def nb:EVGElement (EcBoard.btn((p + "-new") "eb-btn eb-btn-primary" newLabel))
+            nb.addChild((EcBoard.icon("plus" "eb-icon-md eb-icon-inv")))
+            if (narrow == false) {
+                nb.addChild((EcBoard.tx("eb-btntx eb-btntx-inv" newLabel)))
+            } {
+                UiTree.addClass(nb "eb-btn-sq")
+            }
+            row.addChild(nb)
         }
-        row.addChild(nb)
         ; On a phone the popover's trigger is the last thing in the row, so
         ; the panel it hangs off its right edge stays on the page.
         if ((hotel == false) && (narrow && hasSettings)) {
