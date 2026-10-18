@@ -1056,7 +1056,15 @@
 .ui-navmenu-viewport { height: 1px; }
 
 .ui-select { display: flex; flex-direction: column; width: fit-content; }
+/* The trigger is a row that centres its label, so a theme that gives it a
+   height of its own (Sliqtly's formatting bar: 28px) still draws the label
+   in the middle and not at the top padding. `nowrap` because EVG's rows wrap
+   by default, and a wrapping row's line keeps its items' height. */
 .ui-select-trigger {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   padding: 7px 12px;
