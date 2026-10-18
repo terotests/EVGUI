@@ -1,0 +1,75 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+; A select's chosen label in the middle of its trigger on Node:
+; `ui:selectfit:check`. The bug this was written for: Sliqtly's formatting
+; bar gives the trigger a height of its own (28px), and the label kept to the
+; top padding of base.css's block trigger, so it sat low and ran out of the
+; box's foot.
+Import "../src/UiHost.rgr"
+
+class SelectFitCheck {
+    def fails:int 0
+    def passes:int 0
+
+    fn ok:void (cond:boolean what:string) {
+        if cond {
+            passes = (passes + 1)
+        } {
+            fails = (fails + 1)
+            print ("[FAIL] " + what)
+        }
+    }
+
+    ; base.css's select rules, then the height a host's theme adds.
+    fn sheet:string (extra:string) {
+        return (".ui-root { width: 100%; height: 100%; } .ui-select { display: flex; flex-direction: column; width: fit-content; } .ui-select-trigger { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; border: 1px solid #cbd5e1; border-radius: 6px; padding: 7px 12px; width: fit-content; } .ui-select-value { color: #0f172a; } " + extra)
+    }
+
+    fn el:EVGElement (h:UiHost id:string) {
+        def page:EVGElement (unwrap h.lastPage)
+        def hit@(optional):EVGElement (h.findEl(page id))
+        if (null? hit) {
+            print ("[FAIL] no element " + id)
+            fails = (fails + 1)
+            return (EVGElement.createDiv())
+        }
+        return (unwrap hit)
+    }
+
+    fn centred:void (extra:string what:string) {
+        def h (new UiHost())
+        h.setPageSize(800.0 400.0)
+        h.addStyleSheet((this.sheet(extra)))
+        def s:SelectCtl (h.addSelect("lvl" "Level"))
+        s.addItem("p" "Kappale" false)
+        s.addItem("h1" "Otsikko 1" false)
+        s.value = "p"
+        s.build()
+        h.layout()
+        def trig:EVGElement (this.el(h "lvl-trigger"))
+        def val:EVGElement (this.el(h "lvl-value"))
+        def above:double (val.calculatedY - trig.calculatedY)
+        def below:double ((trig.calculatedY + trig.calculatedHeight) - (val.calculatedY + val.calculatedHeight))
+        print ((((what + ": trigger h ") + (to_string trig.calculatedHeight)) + ", label h ") + (to_string val.calculatedHeight))
+        print ((("  above " + (to_string above)) + ", below ") + (to_string below))
+        def diff:double (above - below)
+        if (diff < 0.0) {
+            diff = (0.0 - diff)
+        }
+        this.ok((diff <= 1.0) (((what + ": the label is in the middle, above ") + (to_string above)) + (" below " + (to_string below))))
+    }
+
+    fn run:void () {
+        this.centred("" "own height")
+        this.centred(".ui-select-trigger { height: 28px; padding: 0px 10px; font-family: Open Sans; }" "28px trigger, Sliqtly's bar")
+        this.centred(".ui-select-trigger { height: 44px; }" "44px trigger")
+    }
+
+    sfn main:void () {
+        def c (new SelectFitCheck())
+        c.run()
+        print ((to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
+        if (c.fails > 0) {
+            print "RESULT FAIL"
+        }
+    }
+}
