@@ -109,7 +109,8 @@ class EcBoard {
     def cardW:double 960.0
     def narrow:boolean false
     ; the hours at their full height, with no scroll of their own: a host
-    ; whose page scrolls sets it, so the wheel moves the page, not the grid
+    ; whose page scrolls sets it, so the wheel moves the page, not the grid;
+    ; a month's week rows then grow to show every event of their days
     def fullHeight:boolean false
     def cardEl@(optional):EVGElement
 
@@ -1194,6 +1195,41 @@ class EcBoard {
         return (to_int (((this.cellH()) - 36.0) / 24.0))
     }
 
+    ; The lanes week row `rs` holds: the fixed ones, or at full height as many
+    ; as its busiest day needs (up to 12, then "+N more" again).
+    fn rowLanes:int (rs:int) {
+        def ml:int (this.maxLanes())
+        if (fullHeight == false) {
+            return ml
+        }
+        def need:int 0
+        def i:int 0
+        while (i < (array_length model.events)) {
+            def e:CalEvent (itemAt model.events i)
+            if (((e.clipStart <= (rs + 6)) && (e.clipEnd >= rs)) && (e.clipEnd >= e.clipStart)) {
+                if (e.lane > need) {
+                    need = e.lane
+                }
+            }
+            i = (i + 1)
+        }
+        if (need > 12) {
+            need = 12
+        }
+        if (need > ml) {
+            return need
+        }
+        return ml
+    }
+
+    fn rowH:double (lanes:int) {
+        def h:double (36.0 + ((to_double lanes) * 24.0))
+        if (h < (this.cellH())) {
+            return (this.cellH())
+        }
+        return h
+    }
+
     ; The events on day `d` at or below `lane`.
     fn coverAt:[CalEvent] (d:int fromLane:int) {
         def out:[CalEvent]
@@ -1223,8 +1259,7 @@ class EcBoard {
     }
 
     ; A day whose last slot says "+N more" instead of holding a chip.
-    fn overflowing:boolean (d:int) {
-        def ml:int (this.maxLanes())
+    fn overflowing:boolean (d:int ml:int) {
         def extra:[CalEvent] (this.coverAt(d ml))
         if ((array_length extra) > 1) {
             return true
@@ -1239,8 +1274,6 @@ class EcBoard {
         def nc:int (array_length cols)
         def wn:double (this.wnW())
         def cw:double ((((this.innerW()) - wn)) / (to_double nc))
-        def ch:double (this.cellH())
-        def ml:int (this.maxLanes())
         def m:EVGElement (UiTree.div((p + "-month") "eb-month"))
         m.role = "grid"
         m.a11yLabel = (EcI18n.monthTitle(lang cursor))
@@ -1268,6 +1301,8 @@ class EcBoard {
         def row:int 0
         while (row < 6) {
             def rs:int (start + (row * 7))
+            def ml:int (this.rowLanes(rs))
+            def ch:double (this.rowH(ml))
             def r:EVGElement (UiTree.div((p + "-mrow-" + (to_string row)) "eb-mrow"))
             r.role = "row"
             EcBoard.dims(r -1.0 ch)
@@ -1387,7 +1422,7 @@ class EcBoard {
             cell.a11yCurrent = "date"
         }
         EcBoard.dims(cell cw ch)
-        def over:boolean (this.overflowing(d))
+        def over:boolean (this.overflowing(d ml))
         def lane:int 1
         while (lane <= ml) {
             def last:boolean (lane == ml)
@@ -1422,7 +1457,7 @@ class EcBoard {
                         def going:boolean true
                         while (going && (q < nc)) {
                             def dq:int (rs + (itemAt cols q))
-                            if ((dq <= e.clipEnd) && ((last && (this.overflowing(dq))) == false)) {
+                            if ((dq <= e.clipEnd) && ((last && (this.overflowing(dq ml))) == false)) {
                                 span = (span + 1)
                                 q = (q + 1)
                             } {
@@ -1541,7 +1576,7 @@ class EcBoard {
         }
         def tw:double 0.0
         if ((strlen tstr) > 0) {
-            tw = ((this.textW(tstr 11.0)) + 6.0)
+            tw = ((this.textW(tstr 11.0)) + 12.0)
         }
         ch.addChild((EcBoard.tx("eb-chiptx" (this.fit(e.title 12.0 (room - tw))))))
         if ((strlen tstr) > 0) {

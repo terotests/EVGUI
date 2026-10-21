@@ -687,7 +687,7 @@
 
 .eb-dot { width: 6px; height: 6px; border-radius: 3px; }
 
-.eb-chiptx { color: #0a0a0a; font-size: 12px; font-weight: 500; height: 16px; line-height: 16px; }
+.eb-chiptx { color: #0a0a0a; font-size: 12px; font-weight: 500; height: 16px; line-height: 16px; white-space: nowrap; flex-shrink: 1; min-width: 0px; overflow: hidden; text-overflow: ellipsis; }
 .eb-chiptx-bold { font-weight: 600; }
 .eb-chiptime { color: #737373; font-size: 11px; height: 16px; line-height: 16px; }
 
