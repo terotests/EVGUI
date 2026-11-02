@@ -61,6 +61,7 @@ SUITES=(
   ui:chat:check
   ui:questionnaire:check
   ui:select:check
+  ui:select:window
   ui:window:check
   ui:dialog:check
   ui:popover:check

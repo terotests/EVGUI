@@ -32,6 +32,7 @@
 Import "../src/SelectCtl.rgr"
 Import "../src/UiCtl.rgr"
 Import "../src/UiTree.rgr"
+Import "../src/UiListWindow.rgr"
 Import "pkg:evg/EVGElement.rgr"
 Import "pkg:evg/EVGUnit.rgr"
 Import "pkg:evg/EVGLayout.rgr"
@@ -107,6 +108,9 @@ class SelectDemo {
     def popScroll:double 0.0
     def popH:double 0.0
     def reveal:boolean false
+    ; A long list builds the rows near its viewport and spacers for the rest
+    ; (src/UiListWindow.rgr); lists of `win.above` rows or fewer are whole.
+    def win:UiListWindow (new UiListWindow())
 
     ; Parallel to the status items: the dot colours; to the users: avatar hues.
     def dotColors:[string]
@@ -496,6 +500,10 @@ class SelectDemo {
         if (popH > 0.0) {
             pop.height = (EVGUnit.px(popH))
         }
+        if (win.on((array_length c.items))) {
+            this.popupRows(c pop)
+            return pop
+        }
         def group@(optional):EVGElement
         def groupName:string ""
         def groups:int 0
@@ -523,6 +531,130 @@ class SelectDemo {
             i = (i + 1)
         }
         return pop
+    }
+
+    ; The lengths of the list's runs: rows one after the other in one group
+    ; (or in none), the stretches UiListWindow measures and leaves out.
+    sfn runLens:[int] (c:SelectCtl) {
+        def out:[int]
+        def n:int 0
+        def i:int 0
+        while (i < (array_length c.items)) {
+            def it:UiItem (itemAt c.items i)
+            if (i > 0) {
+                def prev:UiItem (itemAt c.items (i - 1))
+                if (prev.group != it.group) {
+                    push out n
+                    n = 0
+                }
+            }
+            n = (n + 1)
+            i = (i + 1)
+        }
+        if (n > 0) {
+            push out n
+        }
+        return out
+    }
+
+    ; A long list's rows: the groups as they are, the rows near the viewport,
+    ; the highlighted and the chosen row, and a spacer for each stretch left
+    ; out (the same tree as `popup` builds, less the rows out of sight).
+    fn popupRows:void (c:SelectCtl pop:EVGElement) {
+        win.start(c.tid)
+        win.begin(popScroll popH)
+        def lens:[int] (SelectDemo.runLens(c))
+        def activeAt:int (c.indexOfValue(c.activeValue))
+        def chosenAt:int (c.firstChosen())
+        def target:EVGElement pop
+        def group@(optional):EVGElement
+        def groupName:string ""
+        def groups:int 0
+        def run:int -1
+        def runStart:int 0
+        def a:int 0
+        def b:int -1
+        def pending:int 0
+        def fresh:boolean true
+        def prevIdx:int -2
+        def prevEl:EVGElement pop
+        def i:int 0
+        while (i < (array_length c.items)) {
+            def it:UiItem (itemAt c.items i)
+            def newRun:boolean (i == 0)
+            if (i > 0) {
+                def prev:UiItem (itemAt c.items (i - 1))
+                newRun = (prev.group != it.group)
+            }
+            if newRun {
+                if (pending > 0) {
+                    def sp:EVGElement (win.spacer(pending))
+                    target.addChild(sp)
+                    if fresh {
+                        win.probe(run 0 sp)
+                    }
+                    pending = 0
+                }
+                run = (run + 1)
+                runStart = i
+                def len:int (itemAt lens run)
+                a = (win.first(run len))
+                b = (win.last(run len))
+                fresh = true
+                prevIdx = -2
+                if ((strlen it.group) == 0) {
+                    target = pop
+                } {
+                    if ((it.group != groupName) || (null? group)) {
+                        if (groups > 0) {
+                            pop.addChild((tree Sl (Sep (SepLine))))
+                        }
+                        def gid:string (c.tid + "-group-" + (to_string groups))
+                        def g (tree Sl (Group (props (id gid) (a11yLabel it.group))))
+                        g.addChild((tree Sl (GLabel (props (id (gid + "-label"))) it.group)))
+                        pop.addChild(g)
+                        group = g
+                        groupName = it.group
+                        groups = (groups + 1)
+                    }
+                    target = (unwrap group)
+                }
+            }
+            def idx:int (i - runStart)
+            if (((idx >= a) && (idx <= b)) || (i == activeAt) || (i == chosenAt)) {
+                if (pending > 0) {
+                    def sp:EVGElement (win.spacer(pending))
+                    target.addChild(sp)
+                    if fresh {
+                        win.probe(run (idx - pending) sp)
+                        fresh = false
+                    }
+                    pending = 0
+                }
+                def el:EVGElement (this.row(c it))
+                target.addChild(el)
+                if fresh {
+                    win.probe(run idx el)
+                    fresh = false
+                }
+                if (prevIdx == (idx - 1)) {
+                    win.pair(prevEl el)
+                }
+                prevIdx = idx
+                prevEl = el
+            } {
+                pending = (pending + 1)
+            }
+            i = (i + 1)
+        }
+        if (pending > 0) {
+            def sp:EVGElement (win.spacer(pending))
+            target.addChild(sp)
+            if fresh {
+                win.probe(run 0 sp)
+            }
+        }
+        win.end(lens)
     }
 
     fn selectEl:EVGElement (c:SelectCtl sizeCls:string) {
@@ -794,6 +926,23 @@ class SelectDemo {
                         lay = (this.layOnce())
                     }
                 }
+            }
+        }
+        ; A long list: the rows built are the ones this layout asks for, or it
+        ; is built and laid out again (the first open measures the rows).
+        if (win.on((array_length c.items))) {
+            def lens:[int] (SelectDemo.runLens(c))
+            def tries:int 0
+            while (tries < 3) {
+                def lp:EVGElement (this.popEl())
+                if ((win.changed(lp lp.calculatedHeight lens)) == false) {
+                    tries = 3
+                } {
+                    this.rebuild()
+                    this.markStates((unwrap root))
+                    lay = (this.layOnce())
+                }
+                tries = (tries + 1)
             }
         }
         return lay

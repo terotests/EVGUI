@@ -1,0 +1,257 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; UiListWindow — which rows of a long, scrolling list are worth building
+; =============================================================================
+; An open select with 3000 options built every option on every frame: style,
+; layout and display list for 3000 rows to show twenty of them (Select demo,
+; 3000 options: hover 620 ms, ArrowDown 760 ms a frame). This builds the rows
+; near the list's viewport and stands a SPACER in for each stretch of rows it
+; leaves out, so the list is exactly as tall as it would be with every row in
+; it: the scroll range, the scroll bar and every built row's position stay
+; what they were.
+;
+; The list is a sequence of RUNS (a group's rows, or the ungrouped rows
+; between groups). Within a run every row is the same height, which is what
+; makes a spacer exact: k rows left out between two built rows take
+;
+;   k * stride - gap      (stride: one row's top to the next one's top,
+;                          gap: stride less a row's height)
+;
+; so the next built row lands where it would have. A run's headings and
+; separators are always built; only rows are left out.
+;
+; NOTHING IS GUESSED ABOUT SIZES. The stride and each run's origin (where its
+; row 0 would be, in the list's content) are MEASURED from the last layout,
+; through probes the host records while it builds (the first thing built for
+; each run, and a row followed by its next row). Before the first measurement
+; the first `firstRows` rows of each run are built; `changed` then says the
+; built set is not the one the measurement asks for, and the host builds and
+; lays out again before it shows the frame.
+;
+; Lists of `above` rows or fewer are built whole, exactly as before: the
+; conformance traces (a handful of options) see the same tree they always did.
+;
+; NOT DONE: rows of different heights inside one run, and a list whose width
+; follows its widest row (`width: fit-content`): a row that is not built does
+; not widen the list. The Select demo's list is the trigger's width.
+; =============================================================================
+
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGUnit.rgr"
+
+class UiListWindow {
+    ; Lists with this many rows or fewer are built whole.
+    def above:int 120
+    ; Rows built beyond each edge of the viewport, in pixels.
+    def overscanPx:double 240.0
+    ; Rows built per run before anything has been measured.
+    def firstRows:int 40
+    ; Whose list this is: another list (or the same one reopened) starts over.
+    def owner:string ""
+
+    ; Measured: one row's top to the next one's, and that less a row's height.
+    def stride:double 0.0
+    def gapPx:double 0.0
+    ; Each run's row 0, in the list's content (-1: not measured).
+    def origins:[double]
+    ; The list's scroll and its visible height, given before a build.
+    def scroll:double 0.0
+    def viewport:double 0.0
+
+    ; What the last build built, as "a-b;" per run (see `signature`).
+    def built:string ""
+    ; The probes of the last build, parallel: an element, the row index it
+    ; stands at (a spacer at a run's top stands at 0), and its run.
+    def probeEls:[EVGElement]
+    def probeIdx:[int]
+    def probeRun:[int]
+    ; One built row and the row after it, for the stride.
+    def pairA@(optional):EVGElement
+    def pairB@(optional):EVGElement
+    def hasPair:boolean false
+
+    Constructor () {
+        def o:[double]
+        origins = o
+        def e:[EVGElement]
+        probeEls = e
+        def i:[int]
+        probeIdx = i
+        def r:[int]
+        probeRun = r
+    }
+
+    fn on:boolean (count:int) {
+        return (count > above)
+    }
+
+    ; A new list, or a list opened again: forget what was measured.
+    fn start:void (tid:string) {
+        if (tid == owner) {
+            return
+        }
+        owner = tid
+        stride = 0.0
+        gapPx = 0.0
+        viewport = 0.0
+        def o:[double]
+        origins = o
+        built = ""
+    }
+
+    fn originOf:double (run:int) {
+        if (run < (array_length origins)) {
+            return (itemAt origins run)
+        }
+        return -1.0
+    }
+
+    ; The first row of the run's window (`len` when none of it is near).
+    fn first:int (run:int len:int) {
+        def o:double (this.originOf(run))
+        if ((stride <= 0.0) || (viewport <= 0.0) || (o < 0.0)) {
+            return 0
+        }
+        def top:double (((scroll - overscanPx) - o) / stride)
+        if (top < 0.0) {
+            return 0
+        }
+        def a:int (to_int top)
+        if (a > len) {
+            return len
+        }
+        return a
+    }
+
+    ; The last row of the run's window (-1 when none of it is near).
+    fn last:int (run:int len:int) {
+        def o:double (this.originOf(run))
+        if ((stride <= 0.0) || (viewport <= 0.0) || (o < 0.0)) {
+            if (firstRows < len) {
+                return (firstRows - 1)
+            }
+            return (len - 1)
+        }
+        def bottom:double ((((scroll + viewport) + overscanPx) - o) / stride)
+        if (bottom < 0.0) {
+            return -1
+        }
+        def b:int (to_int bottom)
+        if (b > (len - 1)) {
+            return (len - 1)
+        }
+        return b
+    }
+
+    ; The built set, run by run, for lists of these run lengths.
+    fn signature:string (lens:[int]) {
+        def out:string ""
+        def r:int 0
+        while (r < (array_length lens)) {
+            def len:int (itemAt lens r)
+            out = (out + (to_string (this.first(r len))) + "-" + (to_string (this.last(r len))) + ";")
+            r = (r + 1)
+        }
+        return out
+    }
+
+    ; --- building -----------------------------------------------------------
+
+    ; Before a build: where the list is scrolled and how much of it shows.
+    fn begin:void (scrollTop:double visible:double) {
+        scroll = scrollTop
+        ; 0: the list has no height of its own yet; the last layout's stands
+        if (visible > 0.0) {
+            viewport = visible
+        }
+        def e:[EVGElement]
+        probeEls = e
+        def i:[int]
+        probeIdx = i
+        def r:[int]
+        probeRun = r
+        hasPair = false
+    }
+
+    ; After a build: what it built (`signature` of the same run lengths).
+    fn end:void (lens:[int]) {
+        built = (this.signature(lens))
+    }
+
+    ; The first thing built for a run, standing at row `idx`.
+    fn probe:void (run:int idx:int el:EVGElement) {
+        push probeEls el
+        push probeIdx idx
+        push probeRun run
+    }
+
+    ; Two rows built one after the other (the stride is measured from them).
+    fn pair:void (a:EVGElement b:EVGElement) {
+        if hasPair {
+            return
+        }
+        pairA = a
+        pairB = b
+        hasPair = true
+    }
+
+    ; What stands in for `rows` rows that are left out.
+    fn spacer:EVGElement (rows:int) {
+        def el (new EVGElement())
+        el.className = "ui-list-spacer"
+        el.a11yHidden = true
+        def h:double ((to_double rows) * 32.0)
+        if (stride > 0.0) {
+            h = (((to_double rows) * stride) - gapPx)
+        }
+        if (h < 0.0) {
+            h = 0.0
+        }
+        el.height = (EVGUnit.px(h))
+        el.minHeight = (EVGUnit.px(h))
+        el.flexShrink = 0.0
+        return el
+    }
+
+    ; --- after the layout ---------------------------------------------------
+
+    ; Measure the stride and the runs' origins from the laid-out list, and say
+    ; whether the rows the list now asks for are not the ones built (the host
+    ; then builds and lays out again). `list` is the scrolling box; `visible`
+    ; its visible height.
+    fn changed:boolean (list:EVGElement visible:double lens:[int]) {
+        def base:double (list.calculatedY - list.appliedScrollTop)
+        scroll = list.appliedScrollTop
+        viewport = visible
+        if hasPair {
+            def a:EVGElement (unwrap pairA)
+            def b:EVGElement (unwrap pairB)
+            def s:double (b.calculatedY - a.calculatedY)
+            if (s > 0.0) {
+                stride = s
+                gapPx = (s - a.calculatedHeight)
+            }
+        }
+        if (stride > 0.0) {
+            def fresh:[double]
+            def r:int 0
+            while (r < (array_length lens)) {
+                def o:double -1.0
+                def j:int 0
+                while (j < (array_length probeEls)) {
+                    if ((itemAt probeRun j) == r) {
+                        def el:EVGElement (itemAt probeEls j)
+                        o = ((el.calculatedY - base) - ((to_double (itemAt probeIdx j)) * stride))
+                        j = (array_length probeEls)
+                    }
+                    j = (j + 1)
+                }
+                push fresh o
+                r = (r + 1)
+            }
+            origins = fresh
+        }
+        return ((this.signature(lens)) != built)
+    }
+}
