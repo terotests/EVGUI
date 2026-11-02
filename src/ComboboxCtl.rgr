@@ -112,7 +112,9 @@
 Import "UiCtl.rgr"
 Import "UiTree.rgr"
 Import "InputCtl.rgr"
+Import "UiListWindow.rgr"
 Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGUnit.rgr"
 Import "pkg:evg/EVGA11yTree.rgr"
 
 class ComboboxCtl extends UiCtl {
@@ -172,6 +174,19 @@ class ComboboxCtl extends UiCtl {
     def contentEl:EVGElement
     def emptyEl:EVGElement
 
+    ; A long list (more than `win.above` rows shown) is `maxListHeight` tall,
+    ; scrolls (`scrollList`) and builds only the rows near its viewport, the
+    ; highlighted and the chosen ones (src/UiListWindow.rgr). The host calls
+    ; `listLaidOut` after each layout and builds again when it says so.
+    ; Shorter lists are what they always were.
+    def win:UiListWindow (new UiListWindow())
+    def maxListHeight:double 320.0
+    def listScroll:double 0.0
+    ; The highlight last scrolled into view, and the query the scroll is for.
+    def revealed:string ""
+    def scrolledFor:string ""
+    def wasLong:boolean false
+
     Constructor () {
         rootEl = (EVGElement.createDiv())
         groupEl = (EVGElement.createDiv())
@@ -223,6 +238,130 @@ class ComboboxCtl extends UiCtl {
             return ""
         }
         return (itemAt itemGroups i)
+    }
+
+    ; The section of each of `vis` (a subsequence of `items`, in order), in
+    ; one pass: `groupOf` per row looked each one up from the start.
+    fn groupsOf:[string] (vis:[UiItem]) {
+        def out:[string]
+        def k:int 0
+        def j:int 0
+        while (j < (array_length vis)) {
+            def it:UiItem (itemAt vis j)
+            def from:int k
+            def hunting:boolean true
+            while (hunting && (k < (array_length items))) {
+                def cand:UiItem (itemAt items k)
+                if (cand.value == it.value) {
+                    hunting = false
+                } {
+                    k = (k + 1)
+                }
+            }
+            if (k < (array_length items)) {
+                if (k < (array_length itemGroups)) {
+                    push out (itemAt itemGroups k)
+                } {
+                    push out ""
+                }
+                k = (k + 1)
+            } {
+                k = from
+                push out (this.groupOf(it.value))
+            }
+            j = (j + 1)
+        }
+        return out
+    }
+
+    ; The lengths of the runs of rows one after the other in one section (or
+    ; in none): the stretches UiListWindow measures and leaves out.
+    sfn runLens:[int] (groups:[string]) {
+        def out:[int]
+        def n:int 0
+        def j:int 0
+        while (j < (array_length groups)) {
+            if ((j > 0) && ((itemAt groups j) != (itemAt groups (j - 1)))) {
+                push out n
+                n = 0
+            }
+            n = (n + 1)
+            j = (j + 1)
+        }
+        if (n > 0) {
+            push out n
+        }
+        return out
+    }
+
+    ; Is the open list a long one (see `win`)?
+    fn windowed:boolean (vis:[UiItem]) {
+        if ((open == false) || (autocomplete && loading)) {
+            return false
+        }
+        return (win.on((array_length vis)))
+    }
+
+    fn clampListScroll:double (v:double) {
+        def content:EVGElement (unwrap contentEl)
+        def most:double (content.scrollHeight - content.calculatedHeight)
+        if (most < 0.0) {
+            most = 0.0
+        }
+        if (v > most) {
+            return most
+        }
+        if (v < 0.0) {
+            return 0.0
+        }
+        return v
+    }
+
+    ; The wheel over a long open list. `false`: not one, or at its end.
+    fn scrollList:boolean (dy:double) {
+        if ((this.windowed((this.visibleItems()))) == false) {
+            return false
+        }
+        def next:double (this.clampListScroll((listScroll + dy)))
+        if ((next < (listScroll + 0.5)) && (next > (listScroll - 0.5))) {
+            return false
+        }
+        listScroll = next
+        return true
+    }
+
+    ; After the host's layout: keep a highlight that moved in view, and say
+    ; whether the rows this layout asks for are not the ones built (then the
+    ; host builds and lays out again before it shows the frame).
+    fn listLaidOut:boolean () {
+        def vis:[UiItem] (this.visibleItems())
+        if ((this.windowed(vis)) == false) {
+            return false
+        }
+        def content:EVGElement (unwrap contentEl)
+        if (activeValue != revealed) {
+            revealed = activeValue
+            def i:int (this.visibleIndexOf(vis activeValue))
+            if (i >= 0) {
+                def it:UiItem (itemAt vis i)
+                def el:EVGElement (unwrap it.el)
+                def top:double (content.calculatedY + 6.0)
+                def bottom:double ((content.calculatedY + content.calculatedHeight) - 6.0)
+                def next:double listScroll
+                if (el.calculatedY < top) {
+                    next = (listScroll - (top - el.calculatedY))
+                }
+                if ((el.calculatedY + el.calculatedHeight) > bottom) {
+                    next = (listScroll + ((el.calculatedY + el.calculatedHeight) - bottom))
+                }
+                next = (this.clampListScroll(next))
+                if ((next > (listScroll + 0.5)) || (next < (listScroll - 0.5))) {
+                    listScroll = next
+                    return true
+                }
+            }
+        }
+        return (win.changed(content content.calculatedHeight (ComboboxCtl.runLens((this.groupsOf(vis))))))
     }
 
     ; A section's id: its position among the sections, so a heading with
@@ -1352,21 +1491,106 @@ class ComboboxCtl extends UiCtl {
         }
         ; Rows go straight into the list, or into their section when they
         ; have one: a section is a box with its heading and then its rows.
+        def groups:[string] (this.groupsOf(vis))
+        def virt:boolean (this.windowed(vis))
+        def lens:[int] (ComboboxCtl.runLens(groups))
+        def activeAt:int -1
+        if virt {
+            def q:string (this.query())
+            if (q != scrolledFor) {
+                scrolledFor = q
+                listScroll = 0.0
+                revealed = ""
+            }
+            wasLong = true
+            win.start(tid)
+            win.begin(listScroll maxListHeight)
+            content.height = (EVGUnit.px(maxListHeight))
+            UiTree.addClass(content "ui-combobox-content-scroll")
+            content.scrollTop = listScroll
+            activeAt = (this.visibleIndexOf(vis activeValue))
+        } {
+            if wasLong {
+                ; it was a long list a moment ago (a query narrowed it)
+                wasLong = false
+                content.height = (EVGUnit.unset())
+                content.scrollTop = 0.0
+            }
+            listScroll = 0.0
+            revealed = ""
+            scrolledFor = ""
+        }
+        def run:int -1
+        def runStart:int 0
+        def wa:int 0
+        def wb:int -1
+        def pending:int 0
+        def fresh:boolean true
+        def prevIdx:int -2
+        def prevEl:EVGElement content
         def section:EVGElement content
         def sectionName:string ""
         def j:int 0
         while (j < (array_length vis)) {
             def it:UiItem (itemAt vis j)
-            def g:string (this.groupOf(it.value))
+            def g:string (itemAt groups j)
+            if (virt && ((j == 0) || (g != (itemAt groups (j - 1))))) {
+                if (pending > 0) {
+                    def sp:EVGElement (win.spacer(pending))
+                    section.addChild(sp)
+                    if fresh {
+                        win.probe(run 0 sp)
+                    }
+                    pending = 0
+                }
+                run = (run + 1)
+                runStart = j
+                wa = (win.first(run (itemAt lens run)))
+                wb = (win.last(run (itemAt lens run)))
+                fresh = true
+                prevIdx = -2
+            }
             if (g != sectionName) {
                 sectionName = g
                 if ((strlen g) > 0) {
                     section = (UiTree.div((this.sectionTid(g)) "ui-combobox-section"))
                     section.addChild((UiTree.label((this.sectionLabelTid(g)) "ui-combobox-section-label" g)))
+                    if virt {
+                        section.flexShrink = 0.0
+                    }
                     content.addChild(section)
                 } {
                     section = content
                 }
+            }
+            it.shown = true
+            if virt {
+                def idx:int (j - runStart)
+                it.shown = (((idx >= wa) && (idx <= wb)) || (j == activeAt) || (this.isChosen(it.value)))
+                if (it.shown == false) {
+                    pending = (pending + 1)
+                    j = (j + 1)
+                    continue
+                }
+                if (pending > 0) {
+                    def sp:EVGElement (win.spacer(pending))
+                    section.addChild(sp)
+                    if fresh {
+                        win.probe(run (idx - pending) sp)
+                        fresh = false
+                    }
+                    pending = 0
+                }
+                def rowEl:EVGElement (unwrap it.el)
+                if fresh {
+                    win.probe(run idx rowEl)
+                    fresh = false
+                }
+                if (prevIdx == (idx - 1)) {
+                    win.pair(prevEl rowEl)
+                }
+                prevIdx = idx
+                prevEl = rowEl
             }
             def el:EVGElement (unwrap it.el)
             el.id = (this.itemTid(it.value))
@@ -1383,8 +1607,21 @@ class ComboboxCtl extends UiCtl {
             }
             UiTree.setState(el "ui-combobox-item" itemWord)
             this.itemText(el it)
+            if virt {
+                el.flexShrink = 0.0
+            }
             section.addChild(el)
             j = (j + 1)
+        }
+        if (pending > 0) {
+            def sp:EVGElement (win.spacer(pending))
+            section.addChild(sp)
+            if fresh {
+                win.probe(run 0 sp)
+            }
+        }
+        if virt {
+            win.end(lens)
         }
         def more:int (this.hiddenCount())
         if (more > 0) {
@@ -1618,13 +1855,19 @@ class ComboboxCtl extends UiCtl {
             push out mo
         }
         def sectionName:string ""
+        def groups:[string] (this.groupsOf(vis))
+        def virt:boolean (this.windowed(vis))
+        def secTid:string ""
         def j:int 0
         while (j < (array_length vis)) {
             def it:UiItem (itemAt vis j)
-            def g:string (this.groupOf(it.value))
+            def g:string (itemAt groups j)
             def parent:string (this.contentTid())
             if ((strlen g) > 0) {
-                parent = (this.sectionTid(g))
+                if (g != sectionName) {
+                    secTid = (this.sectionTid(g))
+                }
+                parent = secTid
                 if (g != sectionName) {
                     ; role=group named by its heading, which is then hidden so
                     ; it is not read twice.
@@ -1638,7 +1881,16 @@ class ComboboxCtl extends UiCtl {
                 }
             }
             sectionName = g
+            if (virt && (it.shown == false)) {
+                ; not built: a reader is told the list's size on the rows that are
+                j = (j + 1)
+                continue
+            }
             def row:UiRow (UiRow.of((this.itemTid(it.value)) (EVGA11yRole.option()) it.name))
+            if virt {
+                row.setSize = (array_length vis)
+                row.setPos = (j + 1)
+            }
             row.parentTid = parent
             row.disabled = it.disabled
             row.focusable = (it.disabled == false)

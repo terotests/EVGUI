@@ -494,7 +494,10 @@ class ComboboxDemo {
         def j:int 0
         while (j < (array_length c.items)) {
             def it:UiItem (itemAt c.items j)
-            this.dressRow(c it j)
+            ; a row a long list left out is not dressed (ComboboxCtl.win)
+            if it.shown {
+                this.dressRow(c it j)
+            }
             j = (j + 1)
         }
         ; A separator before every section but the first.
@@ -506,7 +509,11 @@ class ComboboxDemo {
             def kid:EVGElement (itemAt content.children k)
             if (UiTree.hasClass(kid "ui-combobox-section")) {
                 if (seen > 0) {
-                    push kids (tree Cb (Sep))
+                    def sep (tree Cb (Sep))
+                    if (UiTree.hasClass(content "ui-combobox-content-scroll")) {
+                        sep.flexShrink = 0.0
+                    }
+                    push kids sep
                 }
                 seen = (seen + 1)
             }
@@ -680,7 +687,56 @@ class ComboboxDemo {
         return b
     }
 
+    ; A long open list keeps its highlight in view and builds the rows its
+    ; layout asks for (ComboboxCtl.listLaidOut): built and laid out again.
     fn laidOut:EVGLayout () {
+        def lay:EVGLayout (this.layOnce())
+        def tries:int 0
+        while (tries < 3) {
+            if (this.listsChanged()) {
+                this.rebuild()
+                lay = (this.layOnce())
+            } {
+                tries = 3
+            }
+            tries = (tries + 1)
+        }
+        return lay
+    }
+
+    fn listsChanged:boolean () {
+        def all:[ComboboxCtl] (this.ctls())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:ComboboxCtl (itemAt all i)
+            if (c.open && (c.listLaidOut())) {
+                return true
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    ; The wheel over a long open list. `false` leaves the page to scroll.
+    fn scrollBy:boolean (dy:double) {
+        def all:[ComboboxCtl] (this.ctls())
+        def i:int 0
+        while (i < (array_length all)) {
+            def c:ComboboxCtl (itemAt all i)
+            if c.open {
+                this.laidOut()
+                if (c.scrollList(dy)) {
+                    this.rebuild()
+                    return true
+                }
+                return false
+            }
+            i = (i + 1)
+        }
+        return false
+    }
+
+    fn layOnce:EVGLayout () {
         def r:EVGElement (unwrap root)
         def s:EVGStyleSheet (unwrap sheet)
         this.markStates(r)
