@@ -210,6 +210,9 @@ class UiItem {
     def name:string ""
     def body:string ""
     def disabled:boolean false
+    ; Built in the last frame: false for a row a long list left out
+    ; (UiListWindow); true everywhere else.
+    def shown:boolean true
     def el:EVGElement
     def contentEl:EVGElement
     ; A row that is itself a menu. Empty for almost every item; when it is not,

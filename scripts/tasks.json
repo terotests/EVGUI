@@ -94,5 +94,7 @@
   "ui:participants:check": "node dist/rgrc.js -es6 gallery/evgui/demo/ParticipantsCheck.rgr -d=gallery/evgui/bin -o=ParticipantsCheck.js -nodecli && node gallery/evgui/bin/ParticipantsCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
   "ui:findbar:check": "node dist/rgrc.js -es6 gallery/evgui/demo/FindBarCheck.rgr -d=gallery/evgui/bin -o=FindBarCheck.js -nodecli && node gallery/evgui/bin/FindBarCheck.js | tee /dev/stderr | grep -q ' 0 failed'",
   "ui:select:window": "npm run ui:demo:build --silent && node gallery/evgui/demo/select-window-check.mjs",
-  "ui:select:bench": "npm run ui:demo:build --silent && node gallery/evgui/bench/select-bench.mjs"
+  "ui:select:bench": "npm run ui:demo:build --silent && node gallery/evgui/bench/select-bench.mjs",
+  "ui:combobox:window": "npm run ui:demo:build --silent && node gallery/evgui/demo/combobox-window-check.mjs",
+  "ui:combobox:bench": "npm run ui:demo:build --silent && node gallery/evgui/bench/combobox-bench.mjs"
 }

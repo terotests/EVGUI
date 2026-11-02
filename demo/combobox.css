@@ -274,3 +274,6 @@
   .cb-stage { padding: 20px 16px; }
   .cb-field { width: 100%; }
 }
+
+/* a long list (ComboboxCtl.win): a fixed height that scrolls */
+.ui-combobox-content-scroll { overflow: hidden; }

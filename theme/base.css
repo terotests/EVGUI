@@ -2360,3 +2360,6 @@
 .theme-dark .findbar-icon { stroke: #e2e8f0; }
 .theme-dark .findbar-option.findbar-hot, .theme-dark .findbar-button.findbar-hot { background-color: #334155; }
 .theme-dark .findbar-option.findbar-on, .theme-dark .findbar-button.findbar-on { background-color: #1e3a8a; border-color: #60a5fa; }
+
+/* a long combobox list (ComboboxCtl.win): a fixed height that scrolls */
+.ui-combobox-content-scroll { overflow: hidden; }
