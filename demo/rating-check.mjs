@@ -279,6 +279,29 @@ for (const w of [900, 358]) {
 }
 
 console.log("");
+console.log("--- UiApp: handlers in the tree, one rebuild per event ---");
+{
+  const d = fresh();
+  ok("every routed element has an id (nothing bound without one)", d.events.unbound === 0, d.events.unbound);
+  // key and leave on each row (a read-only row's key handler declines),
+  // hover and press on each hit target of an editable row
+  ok("handlers are bound while the page is built", d.events.count > 0 && d.events.has("rt-rate", "key") && d.events.has("rt-rate-star-0-h1", "press"), d.events.count);
+  ok("a read-only row has no hit targets, so nothing to press", !d.events.has("rt-fixed-star-0-h1", "press") && d.events.has("rt-edit-star-0-h1", "press"));
+  const n0 = d.rebuilds;
+  click(d, "rt-rate-star-1-h1");
+  ok("a press that sets a value rebuilds once", d.rebuilds === n0 + 1 && state(d)["rt-rate"].value === 2, [d.rebuilds - n0, state(d)["rt-rate"].value]);
+  const n1 = d.rebuilds;
+  ok("a press nobody handles does not rebuild", d.press("rt-card-summary") === false && d.rebuilds === n1);
+  ok("a key on the focused row bubbles from it and rebuilds once", d.key("ArrowRight") && d.rebuilds === n1 + 1 && state(d)["rt-rate"].value === 3);
+  const count = d.events.count;
+  d.key("ArrowRight");
+  ok("handlers are rebound, not piled up, on each rebuild", d.events.count === count, [count, d.events.count]);
+  hoverAt(d, "rt-half-star-0-h0");
+  ok("hover reaches the hit target's handler", state(d)["rt-half"].hover === 0.5, state(d)["rt-half"]);
+  d.setHover("");
+  ok("leaving reaches the row it was over, after the rebuild replaced the hit element", state(d)["rt-half"].hover === -1, state(d)["rt-half"]);
+}
+
 console.log("passed=" + passed + " failed=" + failed);
 if (failed > 0) { console.log("FAILURES"); process.exit(1); }
 console.log("ALL PASS");
