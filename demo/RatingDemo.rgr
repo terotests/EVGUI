@@ -48,6 +48,11 @@ treefactory Rt {
     child addChild
     text  textContent
     on    events.bind
+    ; the page's own pieces, written as tags: each is a method of the demo
+    component StarRow  this.stars
+    component Rated    this.withValue
+    component DistLine this.distRow
+    component Example  this.card
 
     tag Page     EVGElement (props (className "rt-page"))
     tag Card     EVGElement (props (className "rt-card"))
@@ -79,7 +84,21 @@ treefactory Rt {
     tag BarFill  EVGElement (props (className "rt-bar-fill") (a11yHidden true))
 }
 
+; One bar of the review summary's distribution.
+class RtDist {
+    def stars:int 0
+    def percent:int 0
+    def count:int 0
+    Constructor (s:int p:int c:int) {
+        stars = s
+        percent = p
+        count = c
+    }
+}
+
 class RatingDemo extends UiApp {
+    ; the summary's distribution, five stars first
+    def dists:[RtDist]
 
     ; 1. sizes — read-only, rating 4.
     def sizeSm:RatingCtl (new RatingCtl())
@@ -123,6 +142,11 @@ class RatingDemo extends UiApp {
         edit.setup("rt-edit" "Editable rating" 3.0 5 false)
         ten.setup("rt-ten" "Rating out of ten" 7.0 10 false)
         half.precision = 0.5
+        push dists (new RtDist(5 62 124))
+        push dists (new RtDist(4 22 45))
+        push dists (new RtDist(3 9 18))
+        push dists (new RtDist(2 4 8))
+        push dists (new RtDist(1 3 5))
         this.build()
         this.laidOut()
     }
@@ -259,7 +283,10 @@ class RatingDemo extends UiApp {
         return c
     }
 
-    fn distRow:EVGElement (stars:int percent:int count:int) {
+    fn distRow:EVGElement (d:RtDist) {
+        def stars:int d.stars
+        def percent:int d.percent
+        def count:int d.count
         def k:string (to_string stars)
         def bar (tree Rt (Bar (props (id ("rt-dist-bar-" + k)))))
         def noun:string " stars, "
@@ -284,62 +311,53 @@ class RatingDemo extends UiApp {
     }
 
     fn page:EVGElement () {
-        def p (tree Rt (Page (props (id "rt-page"))))
-
         ; 1. Sizes.
-        def ex1 (tree Rt (Col (props (id "rt-sizes") (className "rt-col rt-sizes"))))
-        ex1.addChild((this.stars(sizeSm "sm")))
-        ex1.addChild((this.stars(sizeMd "")))
-        ex1.addChild((this.stars(sizeLg "lg")))
-        p.addChild((this.card("rt-card-sizes" "Sizes: sm, default and lg" ex1)))
+        def ex1 (tree Rt (Col (props (id "rt-sizes") (className "rt-col rt-sizes"))
+            (StarRow sizeSm "sm")
+            (StarRow sizeMd "")
+            (StarRow sizeLg "lg")))
 
         ; 2. The review summary.
         def score:string (RatingCtl.oneDecimal(summary.value))
-        def head (tree Rt (Col (props (id "rt-summary-head") (className "rt-col rt-summary-head"))
-            (Big (props (id "rt-summary-score")) score)))
-        head.addChild((this.stars(summary "sm")))
-        head.addChild((tree Rt (Muted (props (id "rt-summary-count")) "Based on 200 reviews")))
-        def dist (tree Rt (Dist (props (id "rt-dist"))))
-        dist.addChild((this.distRow(5 62 124)))
-        dist.addChild((this.distRow(4 22 45)))
-        dist.addChild((this.distRow(3 9 18)))
-        dist.addChild((this.distRow(2 4 8)))
-        dist.addChild((this.distRow(1 3 5)))
-        def ex2 (tree Rt (Col (props (id "rt-summary") (className "rt-summary"))))
-        ex2.addChild(head)
-        ex2.addChild((tree Rt (Rule (props (id "rt-summary-rule")))))
-        ex2.addChild(dist)
-        p.addChild((this.card("rt-card-summary" "Review summary" ex2)))
+        def ex2 (tree Rt (Col (props (id "rt-summary") (className "rt-summary"))
+            (Col (props (id "rt-summary-head") (className "rt-col rt-summary-head"))
+                (Big (props (id "rt-summary-score")) score)
+                (StarRow summary "sm")
+                (Muted (props (id "rt-summary-count")) "Based on 200 reviews"))
+            (Rule (props (id "rt-summary-rule")))
+            (Dist (props (id "rt-dist"))
+                (each dists d:RtDist (DistLine d)))))
 
         ; 3. Interactive.
-        def ex3 (tree Rt (Col (props (id "rt-interactive") (className "rt-col rt-interactive"))))
-        ex3.addChild((this.withValue(rate "lg")))
-        ex3.addChild((tree Rt (Hint (props (id "rt-rate-hint")) "Hover to preview, click or use the arrow keys")))
-        p.addChild((this.card("rt-card-interactive" "Interactive with value" ex3)))
+        def ex3 (tree Rt (Col (props (id "rt-interactive") (className "rt-col rt-interactive"))
+            (Rated rate "lg")
+            (Hint (props (id "rt-rate-hint")) "Hover to preview, click or use the arrow keys")))
 
         ; 4. Half stars.
-        def ex4 (tree Rt (Col (props (id "rt-halfstars") (className "rt-col rt-interactive"))))
-        ex4.addChild((this.withValue(half "lg")))
-        ex4.addChild((tree Rt (Hint (props (id "rt-half-hint")) "Each star is two halves: steps of 0.5")))
-        p.addChild((this.card("rt-card-half" "Half-star precision" ex4)))
+        def ex4 (tree Rt (Col (props (id "rt-halfstars") (className "rt-col rt-interactive"))
+            (Rated half "lg")
+            (Hint (props (id "rt-half-hint")) "Each star is two halves: steps of 0.5")))
 
         ; 5. Read-only next to editable.
-        def rowA (tree Rt (Row (props (id "rt-pair-fixed"))
-            (PairLbl (props (id "rt-pair-fixed-label")) "Read-only")))
-        rowA.addChild((this.withValue(fixed "")))
-        def rowB (tree Rt (Row (props (id "rt-pair-edit"))
-            (PairLbl (props (id "rt-pair-edit-label")) "Editable")))
-        rowB.addChild((this.withValue(edit "")))
-        def ex5 (tree Rt (Col (props (id "rt-pairs") (className "rt-col rt-pairs"))))
-        ex5.addChild(rowA)
-        ex5.addChild(rowB)
-        p.addChild((this.card("rt-card-readonly" "Read-only and editable" ex5)))
+        def ex5 (tree Rt (Col (props (id "rt-pairs") (className "rt-col rt-pairs"))
+            (Row (props (id "rt-pair-fixed"))
+                (PairLbl (props (id "rt-pair-fixed-label")) "Read-only")
+                (Rated fixed ""))
+            (Row (props (id "rt-pair-edit"))
+                (PairLbl (props (id "rt-pair-edit-label")) "Editable")
+                (Rated edit ""))))
 
         ; 6. Ten stars.
-        def ex6 (tree Rt (Col (props (id "rt-tenstars") (className "rt-col rt-interactive"))))
-        ex6.addChild((this.withValue(ten "sm")))
-        p.addChild((this.card("rt-card-ten" "Custom max: 10 stars" ex6)))
-        return p
+        def ex6 (tree Rt (Col (props (id "rt-tenstars") (className "rt-col rt-interactive"))
+            (Rated ten "sm")))
+
+        return (tree Rt (Page (props (id "rt-page"))
+            (Example "rt-card-sizes" "Sizes: sm, default and lg" ex1)
+            (Example "rt-card-summary" "Review summary" ex2)
+            (Example "rt-card-interactive" "Interactive with value" ex3)
+            (Example "rt-card-half" "Half-star precision" ex4)
+            (Example "rt-card-readonly" "Read-only and editable" ex5)
+            (Example "rt-card-ten" "Custom max: 10 stars" ex6)))
     }
 
     fn view:EVGElement () {
