@@ -22,11 +22,15 @@
 ; reader; this file only draws what `fillAt(i)` says and routes the pointer
 ; and the keyboard to the controller that owns the target.
 ;
-; A press, a key or a hover rebuilds the tree and folds it into the live one
-; (`EVGReconcile`), keyed by id, the way AccordionDemo does.
+; The pointer and the keyboard are handlers in the tree: `(on press …)` on a
+; star's hit target, `(on key …)` and `(on leave …)` on the row. UiApp finds
+; the handler from the hit element outwards, runs it, and rebuilds the tree
+; and folds it into the live one (`EVGReconcile`, keyed by id) — the page
+; neither routes an id to its owner nor calls a rebuild itself.
 ; =============================================================================
 
 Import "../src/RatingCtl.rgr"
+Import "../src/UiApp.rgr"
 Import "../src/UiCtl.rgr"
 Import "../src/UiTree.rgr"
 Import "pkg:evg/EVGElement.rgr"
@@ -43,6 +47,7 @@ Import "pkg:evg/EVGReconcile.rgr"
 treefactory Rt {
     child addChild
     text  textContent
+    on    events.bind
 
     tag Page     EVGElement (props (className "rt-page"))
     tag Card     EVGElement (props (className "rt-card"))
@@ -74,7 +79,7 @@ treefactory Rt {
     tag BarFill  EVGElement (props (className "rt-bar-fill") (a11yHidden true))
 }
 
-class RatingDemo {
+class RatingDemo extends UiApp {
 
     ; 1. sizes — read-only, rating 4.
     def sizeSm:RatingCtl (new RatingCtl())
@@ -92,10 +97,8 @@ class RatingDemo {
     ; 6. ten stars.
     def ten:RatingCtl (new RatingCtl())
 
-    def root@(optional):EVGElement
     def sheet@(optional):EVGStyleSheet
     def transitions:EVGTransition (new EVGTransition())
-    def reconciler:EVGReconcile (new EVGReconcile())
     def layout@(optional):EVGLayout
     def hovered:string ""
     def pressed:string ""
@@ -120,7 +123,7 @@ class RatingDemo {
         edit.setup("rt-edit" "Editable rating" 3.0 5 false)
         ten.setup("rt-ten" "Rating out of ten" 7.0 10 false)
         half.precision = 0.5
-        this.rebuild()
+        this.build()
         this.laidOut()
     }
 
@@ -166,7 +169,20 @@ class RatingDemo {
 
     ; One row of stars, as RatingCtl says it is filled.
     fn stars:EVGElement (c:RatingCtl size:string) {
-        def row (tree Rt (Stars (props (id c.tid))))
+        def row (tree Rt (Stars (props (id c.tid))
+            (on key (fn:void (e:UiEvent) {
+                if (c.takesKey(e.key)) {
+                    c.keyDown(c.tid e.key)
+                } {
+                    e.handled = false
+                }
+            }))
+            ; the pointer left a star of this row (or the row)
+            (on leave (fn:void (e:UiEvent) {
+                def before:double c.hoverValue
+                c.unhover()
+                e.handled = (c.hoverValue != before)
+            }))))
         c.applyTo(row)
         def w:double (RatingDemo.sizePx(size))
         def starCls:string "rt-star"
@@ -189,16 +205,35 @@ class RatingDemo {
             }
             if (c.editable()) {
                 if (c.halves()) {
-                    star.addChild((tree Rt (Hit (props (id (c.hitTid(i 0))) (className "rt-hit rt-hit-left")))))
-                    star.addChild((tree Rt (Hit (props (id (c.hitTid(i 1))) (className "rt-hit rt-hit-right")))))
+                    star.addChild((this.hit(c (c.hitTid(i 0)) "rt-hit rt-hit-left")))
+                    star.addChild((this.hit(c (c.hitTid(i 1)) "rt-hit rt-hit-right")))
                 } {
-                    star.addChild((tree Rt (Hit (props (id (c.hitTid(i 1)))))))
+                    star.addChild((this.hit(c (c.hitTid(i 1)) "rt-hit")))
                 }
             }
             row.addChild(star)
             i = (i + 1)
         }
         return row
+    }
+
+    ; One hit target: a hover previews its value, a press sets it and puts
+    ; the focus on the row.
+    fn hit:EVGElement (c:RatingCtl hid:string cls:string) {
+        return (tree Rt (Hit (props (id hid) (className cls))
+            (on hover (fn:void (e:UiEvent) {
+                def before:double c.hoverValue
+                c.hover(e.target)
+                e.handled = (c.hoverValue != before)
+            }))
+            (on press (fn:void (e:UiEvent) {
+                def f:string (c.activate(e.target))
+                if ((strlen f) == 0) {
+                    e.handled = false
+                } {
+                    focused = f
+                }
+            }))))
     }
 
     ; The stars and ReUI's showValue label after them.
@@ -307,26 +342,8 @@ class RatingDemo {
         return p
     }
 
-    sfn keyAll:void (el:EVGElement) {
-        if ((strlen el.id) > 0) {
-            el.key = el.id
-        }
-        def i:int 0
-        while (i < (array_length el.children)) {
-            def kid:EVGElement (itemAt el.children i)
-            RatingDemo.keyAll(kid)
-            i = (i + 1)
-        }
-    }
-
-    fn rebuild:void () {
-        def next:EVGElement (this.page())
-        RatingDemo.keyAll(next)
-        if (null? root) {
-            root = next
-            return
-        }
-        reconciler.reconcile((unwrap root) next)
+    fn view:EVGElement () {
+        return (this.page())
     }
 
     ; --- the host ----------------------------------------------------------------
@@ -354,32 +371,11 @@ class RatingDemo {
     }
 
     fn press:boolean (target:string) {
-        def k:int (this.ownerIndex(target))
-        if (k < 0) {
-            return false
-        }
-        def c:RatingCtl (this.ctlAt(k))
-        def f:string (c.activate(target))
-        if ((strlen f) == 0) {
-            return false
-        }
-        focused = f
-        this.rebuild()
-        return true
+        return (this.dispatch("press" target))
     }
 
     fn key:boolean (k:string) {
-        def i:int (this.ownerIndex(focused))
-        if (i < 0) {
-            return false
-        }
-        def c:RatingCtl (this.ctlAt(i))
-        if ((c.takesKey(k)) == false) {
-            return false
-        }
-        c.keyDown(focused k)
-        this.rebuild()
-        return true
+        return (this.dispatchKey(focused k))
     }
 
     fn ownsKey:boolean (k:string) {
@@ -391,30 +387,11 @@ class RatingDemo {
         return (c.takesKey(k))
     }
 
-    ; The pointer moved onto `id`: the controller that owns it previews, every
-    ; other one drops its preview. True when anything changed.
+    ; The pointer moved onto `id`: `leave` for the row it was over, `hover`
+    ; for the star it is over now. True when any preview changed.
     fn setHover:boolean (id:string) {
         hovered = id
-        def changed:boolean false
-        def all:[RatingCtl] (this.ctls())
-        def i:int 0
-        while (i < (array_length all)) {
-            def c:RatingCtl (itemAt all i)
-            def before:double c.hoverValue
-            if (c.owns(id)) {
-                c.hover(id)
-            } {
-                c.unhover()
-            }
-            if (c.hoverValue != before) {
-                changed = true
-            }
-            i = (i + 1)
-        }
-        if changed {
-            this.rebuild()
-        }
-        return changed
+        return (this.pointerOver(id))
     }
 
     fn setPressed:void (id:string) {

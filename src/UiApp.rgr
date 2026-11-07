@@ -1,0 +1,287 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; UiApp — handlers in the tree, and the rebuild after them
+; =============================================================================
+; A page built from tree literals used to route input itself: the hit test
+; gives an id, and the page asked each controller whether it owned that id,
+; called it, and then called `rebuild()` — which it could forget. With this:
+;
+;   treefactory Rt {
+;       child addChild
+;       on    events.bind                 ; UiApp's field
+;       tag   Hit EVGElement
+;   }
+;   class RatingDemo extends UiApp {
+;       fn view:EVGElement () {
+;           return (tree Rt (Hit (props (id "h1"))
+;               (on press (fn:void (e:UiEvent) { rate.setValue(1.0) }))))
+;       }
+;   }
+;
+; and the host calls `dispatch("press" id)`. The handler that ran is found
+; from the hit element outwards (the hit first, then its parents), and after
+; one ran the page is rebuilt and folded into the live tree (`EVGReconcile`,
+; keyed by id) — once per event, however many fields the handler changed.
+;
+; WHAT IS NOT HERE. Nothing in EVG changes: EVGElement has no handler field,
+; `UiEvents` keeps them by id beside the tree. A page that does not extend
+; UiApp, and every program built on EVG directly (the M-Files window), is
+; compiled exactly as before.
+;
+; Handlers are bound while `view()` runs and dropped before the next one, so
+; a handler always sees the state the tree it belongs to was built from. An
+; element without an id cannot be routed to and is counted in `unbound`.
+; =============================================================================
+
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGReconcile.rgr"
+
+class UiEvent {
+    ; press, key, hover, leave, or what the host chose
+    def kind:string ""
+    ; the id the hit test (or the focus) gave
+    def target:string ""
+    ; the id of the element whose handler is running: the target or a parent
+    def owner:string ""
+    def key:string ""
+    def x:double 0.0
+    def y:double 0.0
+    ; a handler that does not take the event says false: the next parent's
+    ; handler is tried, and the host is told nothing was done
+    def handled:boolean true
+    Constructor () {
+    }
+}
+
+class UiHandler {
+    def id:string ""
+    def kind:string ""
+    def run@(optional):(fn:void (e:UiEvent))
+    Constructor () {
+    }
+}
+
+class UiEvents {
+    ; "<id> <kind>" -> its handler
+    def byKey:[string:UiHandler]
+    def count:int 0
+    def unbound:int 0
+    Constructor () {
+    }
+
+    fn clear:void () {
+        map_clear byKey
+        count = 0
+        unbound = 0
+    }
+
+    ; What `on events.bind` in a treefactory calls: `(on press h)` on an
+    ; element is `events.bind(el "press" h)`. A second handler for the same
+    ; element and event replaces the first.
+    fn bind:void (el:EVGElement kind:string run:(fn:void (e:UiEvent))) {
+        if ((strlen el.id) == 0) {
+            unbound = (unbound + 1)
+            return
+        }
+        def h (new UiHandler())
+        h.id = el.id
+        h.kind = kind
+        h.run = run
+        def k:string (el.id + " " + kind)
+        if ((has byKey k) == false) {
+            count = (count + 1)
+        }
+        set byKey k h
+    }
+
+    fn has:boolean (id:string kind:string) {
+        return (has byKey (id + " " + kind))
+    }
+
+    ; Runs the handler of `id` for `e.kind`; false when there is none or it
+    ; did not take the event.
+    fn run:boolean (id:string e:UiEvent) {
+        def k:string (id + " " + e.kind)
+        if ((has byKey k) == false) {
+            return false
+        }
+        def h:UiHandler (unwrap (get byKey k))
+        if (null? h.run) {
+            return false
+        }
+        def f (unwrap h.run)
+        e.owner = id
+        e.handled = true
+        f(e)
+        return e.handled
+    }
+}
+
+class UiApp {
+    def events:UiEvents (new UiEvents())
+    def root@(optional):EVGElement
+    def reconciler:EVGReconcile (new EVGReconcile())
+    ; set by a handler that ran, or by `invalidate()`; `flush()` rebuilds
+    def dirty:boolean true
+    ; off: a handler only marks the page dirty and the host calls `flush()`
+    def autoFlush:boolean true
+    def rebuilds:int 0
+    ; the ids from the hovered element out to the page, as they were when
+    ; the pointer arrived, so `leave` reaches them even after a rebuild
+    ; took the element away
+    def hoverPath:[string]
+    def hoverId:string ""
+
+    Constructor () {
+    }
+
+    ; The page. Overridden; the tree it returns is keyed by id and folded
+    ; into the live one.
+    fn view:EVGElement () {
+        return (EVGElement.createDiv())
+    }
+
+    fn invalidate:void () {
+        dirty = true
+    }
+
+    fn build:void () {
+        events.clear()
+        def next:EVGElement (this.view())
+        UiApp.keyAll(next)
+        if (null? root) {
+            root = next
+        } {
+            reconciler.reconcile((unwrap root) next)
+        }
+        dirty = false
+        rebuilds = (rebuilds + 1)
+    }
+
+    ; Rebuilds when something changed; true when it did.
+    fn flush:boolean () {
+        if dirty {
+            this.build()
+            return true
+        }
+        return false
+    }
+
+    sfn keyAll:void (el:EVGElement) {
+        if ((strlen el.id) > 0) {
+            el.key = el.id
+        }
+        for el.children kid:EVGElement i {
+            UiApp.keyAll(kid)
+        }
+    }
+
+    ; The ids from `id` out to the page's root, innermost first; empty when
+    ; the live tree has no such element.
+    fn pathTo:[string] (id:string) {
+        def out:[string]
+        if ((strlen id) == 0) {
+            return out
+        }
+        if (null? root) {
+            return out
+        }
+        def r:EVGElement (unwrap root)
+        def chain:[EVGElement]
+        if (UiApp.findChain(r id chain)) {
+            def i:int ((array_length chain) - 1)
+            while (i >= 0) {
+                def el:EVGElement (itemAt chain i)
+                if ((strlen el.id) > 0) {
+                    push out el.id
+                }
+                i = (i - 1)
+            }
+        }
+        return out
+    }
+
+    sfn findChain:boolean (el:EVGElement id:string chain:[EVGElement]) {
+        push chain el
+        if (el.id == id) {
+            return true
+        }
+        for el.children kid:EVGElement i {
+            if (UiApp.findChain(kid id chain)) {
+                return true
+            }
+        }
+        removeLast chain
+        return false
+    }
+
+    ; The event at `e.target`, then at each parent until a handler takes it.
+    fn dispatchEvent:boolean (e:UiEvent) {
+        def path:[string] (this.pathTo(e.target))
+        return (this.dispatchAlong(e path))
+    }
+
+    fn dispatchAlong:boolean (e:UiEvent path:[string]) {
+        for path id:string i {
+            if (events.run(id e)) {
+                dirty = true
+                if autoFlush {
+                    this.flush()
+                }
+                return true
+            }
+        }
+        return false
+    }
+
+    fn dispatch:boolean (kind:string target:string) {
+        def e (new UiEvent())
+        e.kind = kind
+        e.target = target
+        return (this.dispatchEvent(e))
+    }
+
+    fn dispatchKey:boolean (target:string key:string) {
+        def e (new UiEvent())
+        e.kind = "key"
+        e.target = target
+        e.key = key
+        return (this.dispatchEvent(e))
+    }
+
+    ; The pointer is over `id` now ("" for nothing): `leave` along the path
+    ; it was over, then `hover` along the new one. True when a handler took
+    ; either.
+    fn pointerOver:boolean (id:string) {
+        if (id == hoverId) {
+            return false
+        }
+        def old:[string] hoverPath
+        def oldId:string hoverId
+        def autoWas:boolean autoFlush
+        autoFlush = false
+        def took:boolean false
+        if ((array_length old) > 0) {
+            def le (new UiEvent())
+            le.kind = "leave"
+            le.target = oldId
+            if (this.dispatchAlong(le old)) {
+                took = true
+            }
+        }
+        hoverId = id
+        hoverPath = (this.pathTo(id))
+        def he (new UiEvent())
+        he.kind = "hover"
+        he.target = id
+        if (this.dispatchAlong(he hoverPath)) {
+            took = true
+        }
+        autoFlush = autoWas
+        if autoFlush {
+            this.flush()
+        }
+        return took
+    }
+}

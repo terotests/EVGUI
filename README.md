@@ -24,6 +24,26 @@ oracles) stays in Ranger and is used from there.
 
 **License: AGPL-3.0-or-later** (see `LICENSE-AGPL-3.0`).
 
+## Handlers in the tree (UiApp)
+
+A page can extend `src/UiApp.rgr` instead of routing input itself. Its
+treefactory says `on events.bind`, and a tag takes handlers next to its props:
+
+```lisp
+(tree Rt (Hit (props (id hid))
+    (on press (fn:void (e:UiEvent) { rate.setValue(2.0) }))))
+```
+
+The host calls `dispatch("press" id)`, `dispatchKey(focused key)` or
+`pointerOver(id)`. The handler is looked up from the hit element outwards,
+and after one runs the page's `view()` is built again and reconciled into the
+live tree, once per event. A handler that declines sets `e.handled = false`.
+`demo/RatingDemo.rgr` is written this way (`demo/rating-check.mjs` checks it).
+
+`(on …)` needs a Ranger whose compiler knows the form (Ranger PR "Tree
+literals: (on <event> <handler>)…"). Nothing in EVG changes: EVGElement has no
+handler field, so programs built on EVG directly compile exactly as before.
+
 ## Building
 
 The sources expect to sit at `gallery/evgui/` in a Ranger checkout: they use
