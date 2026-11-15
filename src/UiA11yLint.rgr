@@ -1,0 +1,108 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; UiA11yLint — what a reader would miss, said while the page is built
+; =============================================================================
+; Two mistakes a canvas UI makes without anyone seeing them, because the
+; picture is right and only the accessible tree is wrong:
+;
+;   * a ROLE WITHOUT A NAME: a button a reader announces as "button" and
+;     nothing else. The name is the one EVGA11yFromTree would publish
+;     (aria-label, else the text inside), so the lint and the tree agree.
+;   * a PRESS HANDLER WITHOUT A ROLE: something a mouse can click and a
+;     keyboard or a reader cannot find, because only an element with a role
+;     is in the accessible tree.
+;
+; It reads the tree and the handlers and writes nothing. `checkApp(app)`
+; runs it on a UiApp's live page; a check script turns the findings into
+; failures.
+; A hidden element (aria-hidden) and everything under it is skipped, as the
+; accessible tree skips it.
+; =============================================================================
+
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGA11yFromTree.rgr"
+Import "UiApp.rgr"
+
+class UiA11yLint {
+    def findings:[string]
+    def names:EVGA11yFromTree (new EVGA11yFromTree())
+
+    Constructor () {
+    }
+
+    ; The roles a reader stops on and announces by name. A container role
+    ; (group, list, main…) is fine without one.
+    sfn needsName:boolean (role:string) {
+        if (role == "button")           { return true }
+        if (role == "link")             { return true }
+        if (role == "checkbox")         { return true }
+        if (role == "radio")            { return true }
+        if (role == "switch")           { return true }
+        if (role == "tab")              { return true }
+        if (role == "menuitem")         { return true }
+        if (role == "menuitemcheckbox") { return true }
+        if (role == "menuitemradio")    { return true }
+        if (role == "option")           { return true }
+        if (role == "slider")           { return true }
+        if (role == "spinbutton")       { return true }
+        if (role == "textbox")          { return true }
+        if (role == "searchbox")        { return true }
+        if (role == "combobox")         { return true }
+        if (role == "img")              { return true }
+        if (role == "dialog")           { return true }
+        if (role == "alertdialog")      { return true }
+        if (role == "progressbar")      { return true }
+        return false
+    }
+
+    sfn label:string (el:EVGElement) {
+        if ((strlen el.id) > 0) {
+            return ("#" + el.id)
+        }
+        if ((strlen el.className) > 0) {
+            return ("." + el.className)
+        }
+        return "(an element without id or class)"
+    }
+
+    fn check:[string] (root:EVGElement events:UiEvents) {
+        def none:[string]
+        findings = none
+        this.walk(root events)
+        return findings
+    }
+
+    ; The page a UiApp built last, with the handlers bound for it.
+    fn checkApp:[string] (app:UiApp) {
+        if (null? app.root) {
+            def none:[string]
+            findings = none
+            return findings
+        }
+        return (this.check((unwrap app.root) app.events))
+    }
+
+    fn walk:void (el:EVGElement events:UiEvents) {
+        if el.a11yHidden {
+            return
+        }
+        def role:string el.role
+        if ((strlen role) > 0) {
+            if (UiA11yLint.needsName(role)) {
+                if ((strlen (trim (names.nameOf(el)))) == 0) {
+                    push findings ((((UiA11yLint.label(el)) + ": role ") + role) + " has no name (aria-label or text)")
+                }
+            }
+        } {
+            if ((strlen el.id) > 0) {
+                if (events.has(el.id "press")) {
+                    push findings ((UiA11yLint.label(el)) + ": has a press handler and no role, so a keyboard or a reader cannot reach it")
+                }
+            }
+        }
+        for el.children kid:EVGElement i {
+            this.walk(kid events)
+        }
+    }
+}

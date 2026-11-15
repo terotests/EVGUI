@@ -279,6 +279,33 @@ for (const w of [900, 358]) {
 }
 
 console.log("");
+console.log("--- a11y lint: no role without a name, no press handler without a role ---");
+{
+  const d = fresh();
+  const lint = new M.UiA11yLint();
+  const found = lint.checkApp(d);
+  ok("the demo page has no a11y findings", found.length === 0, found);
+  // and the lint does find both mistakes: a button with no name, and a
+  // pressable element that has no role
+  const btn = byId(d, "rt-rate");
+  const role = btn.role, label = btn.a11yLabel;
+  btn.role = "button"; btn.a11yLabel = ""; btn.textContent = "";
+  const saved = btn.children; btn.children = [];
+  const f2 = lint.checkApp(d);
+  ok("a button with no name is reported", f2.some((s) => s.startsWith("#rt-rate: role button has no name")), f2);
+  btn.role = role; btn.a11yLabel = label; btn.children = saved;
+  const hit = byId(d, "rt-rate-star-0-h1");
+  // the hit targets are hidden from the accessible tree (the row is the
+  // slider a reader uses), which is why the page is clean; shown, one is a
+  // pressable box that nothing announces
+  ok("the star hit targets are hidden from readers", hit.a11yHidden === true && hit.role === "");
+  const star = byId(d, "rt-rate-star-0");
+  star.a11yHidden = false; hit.a11yHidden = false;
+  const f3 = lint.checkApp(d);
+  ok("a shown press handler without a role is reported", f3.some((s) => s.startsWith("#rt-rate-star-0-h1: has a press handler and no role")), f3);
+  star.a11yHidden = true; hit.a11yHidden = true;
+}
+
 console.log("--- UiApp: handlers in the tree, one rebuild per event ---");
 {
   const d = fresh();

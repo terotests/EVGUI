@@ -44,6 +44,15 @@ live tree, once per event. A handler that declines sets `e.handled = false`.
 literals: (on <event> <handler>)…"). Nothing in EVG changes: EVGElement has no
 handler field, so programs built on EVG directly compile exactly as before.
 
+## Accessibility lint (UiA11yLint)
+
+`new UiA11yLint().checkApp(app)` reads a UiApp's live page and its handlers and returns what a screen reader would miss:
+
+- an element with a role that is announced by name (button, link, checkbox, tab, slider, textbox, img, dialog…) but has no `aria-label` and no text;
+- an element with a `press` handler and no role, which a keyboard or a reader cannot reach.
+
+The name is the one `EVGA11yFromTree` publishes, so the lint and the accessible tree agree. Elements under `aria-hidden` are skipped. It writes nothing; a check script turns findings into failures (see the a11y section of `demo/rating-check.mjs`).
+
 ## Building
 
 The sources expect to sit at `gallery/evgui/` in a Ranger checkout: they use

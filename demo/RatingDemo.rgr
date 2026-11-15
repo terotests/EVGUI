@@ -31,6 +31,7 @@
 
 Import "../src/RatingCtl.rgr"
 Import "../src/UiApp.rgr"
+Import "../src/UiA11yLint.rgr"
 Import "../src/UiCtl.rgr"
 Import "../src/UiTree.rgr"
 Import "pkg:evg/EVGElement.rgr"
