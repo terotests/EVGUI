@@ -96,5 +96,7 @@
   "ui:select:window": "npm run ui:demo:build --silent && node gallery/evgui/demo/select-window-check.mjs",
   "ui:select:bench": "npm run ui:demo:build --silent && node gallery/evgui/bench/select-bench.mjs",
   "ui:combobox:window": "npm run ui:demo:build --silent && node gallery/evgui/demo/combobox-window-check.mjs",
-  "ui:combobox:bench": "npm run ui:demo:build --silent && node gallery/evgui/bench/combobox-bench.mjs"
+  "ui:combobox:bench": "npm run ui:demo:build --silent && node gallery/evgui/bench/combobox-bench.mjs",
+  "evg:dev": "node gallery/evgui/web/dev.mjs",
+  "evg:hot:check": "npm run ui:demo:build --silent && node gallery/evgui/demo/build.mjs && node gallery/evgui/web/hot-check.mjs"
 }

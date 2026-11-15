@@ -53,6 +53,28 @@ handler field, so programs built on EVG directly compile exactly as before.
 
 The name is the one `EVGA11yFromTree` publishes, so the lint and the accessible tree agree. Elements under `aria-hidden` are skipped. It writes nothing; a check script turns findings into failures (see the a11y section of `demo/rating-check.mjs`).
 
+## Development server: hot reload and source maps
+
+```sh
+node scripts/run.mjs evg:dev        # PORT=9000 to change the port
+```
+
+compiles every demo with Ranger's `-sourcemap`, bundles the page with
+`bundle.js.map`, and serves it with hot reload (`web/dev.mjs`, `web/hot.mjs`):
+
+- Saving a `.rgr` under `demo/` or `src/` recompiles only the demos that
+  import it (directly or through other files), rebundles, and the open page
+  reloads on the same demo and scroll position. What a controller held in its
+  fields starts over, because the class can change between two saves.
+- A save that does not compile does not reload. The page shows the compiler's
+  message (file, line, the source with a marker) in its error card.
+- Stack traces and breakpoints in the browser's devtools land on `.rgr` lines.
+  The maps carry every source and are large (about 86 MB), so `ui:web` and
+  Pages are built without them.
+
+`node scripts/run.mjs evg:hot:check` drives this in Chromium. It needs Ranger
+with source maps for `.cjs` output (terotests/Ranger#1318).
+
 ## Building
 
 The sources expect to sit at `gallery/evgui/` in a Ranger checkout: they use

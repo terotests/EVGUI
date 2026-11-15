@@ -24,6 +24,7 @@ const TYPES = {
   ".mjs": "text/javascript; charset=utf-8",
   ".cjs": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".map": "application/json; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".svg": "image/svg+xml",
   ".woff2": "font/woff2",
@@ -68,6 +69,26 @@ try {
   console.log("  (no css watch: " + e.message + ")");
 }
 
+// --- hot reload (HOT=1) ---------------------------------------------------------
+//
+// A saved .rgr recompiles the demos that use it and the page reloads; see
+// hot.mjs. Off unless asked for, so `ui:web` and the checks serve what was
+// built and nothing rebuilds under them.
+const codeClients = new Set();
+const HOT = process.env.HOT === "1";
+if (HOT) {
+  const { startHot } = await import("./hot.mjs");
+  startHot({
+    root: ROOT,
+    send(msg) {
+      const line = JSON.stringify(msg);
+      for (const res of codeClients) {
+        try { res.write(`data: ${line}\n\n`); } catch { codeClients.delete(res); }
+      }
+    },
+  });
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");
 
@@ -81,7 +102,7 @@ const server = http.createServer((req, res) => {
   // convenience is worth.
   if (req.method === "PUT") {
     const rel = decodeURIComponent(url.pathname);
-    const okPath = /^\/gallery\/ui\/demo\/[A-Za-z0-9_.-]+\.css$/.test(rel);
+    const okPath = /^\/gallery\/evgui\/demo\/[A-Za-z0-9_.-]+\.css$/.test(rel);
     if (!okPath) {
       res.writeHead(403, { "content-type": "text/plain" }).end("only gallery/evgui/demo/*.css");
       return;
@@ -114,6 +135,18 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (HOT && url.pathname === "/evg/code/events") {
+    res.writeHead(200, {
+      "content-type": "text/event-stream",
+      "cache-control": "no-store",
+      connection: "keep-alive",
+    });
+    res.write("retry: 1000\n\n");
+    codeClients.add(res);
+    req.on("close", () => codeClients.delete(res));
+    return;
+  }
+
   // Redirect "/" rather than serving the page there. Serving it inline leaves
   // the browser on "/", where the page's own `./bundle.js` resolves to the
   // repository root and 404s — the page then loads, looks nearly right, and
@@ -139,6 +172,11 @@ const server = http.createServer((req, res) => {
       "content-type": TYPES[path.extname(file)] || "application/octet-stream",
       "cache-control": "no-store",
     });
+    // The page opens the hot-reload stream only when this meta says the server
+    // has one, so a page served by a check's own server asks for nothing.
+    if (HOT && rel.endsWith("/demo/index.html")) {
+      body = Buffer.from(String(body).replace("<head>", '<head>\n    <meta name="evg-hot" content="1" />'));
+    }
     res.end(body);
   });
 });
@@ -151,5 +189,6 @@ server.listen(PORT, () => {
   console.log("  them live. The demos are the menubar and toolbar built with `tree`.");
   console.log("  Edit gallery/evgui/demo/*.css with the inspector open and the page");
   console.log("  re-cascades on save — the sheet is an input, so nothing is patched.\n");
+  if (HOT) console.log("  Hot reload is on: save a .rgr under demo/ or src/ and the page reloads.\n");
   console.log("  Ctrl+C to stop.\n");
 });
