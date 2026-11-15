@@ -98,5 +98,6 @@
   "ui:combobox:window": "npm run ui:demo:build --silent && node gallery/evgui/demo/combobox-window-check.mjs",
   "ui:combobox:bench": "npm run ui:demo:build --silent && node gallery/evgui/bench/combobox-bench.mjs",
   "evg:dev": "node gallery/evgui/web/dev.mjs",
-  "evg:hot:check": "npm run ui:demo:build --silent && node gallery/evgui/demo/build.mjs && node gallery/evgui/web/hot-check.mjs"
+  "evg:hot:check": "npm run ui:demo:build --silent && node gallery/evgui/demo/build.mjs && node gallery/evgui/web/hot-check.mjs",
+  "evg:guide:check": "node dist/rgrc.js -es6 ./gallery/evgui/demo/GuideTodo.rgr -d=./gallery/evgui/bin -o=GuideTodo.js > /dev/null && node gallery/evgui/bin/GuideTodo.js | tee gallery/evgui/bin/guide-check.txt && grep -q \"^failures: 0$\" gallery/evgui/bin/guide-check.txt"
 }

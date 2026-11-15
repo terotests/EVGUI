@@ -1,0 +1,151 @@
+; SPDX-License-Identifier: AGPL-3.0-or-later
+
+; =============================================================================
+; GuideTodo — the example in docs/GUIDE.md, compiled and run by guide-check
+; =============================================================================
+; A short list of tasks: press a task to mark it done, press "Clear done" to
+; drop the finished ones. Written with UiApp (handlers in the tree), component
+; tags, an each list and a standard-mode stylesheet, and checked with the a11y
+; lint. `main` runs it without a window and prints PASS/FAIL lines.
+; =============================================================================
+
+Import "pkg:evg/EVGElement.rgr"
+Import "pkg:evg/EVGStyleSheet.rgr"
+Import "../src/UiApp.rgr"
+Import "../src/UiA11yLint.rgr"
+
+class Task {
+    def id:string ""
+    def title:string ""
+    def done:boolean false
+    Constructor (i:string t:string) {
+        id = i
+        title = t
+    }
+}
+
+treefactory Td {
+    child addChild
+    text  textContent
+    on    events.bind
+    component TaskRow this.row
+
+    tag Page   EVGElement (props (className "page"))
+    tag Title  EVGElement (props (className "title") (elementType 1) (role "heading") (a11yLevel 1))
+    tag List   EVGElement (props (className "list") (role "list"))
+    tag Item   EVGElement (props (className "item") (role "checkbox"))
+    tag Label  EVGElement (props (className "label") (elementType 1))
+    tag Button EVGElement (props (className "button") (role "button") (elementType 1))
+}
+
+class GuideTodo extends UiApp {
+    def tasks:[Task]
+
+    Constructor () {
+        push tasks (new Task("t1" "Write the guide"))
+        push tasks (new Task("t2" "Compile the example"))
+        push tasks (new Task("t3" "Ship it"))
+    }
+
+    ; One task. A component: `(TaskRow t)` in a tree calls this.
+    fn row:EVGElement (t:Task) {
+        def cls:string "item"
+        if t.done {
+            cls = "item done"
+        }
+        def el (tree Td (Item (props (id t.id) (className cls))
+            (Label (props (id (t.id + "-label"))) t.title)
+            (on press (fn:void (e:UiEvent) {
+                t.done = (t.done == false)
+            }))))
+        ; aria-checked: 1 no, 2 yes (EVGA11yTri)
+        el.a11yChecked = 1
+        if t.done {
+            el.a11yChecked = 2
+        }
+        return el
+    }
+
+    fn view:EVGElement () {
+        return (tree Td (Page (props (id "page"))
+            (Title (props (id "title")) "Today")
+            (List (props (id "list"))
+                (each tasks t:Task (TaskRow t)))
+            (Button (props (id "clear")) "Clear done"
+                (on press (fn:void (e:UiEvent) {
+                    def keep:[Task]
+                    for tasks t:Task i {
+                        if (t.done == false) {
+                            push keep t
+                        }
+                    }
+                    tasks = keep
+                })))))
+    }
+
+    sfn css:string () {
+        return "@evg mode standard;\n.page { display: flex; flex-direction: column; padding: 16px; }\n.list .item { display: flex; padding: 4px 8px; }\n.item.done .label { color: #a1a1aa; }\n"
+    }
+
+    sfn find:EVGElement (el:EVGElement id:string) {
+        if (el.id == id) {
+            return el
+        }
+        for el.children kid:EVGElement i {
+            def hit:EVGElement (GuideTodo.find(kid id))
+            if (hit.id == id) {
+                return hit
+            }
+        }
+        return el
+    }
+
+    sfn check:int (name:string ok:boolean) {
+        if ok {
+            print ("PASS " + name)
+            return 0
+        }
+        print ("FAIL " + name)
+        return 1
+    }
+
+    sfn main@(main):void () {
+        def app (new GuideTodo())
+        app.build()
+        def fails:int 0
+        def root:EVGElement (unwrap app.root)
+        def list:EVGElement (GuideTodo.find(root "list"))
+        fails = fails + (GuideTodo.check("guide:three-rows" ((array_length list.children) == 3)))
+
+        ; A press on the label reaches the row's handler; the page rebuilds once.
+        def before:int app.rebuilds
+        app.dispatch("press" "t2-label")
+        def t2:EVGElement (GuideTodo.find(root "t2"))
+        fails = fails + (GuideTodo.check("guide:press-marks-done" (t2.className == "item done")))
+        fails = fails + (GuideTodo.check("guide:checked-state" (t2.a11yChecked == 2)))
+        fails = fails + (GuideTodo.check("guide:one-rebuild" (app.rebuilds == (before + 1))))
+
+        app.dispatch("press" "clear")
+        list = (GuideTodo.find(root "list"))
+        fails = fails + (GuideTodo.check("guide:clear-done" ((array_length list.children) == 2)))
+
+        ; Standard mode: `.item.done .label` reaches the label under a done row.
+        app.dispatch("press" "t1")
+        def sheet (new EVGStyleSheet())
+        sheet.parse((GuideTodo.css()))
+        sheet.applyTree(root "")
+        def doneLabel:EVGElement (GuideTodo.find(root "t1-label"))
+        def openLabel:EVGElement (GuideTodo.find(root "t3-label"))
+        fails = fails + (GuideTodo.check("guide:sheet-parses" ((array_length sheet.errors) == 0)))
+        fails = fails + (GuideTodo.check("guide:descendant-rule" ((doneLabel.color.r != openLabel.color.r) || (doneLabel.color.g != openLabel.color.g))))
+        fails = fails + (GuideTodo.check("guide:row-is-flex-row" ((GuideTodo.find(root "t1")).flexDirection == "row")))
+
+        def lint (new UiA11yLint())
+        def found:[string] (lint.checkApp(app))
+        fails = fails + (GuideTodo.check("guide:a11y-clean" ((array_length found) == 0)))
+        for found f:string i {
+            print ("  " + f)
+        }
+        print ("failures: " + (to_string fails))
+    }
+}

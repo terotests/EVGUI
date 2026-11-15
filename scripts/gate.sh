@@ -53,6 +53,7 @@ SUITES=(
   ui:pagination:check
   ui:radio:check
   ui:rating:check
+  evg:guide:check
   ui:kanban:check
   ui:drawer:check
   ui:combobox:demo
