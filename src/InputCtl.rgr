@@ -1140,7 +1140,15 @@ class InputCtl extends UiCtl {
             rows = shown
         }
         def room:double ((to_double rows) * lb)
-        def top:double (view.calculatedY + ((view.calculatedHeight - room) / 2.0))
+        ; (a view lower than the lines is an empty run with no height of its
+        ; own: the view shrank to nothing at its top, which is where the
+        ; first typed line goes; centring in it put the caret half a line
+        ; above the field)
+        def spare:double (view.calculatedHeight - room)
+        if (spare < 0.0) {
+            spare = 0.0
+        }
+        def top:double (view.calculatedY + (spare / 2.0))
         ; where the run's first line starts inside it (UiTextLines.of)
         def inset:double ((txt.box.borderWidthPx + txt.box.paddingTopPx) + txt.textShiftY)
         if (n > shown) {
@@ -1413,6 +1421,10 @@ class InputCtl extends UiCtl {
         ; the box a column shrank an empty view to the caret's width
         UiTree.inline(root "display" "flex")
         UiTree.inline(root "flex-direction" "row")
+        ; one line: under EVG's default wrap the line was only as tall as the
+        ; view, so a multiline view's `align-self: stretch` reached nothing
+        ; and its lines sat at the box's top edge
+        UiTree.inline(root "flex-wrap" "nowrap")
         ; a wrapping field is as tall as its lines, up to `maxLines`: the
         ; one-line height the sheet gave it plus a line box per further line
         if (multiline && (oneLineHeight > 0.0)) {

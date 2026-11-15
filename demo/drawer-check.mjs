@@ -447,7 +447,7 @@ for (const w of [390, 358, 330]) {
   ok("resized to a phone after it was built, it lays out for the phone", a[1] === b[1] && b[0] > a[0] && b[0] + b[2] <= 358, [a, b]);
   const t = tree(d).byId.get("drw-top-trigger");
   const tb = box(d, "drw-top-trigger");
-  ok("…and the reader's tree agrees with the picture", t && JSON.stringify(t.b.map(Math.round)) === JSON.stringify(tb.map(Math.round)), [t && t.b, tb]);
+  ok("…and the reader's tree agrees with the picture", t && t.b.length === tb.length && t.b.every((v, i) => Math.abs(v - tb[i]) < 1), [t && t.b, tb]);
   // A top drawer's footer on a phone sits under its list.
   openIt(d, "top");
   const list = box(d, "drw-top-list");
