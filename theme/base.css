@@ -171,6 +171,8 @@
   height: 34px;
 }
 
+/* The clip box the text scrolls in; InputCtl sets its layout inline. */
+.ui-input-view { overflow: hidden; }
 .ui-input-disabled { opacity: 0.45; }
 .ui-input-invalid { border-color: #dc2626; }
 .ui-input-text { color: #0f172a; font-size: 13px; height: 18px; }
