@@ -75,6 +75,42 @@ class ButtonCheck {
         def rows:[UiRow] ((this.button("M12 5v14" true)).rows())
         this.ok(((array_length rows) == 1) "a reader still gets the button")
         this.ok(((itemAt rows 0).name == "Close") "named by its name")
+        ; busy: a spinner and the message, no press, a reader hears the message
+        def sb (new ButtonCtl())
+        sb.tid = "s"
+        sb.name = "Save"
+        sb.variant = "primary"
+        sb.icon = "M5 12l5 5L20 7"
+        sb.build()
+        def save:EVGElement (unwrap sb.rootEl)
+        this.ok(((sb.activate("s")) == "s") "idle: a press is taken")
+        sb.startBusy("Saving changes...")
+        this.ok(((indexOf save.className "ui-button-busy") >= 0) ("busy class: " + save.className))
+        this.ok(((save.getChildCount()) == 2) "busy: a spinner, then the message")
+        def spn:EVGElement (save.getChild(0))
+        this.ok((spn.id == "s-spinner") ("spinner id: " + spn.id))
+        this.ok(((indexOf spn.className "ui-button-spinner-ui-button-primary") > 0) ("the variant's pen: " + spn.className))
+        this.ok(spn.a11yHidden "the spinner is not read out")
+        this.ok(((save.getChild(1)).textContent == "Saving changes...") "the message replaces the words")
+        this.ok(((sb.activate("s")) == "") "busy: a second press is not taken")
+        sb.press(true)
+        this.ok((sb.held == false) "busy: not held by a press")
+        def br:UiRow (itemAt (sb.rows()) 0)
+        this.ok((br.name == "Saving changes...") ("a reader hears the message: " + br.name))
+        this.ok(br.disabled "reported disabled while busy")
+        this.ok((br.state == "busy") ("state busy: " + br.state))
+        this.ok(br.focusable "the focus stays on it")
+        this.ok((sb.tick(250.0)) "tick moves the spinner")
+        this.ok(((spn.rotate > 89.9) && (spn.rotate < 90.1)) ("a quarter turn in 250 ms: " + (to_string spn.rotate)))
+        this.ok(((save.getChild(0)) == spn) "tick does not rebuild")
+        sb.tick(800.0)
+        this.ok(((spn.rotate > 17.9) && (spn.rotate < 18.1)) ("wraps past a turn: " + (to_string spn.rotate)))
+        sb.stopBusy()
+        this.ok(((save.getChildCount()) == 2) "done: the icon and the words again")
+        this.ok(((save.getChild(1)).textContent == "Save") "the words are back")
+        this.ok(((sb.activate("s")) == "s") "done: a press is taken again")
+        this.ok(((sb.tick(16.0)) == false) "idle: tick asks for nothing")
+        this.ok(((itemAt (sb.rows()) 0).name == "Save") "named by its name again")
     }
 
     sfn main@(main):void () {

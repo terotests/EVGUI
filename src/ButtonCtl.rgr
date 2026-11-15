@@ -41,6 +41,19 @@
 ;
 ;     path.ui-button-icon.ui-button-icon-ui-button-ghost   the icon, when
 ;                                            there is one; the variant's pen
+;
+; BUSY. A press that starts something slow (a save, a check-in) should show
+; at once that it was taken, before the work returns: `startBusy(msg)` swaps
+; the button's icon and words for a spinner and `msg` ("Saving changes..."),
+; and the button takes no press until `stopBusy()`. A reader is told the
+; message, and the button reports disabled and state "busy", so a second press
+; is not sent. The spinner turns by `tick(ms)`, which only moves the spinner
+; (`rotate`, a paint transform), so a host repaints without a new layout.
+; From the M-Files desktop window's saving buttons.
+;
+;     button.ui-button.ui-button-busy
+;       path.ui-button-spinner.ui-button-spinner-ui-button-primary
+;       span.ui-button-label                 the message
 ; =============================================================================
 
 Import "UiCtl.rgr"
@@ -66,12 +79,22 @@ class ButtonCtl extends UiCtl {
     def picture:string ""
     def picW:double 160.0
     def picH:double 90.0
+    ; Busy: the press was taken and its work is still running.
+    def busy:boolean false
+    ; What the busy button says ("" keeps the name).
+    def busyText:string ""
+    ; The spinner's turn, in degrees, and the spinner the last build made.
+    def spin:double 0.0
+    def spinEl@(optional):EVGElement
 
     Constructor () {
         rootEl = (EVGElement.createDiv())
     }
 
     fn stateWord:string () {
+        if busy {
+            return "busy"
+        }
         if held {
             return "pressed"
         }
@@ -103,6 +126,30 @@ class ButtonCtl extends UiCtl {
         UiTree.clearChildren(el)
         el.elementType = 0
         el.textContent = ""
+
+        if busy {
+            UiTree.addClass(el "ui-button-busy")
+            def sp (EVGElement.createDiv())
+            sp.id = (tid + "-spinner")
+            sp.className = "ui-button-spinner"
+            UiTree.addClass(sp ("ui-button-spinner-" + (this.variantClass())))
+            sp.tagName = "path"
+            sp.elementType = 3
+            sp.viewBox = "0 0 24 24"
+            ; three quarters of a ring
+            sp.svgPath = "M12 3a9 9 0 1 0 9 9"
+            sp.rotate = spin
+            sp.a11yHidden = true
+            el.addChild(sp)
+            spinEl = sp
+            def msg (EVGElement.createSpan())
+            msg.className = "ui-button-label"
+            msg.textContent = (this.spokenName())
+            msg.elementType = 1
+            msg.a11yHidden = true
+            el.addChild(msg)
+            return
+        }
 
         if ((strlen icon) > 0) {
             def ic (EVGElement.createDiv())
@@ -153,7 +200,7 @@ class ButtonCtl extends UiCtl {
     ; the control as it was. Returning the id is what tells a host that
     ; something happened — a toggle returns "" because its change IS the state.
     fn activate:string (target:string) {
-        if disabled {
+        if (disabled || busy) {
             return ""
         }
         if (target != tid) {
@@ -163,7 +210,7 @@ class ButtonCtl extends UiCtl {
     }
 
     fn press:void (down:boolean) {
-        if disabled {
+        if (disabled || busy) {
             return
         }
         held = down
@@ -180,11 +227,51 @@ class ButtonCtl extends UiCtl {
         return true
     }
 
+    ; What a reader is told: the busy message while busy, else the name.
+    fn spokenName:string () {
+        if (busy && ((strlen busyText) > 0)) {
+            return busyText
+        }
+        return name
+    }
+
+    ; The press was taken; its work is running. `msg` replaces the words.
+    fn startBusy:void (msg:string) {
+        busy = true
+        busyText = msg
+        held = false
+        spin = 0.0
+        this.build()
+    }
+
+    fn stopBusy:void () {
+        busy = false
+        busyText = ""
+        this.build()
+    }
+
+    ; Turns the spinner (one turn a second). True when it moved and the host
+    ; should repaint; nothing is rebuilt or laid out again.
+    fn tick:boolean (ms:double) {
+        if (busy == false) {
+            return false
+        }
+        spin = (spin + (ms * 0.36))
+        while (spin >= 360.0) {
+            spin = (spin - 360.0)
+        }
+        if (!null? spinEl) {
+            def sp:EVGElement (unwrap spinEl)
+            sp.rotate = spin
+        }
+        return true
+    }
+
     fn rows:[UiRow] () {
         def out:[UiRow]
-        def r:UiRow (UiRow.of(tid (EVGA11yRole.button()) name))
+        def r:UiRow (UiRow.of(tid (EVGA11yRole.button()) (this.spokenName())))
         r.state = (this.stateWord())
-        r.disabled = disabled
+        r.disabled = (disabled || busy)
         if disabled {
             r.tabStop = false
         } {
