@@ -26,6 +26,15 @@
 ;
 ; Element ids: `<tid>-<value>` an item, `<tid>-<value>-icon` its icon,
 ; `<tid>-<value>-label` its name, `<tid>-<value>-badge` its badge.
+;
+; MORE THAN FITS. With `room` set (the rail's height, px) and more top items
+; than fit in it, the last place that fits becomes a "More" button
+; (`<tid>--more`, a kebab) and the items past it go into its menu
+; (`<tid>--menu`, role menu; `<tid>--m-<value>` each, role menuitem). The open
+; place is always kept on the rail: when it would fall into the menu it takes
+; the last place on the rail instead. Bottom items always show. `itemH` is one
+; item with its gap; `measure()` takes it from the last layout. From the
+; M-Files desktop window's dashboard tab rail.
 ; =============================================================================
 
 Import "UiCtl.rgr"
@@ -52,7 +61,21 @@ class RailCtl extends UiCtl {
     ; "" on the page, "frame" on a coloured frame (see the header)
     def tone:string ""
     ; the items' elements as the last build made them, in `items`' order
+    ; (the ones on the rail; an item in the More menu has none)
     def itemEls:[EVGElement]
+    ; The rail's height, px; 0: every item shows.
+    def room:double 0.0
+    ; One item and the gap after it, px (`measure` reads it from a layout).
+    def itemH:double 59.0
+    ; The rail's own padding, top and bottom together.
+    def padH:double 16.0
+    def moreLabel:string "More"
+    def moreOpen:boolean false
+    ; More was focused last (its roving tab stop)
+    def rovingMore:boolean false
+    ; The top items on the rail and in the More menu, as the last build split them.
+    def onRail:[RailItem]
+    def inMenu:[RailItem]
 
     Constructor () {
         rootEl = (EVGElement.createDiv())
@@ -60,6 +83,179 @@ class RailCtl extends UiCtl {
         items = empty
         def e:[EVGElement]
         itemEls = e
+        def a:[RailItem]
+        onRail = a
+        def b:[RailItem]
+        inMenu = b
+    }
+
+    fn moreTid:string () {
+        return (tid + "--more")
+    }
+
+    fn menuTid:string () {
+        return (tid + "--menu")
+    }
+
+    fn menuItemTid:string (itemValue:string) {
+        return (tid + "--m-" + itemValue)
+    }
+
+    ; The item a menu row stands for, "" when `hit` is not one.
+    fn menuValueOf:string (hit:string) {
+        def i:int 0
+        while (i < (array_length inMenu)) {
+            def it:RailItem (itemAt inMenu i)
+            def t:string (this.menuItemTid(it.value))
+            if ((hit == t) || ((indexOf hit (t + "-")) == 0)) {
+                return it.value
+            }
+            i = (i + 1)
+        }
+        return ""
+    }
+
+    ; The item height from the last layout: one item's box and the gap to the next.
+    fn measure:void () {
+        if ((array_length itemEls) < 2) {
+            if ((array_length itemEls) == 1) {
+                def only:EVGElement (itemAt itemEls 0)
+                if (only.calculatedHeight > 0.0) {
+                    itemH = (only.calculatedHeight + 4.0)
+                }
+            }
+            return
+        }
+        def a:EVGElement (itemAt itemEls 0)
+        def b:EVGElement (itemAt itemEls 1)
+        def d:double (b.calculatedY - a.calculatedY)
+        if (d > 0.0) {
+            itemH = d
+        }
+    }
+
+    ; Splits the top items between the rail and the More menu.
+    fn split:void () {
+        def top:[RailItem]
+        def bottoms:int 0
+        def i:int 0
+        while (i < (array_length items)) {
+            def it:RailItem (itemAt items i)
+            if it.bottom {
+                bottoms = (bottoms + 1)
+            } {
+                push top it
+            }
+            i = (i + 1)
+        }
+        def rail:[RailItem]
+        def menu:[RailItem]
+        def n:int (array_length top)
+        def fit:int n
+        if ((room > 0.0) && (itemH > 0.0)) {
+            fit = (to_int (((room - padH) - ((to_double bottoms) * itemH)) / itemH))
+        }
+        if (fit >= n) {
+            onRail = top
+            inMenu = menu
+            moreOpen = false
+            return
+        }
+        ; one place goes to the More button
+        def keep:int (fit - 1)
+        if (keep < 0) {
+            keep = 0
+        }
+        def openAt:int -1
+        def j:int 0
+        while (j < n) {
+            def it2:RailItem (itemAt top j)
+            if (it2.value == value) {
+                openAt = j
+            }
+            j = (j + 1)
+        }
+        def k:int 0
+        while (k < n) {
+            def it3:RailItem (itemAt top k)
+            def shownHere:boolean (k < keep)
+            if ((openAt >= keep) && (keep > 0)) {
+                ; the open place takes the last spot; the item there moves to the menu
+                if (k == (keep - 1)) {
+                    shownHere = false
+                }
+                if (k == openAt) {
+                    shownHere = true
+                }
+            }
+            if ((keep == 0) && (k == openAt)) {
+                shownHere = true
+            }
+            if shownHere {
+                push rail it3
+            } {
+                push menu it3
+            }
+            k = (k + 1)
+        }
+        onRail = rail
+        inMenu = menu
+    }
+
+    fn moreEl:EVGElement () {
+        def t:string (this.moreTid())
+        def el (EVGElement.createDiv())
+        el.id = t
+        el.className = "ui-rail-item ui-rail-more"
+        def word:string "inactive"
+        if moreOpen {
+            word = "active"
+        }
+        UiTree.setState(el "ui-rail-item" word)
+        this.toned(el "item" word)
+        def pad (EVGElement.createDiv())
+        pad.id = (t + "-pad")
+        pad.className = "ui-rail-pad"
+        UiTree.setState(pad "ui-rail-pad" word)
+        this.toned(pad "pad" word)
+        ; a kebab: three dots
+        def ic:EVGElement (RailCtl.iconEl((t + "-icon") "M12 5.5v.01M12 12v.01M12 18.5v.01"))
+        UiTree.addClass(ic "ui-rail-more-icon")
+        UiTree.setState(ic "ui-rail-icon" word)
+        this.toned(ic "icon" word)
+        pad.addChild(ic)
+        el.addChild(pad)
+        def lb:EVGElement (UiTree.label((t + "-label") "ui-rail-label" moreLabel))
+        UiTree.setState(lb "ui-rail-label" word)
+        this.toned(lb "label" word)
+        el.addChild(lb)
+        return el
+    }
+
+    fn menuEl:EVGElement () {
+        def m (EVGElement.createDiv())
+        m.id = (this.menuTid())
+        m.className = "ui-rail-menu"
+        UiTree.surface(m "right" "end")
+        def i:int 0
+        while (i < (array_length inMenu)) {
+            def it:RailItem (itemAt inMenu i)
+            def row (EVGElement.createDiv())
+            row.id = (this.menuItemTid(it.value))
+            row.className = "ui-rail-menu-item"
+            if it.disabled {
+                UiTree.addClass(row "ui-rail-menu-item-disabled")
+            }
+            row.addChild((RailCtl.iconEl((row.id + "-icon") it.icon)))
+            def nm:string it.name
+            if ((strlen it.badge) > 0) {
+                nm = (nm + " " + it.badge)
+            }
+            row.addChild((UiTree.label((row.id + "-label") "ui-rail-menu-label" nm)))
+            m.addChild(row)
+            i = (i + 1)
+        }
+        return m
     }
 
     fn add:RailItem (itemValue:string itemName:string iconPath:string) {
@@ -210,18 +406,31 @@ class RailCtl extends UiCtl {
         def foot (EVGElement.createDiv())
         foot.id = (tid + "-foot")
         foot.className = "ui-rail-group"
+        this.split()
         def els:[EVGElement]
         def i:int 0
-        while (i < (array_length items)) {
-            def it:RailItem (itemAt items i)
-            def el:EVGElement (this.itemEl(it))
+        while (i < (array_length onRail)) {
+            def el:EVGElement (this.itemEl((itemAt onRail i)))
             push els el
-            if it.bottom {
-                foot.addChild(el)
-            } {
-                head.addChild(el)
-            }
+            head.addChild(el)
             i = (i + 1)
+        }
+        if ((array_length inMenu) > 0) {
+            def more:EVGElement (this.moreEl())
+            if moreOpen {
+                more.addChild((this.menuEl()))
+            }
+            head.addChild(more)
+        }
+        def j:int 0
+        while (j < (array_length items)) {
+            def it:RailItem (itemAt items j)
+            if it.bottom {
+                def el2:EVGElement (this.itemEl(it))
+                push els el2
+                foot.addChild(el2)
+            }
+            j = (j + 1)
         }
         root.addChild(head)
         root.addChild(foot)
@@ -229,6 +438,13 @@ class RailCtl extends UiCtl {
     }
 
     fn hitFocusId:string (hit:string) {
+        if ((indexOf hit (this.moreTid())) == 0) {
+            return (this.moreTid())
+        }
+        def mv:string (this.menuValueOf(hit))
+        if ((strlen mv) > 0) {
+            return (this.menuItemTid(mv))
+        }
         def v:string (this.valueOf(hit))
         if ((strlen v) == 0) {
             return ""
@@ -238,6 +454,29 @@ class RailCtl extends UiCtl {
 
     fn activate:string (target:string) {
         if disabled {
+            return ""
+        }
+        if ((indexOf target (this.moreTid())) == 0) {
+            moreOpen = (moreOpen == false)
+            this.build()
+            return ""
+        }
+        def mv:string (this.menuValueOf(target))
+        if ((strlen mv) > 0) {
+            def mm@(optional):RailItem (this.itemFor(mv))
+            if (null? mm) {
+                return ""
+            }
+            def mit:RailItem (unwrap mm)
+            if mit.disabled {
+                return ""
+            }
+            value = mv
+            pressed = mv
+            rovingValue = mv
+            rovingMore = false
+            moreOpen = false
+            this.build()
             return ""
         }
         def v:string (this.valueOf(target))
@@ -252,6 +491,8 @@ class RailCtl extends UiCtl {
         value = v
         pressed = v
         rovingValue = v
+        rovingMore = false
+        moreOpen = false
         this.build()
         return ""
     }
@@ -260,11 +501,8 @@ class RailCtl extends UiCtl {
     fn shown:[RailItem] () {
         def out:[RailItem]
         def i:int 0
-        while (i < (array_length items)) {
-            def it:RailItem (itemAt items i)
-            if (it.bottom == false) {
-                push out it
-            }
+        while (i < (array_length onRail)) {
+            push out (itemAt onRail i)
             i = (i + 1)
         }
         def j:int 0
@@ -304,17 +542,63 @@ class RailCtl extends UiCtl {
         return -1
     }
 
-    fn keyDown:string (target:string key:string) {
-        if disabled {
+    ; The places the arrows stop at on the rail, in order: the enabled top
+    ; items shown, More, the enabled bottom items.
+    fn stops:[string] () {
+        def out:[string]
+        def i:int 0
+        while (i < (array_length onRail)) {
+            def it:RailItem (itemAt onRail i)
+            if (it.disabled == false) {
+                push out (this.itemTid(it.value))
+            }
+            i = (i + 1)
+        }
+        if ((array_length inMenu) > 0) {
+            push out (this.moreTid())
+        }
+        def j:int 0
+        while (j < (array_length items)) {
+            def it2:RailItem (itemAt items j)
+            if (it2.bottom && (it2.disabled == false)) {
+                push out (this.itemTid(it2.value))
+            }
+            j = (j + 1)
+        }
+        return out
+    }
+
+    ; The enabled rows of the More menu.
+    fn menuStops:[string] () {
+        def out:[string]
+        def i:int 0
+        while (i < (array_length inMenu)) {
+            def it:RailItem (itemAt inMenu i)
+            if (it.disabled == false) {
+                push out (this.menuItemTid(it.value))
+            }
+            i = (i + 1)
+        }
+        return out
+    }
+
+    ; Where Up / Down (wrapping) and Home / End go from `at` in `list`; ""
+    ; for another key or when `at` is not in it.
+    sfn stepTids:string (list:[string] at:string key:string) {
+        def n:int (array_length list)
+        if (n == 0) {
             return ""
         }
-        def list:[RailItem] (this.shown())
-        def v:string (this.valueOf(target))
+        if (key == "Home") {
+            return (itemAt list 0)
+        }
+        if (key == "End") {
+            return (itemAt list (n - 1))
+        }
         def from:int -1
         def i:int 0
-        while (i < (array_length list)) {
-            def it:RailItem (itemAt list i)
-            if (it.value == v) {
+        while (i < n) {
+            if ((itemAt list i) == at) {
                 from = i
             }
             i = (i + 1)
@@ -322,28 +606,98 @@ class RailCtl extends UiCtl {
         if (from < 0) {
             return ""
         }
-        def landed:int -1
         if (key == "ArrowDown") {
-            landed = (RailCtl.stepShown(list from 1))
+            if ((from + 1) >= n) {
+                return (itemAt list 0)
+            }
+            return (itemAt list (from + 1))
         }
         if (key == "ArrowUp") {
-            landed = (RailCtl.stepShown(list from -1))
+            if (from == 0) {
+                return (itemAt list (n - 1))
+            }
+            return (itemAt list (from - 1))
         }
-        if (key == "Home") {
-            landed = (RailCtl.stepShown(list -1 1))
+        return ""
+    }
+
+    sfn has:boolean (list:[string] x:string) {
+        def i:int 0
+        while (i < (array_length list)) {
+            if ((itemAt list i) == x) {
+                return true
+            }
+            i = (i + 1)
         }
-        if (key == "End") {
-            landed = (RailCtl.stepShown(list (array_length list) -1))
+        return false
+    }
+
+    fn openMenu:string () {
+        moreOpen = true
+        this.build()
+        def ms:[string] (this.menuStops())
+        if ((array_length ms) == 0) {
+            return ""
         }
-        if (landed < 0) {
+        return (itemAt ms 0)
+    }
+
+    fn keyDown:string (target:string key:string) {
+        if disabled {
+            return ""
+        }
+        def more:string (this.moreTid())
+        ; in the More menu: Up / Down / Home / End move, Escape (or Left)
+        ; closes it back to More, Enter / Space open the place
+        def mv:string (this.menuValueOf(target))
+        if ((strlen mv) > 0) {
+            if ((key == "Escape") || (key == "ArrowLeft")) {
+                moreOpen = false
+                this.build()
+                return more
+            }
+            def mto:string (RailCtl.stepTids((this.menuStops()) target key))
+            if ((strlen mto) > 0) {
+                return mto
+            }
             if (UiCtl.activatesOn(key)) {
                 this.activate(target)
+                if (value == mv) {
+                    return (this.itemTid(mv))
+                }
             }
             return ""
         }
-        def to:RailItem (itemAt list landed)
-        rovingValue = to.value
-        return (this.itemTid(to.value))
+        if (target == more) {
+            if (key == "Escape") {
+                if moreOpen {
+                    moreOpen = false
+                    this.build()
+                }
+                return ""
+            }
+            if ((UiCtl.activatesOn(key)) || (key == "ArrowRight")) {
+                if (moreOpen && (key != "ArrowRight")) {
+                    moreOpen = false
+                    this.build()
+                    return ""
+                }
+                return (this.openMenu())
+            }
+        } {
+            if ((strlen (this.valueOf(target))) == 0) {
+                return ""
+            }
+        }
+        def to:string (RailCtl.stepTids((this.stops()) target key))
+        if ((strlen to) > 0) {
+            this.onFocus(to)
+            return to
+        }
+        if ((target != more) && (UiCtl.activatesOn(key))) {
+            this.activate(target)
+        }
+        return ""
     }
 
     fn tids:[string] () {
@@ -355,6 +709,16 @@ class RailCtl extends UiCtl {
             push a (this.itemTid(it.value))
             i = (i + 1)
         }
+        if ((array_length inMenu) > 0) {
+            push a (this.moreTid())
+            push a (this.menuTid())
+            def j:int 0
+            while (j < (array_length inMenu)) {
+                def it2:RailItem (itemAt inMenu j)
+                push a (this.menuItemTid(it2.value))
+                j = (j + 1)
+            }
+        }
         return a
     }
 
@@ -362,18 +726,28 @@ class RailCtl extends UiCtl {
         if disabled {
             return false
         }
-        def m@(optional):RailItem (this.itemFor((this.valueOf(target))))
-        if (null? m) {
-            return false
+        if (target == (this.moreTid())) {
+            return ((array_length inMenu) > 0)
         }
-        def it:RailItem (unwrap m)
-        return ((it.disabled == false) && (target == (this.itemTid(it.value))))
+        def mv:string (this.menuValueOf(target))
+        if ((strlen mv) > 0) {
+            return (moreOpen && (RailCtl.has((this.menuStops()) target)))
+        }
+        return (RailCtl.has((this.stops()) target))
     }
 
     fn onFocus:void (target:string) {
+        if (target == (this.moreTid())) {
+            rovingMore = true
+            return
+        }
+        if ((strlen (this.menuValueOf(target))) > 0) {
+            return
+        }
         def v:string (this.valueOf(target))
         if ((strlen v) > 0) {
             rovingValue = v
+            rovingMore = false
         }
     }
 
@@ -419,10 +793,60 @@ class RailCtl extends UiCtl {
             }
             row.disabled = it.disabled
             row.focusable = (it.disabled == false)
-            row.tabStop = ((it.value == stop) && (it.disabled == false))
+            row.tabStop = ((it.value == stop) && (it.disabled == false) && ((this.moreStop()) == false))
             push out row
             i = (i + 1)
+            if ((i == (array_length onRail)) && ((array_length inMenu) > 0)) {
+                this.moreRows(out)
+            }
+        }
+        if (((array_length onRail) == 0) && ((array_length inMenu) > 0)) {
+            this.moreRows(out)
         }
         return out
+    }
+
+    ; More holds the tab stop when it was focused last and no place on the
+    ; rail is the open one.
+    fn moreStop:boolean () {
+        if ((array_length inMenu) == 0) {
+            return false
+        }
+        return rovingMore
+    }
+
+    fn moreRows:void (out:[UiRow]) {
+        def more:UiRow (UiRow.of((this.moreTid()) (EVGA11yRole.button()) moreLabel))
+        more.parentTid = tid
+        more.hasPopup = "menu"
+        if moreOpen {
+            more.expanded = (EVGA11yTri.yes())
+        } {
+            more.expanded = (EVGA11yTri.no())
+        }
+        more.focusable = true
+        more.tabStop = (this.moreStop())
+        push out more
+        if (moreOpen == false) {
+            return
+        }
+        def menu:UiRow (UiRow.of((this.menuTid()) (EVGA11yRole.menu()) moreLabel))
+        menu.parentTid = (this.moreTid())
+        menu.orientation = "vertical"
+        push out menu
+        def i:int 0
+        while (i < (array_length inMenu)) {
+            def it:RailItem (itemAt inMenu i)
+            def label:string it.name
+            if ((strlen it.badge) > 0) {
+                label = (label + " (" + it.badge + ")")
+            }
+            def r:UiRow (UiRow.of((this.menuItemTid(it.value)) (EVGA11yRole.menuItem()) label))
+            r.parentTid = (this.menuTid())
+            r.disabled = it.disabled
+            r.focusable = (it.disabled == false)
+            push out r
+            i = (i + 1)
+        }
     }
 }
