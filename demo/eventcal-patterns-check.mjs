@@ -342,7 +342,10 @@ console.log("Pattern A: drag in the month");
   const e1 = ev(A(d), "e1");
   dragTo(d, "ea-chip-e1", MON + 2, false);
   const ghost = withClass(d, "eb-ghost")[0];
-  ok("mid-drag a ghost of the chip follows the pointer", !!ghost && text(ghost).startsWith("Team s") && !ghost.id);
+  // (the chip's title is one line with an ellipsis since the month's chips
+  // stopped wrapping, so the ghost is checked against the chip it copies)
+  const src = byId(d, "ea-chip-e1");
+  ok("mid-drag a ghost of the chip follows the pointer", !!ghost && !!src && text(ghost).startsWith("Team") && text(ghost) === text(src) && !ghost.id, [ghost && text(ghost), src && text(src)]);
   const tcell = byId(d, "ea-cell-" + (MON + 2));
   ok("under the pointer", ghost && Math.abs(ghost.calculatedY + ghost.calculatedHeight / 2 - centre(tcell)[1]) < 14, ghost && `${ghost.calculatedY} vs ${centre(tcell)[1]}`);
   const shade = withClass(d, "eb-shade-target");
