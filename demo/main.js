@@ -3065,6 +3065,41 @@ function watchCss() {
   cssStream.onerror = () => {};
 }
 
+// --- hot reload ----------------------------------------------------------------
+//
+// `npm run evg:dev` serves the page with HOT=1: a saved .rgr recompiles the
+// demos that use it and says so on /evg/code/events (web/hot.mjs). The page
+// reloads on the same demo (it is in the URL) and scroll position. The server
+// marks the page with <meta name="evg-hot">; served any other way (Pages, a
+// check's own server) the page opens no stream. A compile error is shown in
+// the error card with the compiler's text.
+function watchCode() {
+  if (!document.querySelector('meta[name="evg-hot"]')) return;
+  try {
+    const y = sessionStorage.getItem("evgui-hot-scroll");
+    if (y !== null) {
+      sessionStorage.removeItem("evgui-hot-scroll");
+      requestAnimationFrame(() => window.scrollTo(0, Number(y) || 0));
+    }
+  } catch (_) { /* storage blocked: start at the top */ }
+  const stream = new EventSource("/evg/code/events");
+  stream.onmessage = (ev) => {
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch { return; }
+    if (msg.ok) {
+      try { sessionStorage.setItem("evgui-hot-scroll", String(window.scrollY)); } catch (_) {}
+      console.log(`hot: ${msg.demos.join(", ")} rebuilt in ${msg.ms} ms, reloading`);
+      location.reload();
+      return;
+    }
+    const e = new Error(`${msg.demo || msg.file} did not compile`);
+    e.stack = msg.error;
+    reportError(e, "a hot rebuild");
+  };
+  stream.onerror = () => {};
+}
+watchCode();
+
 function inspectorTick() {
   const q = new URLSearchParams(location.search).get("inspect");
   if (q === null || q === "0" || q === "false") return;

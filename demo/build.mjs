@@ -297,6 +297,10 @@ await esbuild.build({
   bundle: true,
   format: "esm",
   outfile: path.join(HERE, "bundle.js"),
+  // EVGUI_SOURCEMAP=1 (set by `evg:dev`) writes bundle.js.map. esbuild follows
+  // each compiled demo's own .cjs.map, so a stack trace and a breakpoint land
+  // on the .rgr line. Off otherwise: the maps carry every source and are large.
+  sourcemap: process.env.EVGUI_SOURCEMAP === "1" ? "linked" : false,
   plugins: [noFilesystem],
   logLevel: "info",
 });
