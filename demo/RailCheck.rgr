@@ -122,6 +122,122 @@ class RailCheck {
         this.ok((last.tid == "rail-settings") "the foot's places come last")
     }
 
+
+    fn many:RailCtl (open:string) {
+        def r (new RailCtl())
+        r.tid = "rail"
+        r.name = "Places"
+        r.addItem("a" "A" "M4 4h16")
+        r.addItem("b" "B" "M4 4h16")
+        r.addItem("c" "C" "M4 4h16")
+        r.addItem("d" "D" "M4 4h16")
+        r.addItem("e" "E" "M4 4h16")
+        r.addItem("f" "F" "M4 4h16")
+        r.addBottom("settings" "Settings" "M4 6h16")
+        r.value = open
+        ; padding, the bottom item and three places
+        r.room = (16.0 + (59.0 * 4.0))
+        r.build()
+        return r
+    }
+
+    sfn ids:string (list:[RailItem]) {
+        def s:string ""
+        def i:int 0
+        while (i < (array_length list)) {
+            def it:RailItem (itemAt list i)
+            s = (s + it.value)
+            i = (i + 1)
+        }
+        return s
+    }
+
+    fn overflow:void () {
+        def all:RailCtl (this.rail())
+        def aroot:EVGElement (unwrap all.rootEl)
+        def ahead:EVGElement (aroot.getChild(0))
+        this.ok(((ahead.getChildCount()) == 3) "no room set: every place on the rail, no More")
+        def r:RailCtl (this.many("a"))
+        def root:EVGElement (unwrap r.rootEl)
+        def head:EVGElement (root.getChild(0))
+        this.ok(((head.getChildCount()) == 3) ("two places and More fit, got " + (to_string (head.getChildCount()))))
+        def more:EVGElement (head.getChild(2))
+        this.ok((more.id == "rail--more") ("More is last on top: " + more.id))
+        this.ok(((RailCheck.ids(r.onRail)) == "ab") ("on the rail: " + (RailCheck.ids(r.onRail))))
+        this.ok(((RailCheck.ids(r.inMenu)) == "cdef") ("in the menu: " + (RailCheck.ids(r.inMenu))))
+        def foot:EVGElement (root.getChild(1))
+        this.ok(((foot.getChildCount()) == 1) "the bottom place still shows")
+        def e:RailCtl (this.many("e"))
+        this.ok(((RailCheck.ids(e.onRail)) == "ae") ("the open place keeps the last spot: " + (RailCheck.ids(e.onRail))))
+        this.ok(((RailCheck.ids(e.inMenu)) == "bcdf") ("and the one it took goes to the menu: " + (RailCheck.ids(e.inMenu))))
+        this.ok(((r.isFocusable("rail-d")) == false) "a place in the menu is not on the rail's focus list")
+        this.ok((r.isFocusable("rail--more")) "More takes focus")
+
+        r.activate("rail--more")
+        this.ok(r.moreOpen "pressing More opens its menu")
+        def head2:EVGElement ((unwrap r.rootEl).getChild(0))
+        def more2:EVGElement (head2.getChild(2))
+        def menu:EVGElement (more2.getChild(2))
+        this.ok((menu.id == "rail--menu") ("the menu sits in More: " + menu.id))
+        this.ok(((menu.getChildCount()) == 4) "one row per place in it")
+        def row0:EVGElement (menu.getChild(0))
+        this.ok((row0.id == "rail--m-c") ("menu row id: " + row0.id))
+        this.ok(((r.hitFocusId("rail--m-d-label")) == "rail--m-d") "a press on a row's name is the row's")
+        this.ok(((r.hitFocusId("rail--more-icon")) == "rail--more") "a press on the kebab is More's")
+        r.activate("rail--m-d")
+        this.ok((r.value == "d") "a menu row opens its place")
+        this.ok(((r.takePressed()) == "d") "and is pressed")
+        this.ok((r.moreOpen == false) "the menu closes")
+        this.ok(((RailCheck.ids(r.onRail)) == "ad") ("the place moves onto the rail: " + (RailCheck.ids(r.onRail))))
+    }
+
+    fn overflowKeys:void () {
+        def r:RailCtl (this.many("a"))
+        this.ok(((r.keyDown("rail-b" "ArrowDown")) == "rail--more") "Down from the last place on top: More")
+        this.ok(((r.keyDown("rail--more" "ArrowDown")) == "rail-settings") "Down from More: the foot")
+        this.ok(((r.keyDown("rail-settings" "ArrowUp")) == "rail--more") "Up back to More")
+        this.ok(((r.keyDown("rail--more" "Enter")) == "rail--m-c") "Enter on More opens the menu on its first row")
+        this.ok(r.moreOpen "open")
+        this.ok(((r.keyDown("rail--m-c" "ArrowDown")) == "rail--m-d") "Down in the menu")
+        this.ok(((r.keyDown("rail--m-c" "ArrowUp")) == "rail--m-f") "Up in the menu wraps")
+        this.ok(((r.keyDown("rail--m-d" "End")) == "rail--m-f") "End: the last row")
+        this.ok(((r.keyDown("rail--m-d" "Home")) == "rail--m-c") "Home: the first row")
+        this.ok(((r.keyDown("rail--m-d" "Escape")) == "rail--more") "Escape closes back to More")
+        this.ok((r.moreOpen == false) "closed")
+        this.ok(((r.keyDown("rail--more" "ArrowRight")) == "rail--m-c") "Right on More opens it too")
+        this.ok(((r.keyDown("rail--m-e" "Enter")) == "rail-e") "Enter on a row opens the place, focus on it on the rail")
+        this.ok((r.value == "e") "e is open")
+        this.ok((r.moreOpen == false) "and the menu closed")
+    }
+
+    fn overflowA11y:void () {
+        def r:RailCtl (this.many("a"))
+        r.onFocus("rail--more")
+        def rows:[UiRow] (r.rows())
+        this.ok(((array_length rows) == 5) ("rows: rail, a, b, More, settings; got " + (to_string (array_length rows))))
+        def more:UiRow (itemAt rows 3)
+        this.ok((more.tid == "rail--more") ("More after the places on top: " + more.tid))
+        this.ok((more.role == (EVGA11yRole.button())) "More is a button")
+        this.ok((more.hasPopup == "menu") "that opens a menu")
+        this.ok((more.expanded == (EVGA11yTri.no())) "collapsed")
+        this.ok(more.tabStop "focused last: the tab stop")
+        def a:UiRow (itemAt rows 1)
+        this.ok((a.tabStop == false) "and only it")
+        r.activate("rail--more")
+        def open:[UiRow] (r.rows())
+        this.ok(((array_length open) == 10) ("open: the menu and its four rows too, got " + (to_string (array_length open))))
+        def more2:UiRow (itemAt open 3)
+        this.ok((more2.expanded == (EVGA11yTri.yes())) "expanded")
+        def menu:UiRow (itemAt open 4)
+        this.ok((menu.role == (EVGA11yRole.menu())) "the menu is a menu")
+        this.ok((menu.parentTid == "rail--more") "owned by More")
+        def m0:UiRow (itemAt open 5)
+        this.ok((m0.role == (EVGA11yRole.menuItem())) "its rows are menu items")
+        this.ok((m0.name == "C") ("named: " + m0.name))
+        def last:UiRow (itemAt open 9)
+        this.ok((last.tid == "rail-settings") "the foot still comes last")
+    }
+
     sfn main:void () {
         def c (new RailCheck())
         c.structure()
@@ -129,6 +245,9 @@ class RailCheck {
         c.pressing()
         c.keys()
         c.a11y()
+        c.overflow()
+        c.overflowKeys()
+        c.overflowA11y()
         print ((to_string c.passes) + " passed, " + (to_string c.fails) + " failed")
         if (c.fails > 0) {
             print "RESULT FAIL"

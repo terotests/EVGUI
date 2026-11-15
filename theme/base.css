@@ -1913,6 +1913,14 @@
 .ui-rail-label { font-size: 11px; line-height: 14px; height: 14px; color: #52525b; white-space: nowrap; }
 .ui-rail-label-state-active { color: #312e81; font-weight: 600; }
 .ui-rail-badge { position: absolute; left: 28px; top: -4px; font-size: 14px; line-height: 14px; color: #dc2626; }
+/* More than fits: the kebab and its menu (RailCtl.room) */
+.ui-rail-more-icon { stroke-width: 2.6; }
+.ui-rail-menu { display: flex; flex-direction: column; flex-wrap: nowrap; min-width: 180px; padding: 4px; background-color: #ffffff; border: 1px solid #e4e4e7; border-radius: 10px; box-shadow: 0 8px 24px rgba(9, 9, 11, 0.16); }
+.ui-rail-menu-item { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+.ui-rail-menu-item:hover { background-color: rgba(9, 9, 11, 0.05); }
+.ui-rail-menu-item:focus { background-color: rgba(9, 9, 11, 0.05); }
+.ui-rail-menu-item-disabled { opacity: 0.45; }
+.ui-rail-menu-label { font-size: 13px; line-height: 18px; height: 18px; color: #18181b; white-space: nowrap; }
 /* RailCtl tone "frame": the rail on a coloured app frame (Slack's window), its
    ink light over whatever deep colour the host gives the frame */
 .ui-rail-frame-item:hover { background-color: rgba(255, 255, 255, 0.12); }
