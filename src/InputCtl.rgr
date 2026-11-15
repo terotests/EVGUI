@@ -195,11 +195,11 @@ class InputCtl extends UiCtl {
 
     ; A drag after a press: 0 by characters, 1 by words (after a double
     ; click), 2 the whole text (after a triple click). The word the double
-    ; click took is [dragFrom, dragTo).
+    ; click took is [dragFrom, dragUntil).
     def dragging:boolean false
     def dragUnit:int 0
     def dragFrom:int 0
-    def dragTo:int 0
+    def dragUntil:int 0
 
     def viewEl:EVGElement
     def selEl:EVGElement
@@ -965,7 +965,7 @@ class InputCtl extends UiCtl {
             this.selectWordAt(at)
             dragUnit = 1
             dragFrom = (this.selStart())
-            dragTo = (this.selEnd())
+            dragUntil = (this.selEnd())
             return
         }
         dragUnit = 0
@@ -991,13 +991,13 @@ class InputCtl extends UiCtl {
         def a:int (this.selStart())
         def b:int (this.selEnd())
         if (a < dragFrom) {
-            anchor = dragTo
+            anchor = dragUntil
             caret = a
         } {
             anchor = dragFrom
             caret = b
-            if (caret < dragTo) {
-                caret = dragTo
+            if (caret < dragUntil) {
+                caret = dragUntil
             }
         }
     }
